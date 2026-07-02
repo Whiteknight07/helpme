@@ -22,3 +22,19 @@ settings.
 Students still need to be enrolled in the visible parent course separately.
 When they select an agent, HelpMe allows the chatbot request to use that agent
 course if it belongs to the same `chatbot_agent_group` as the parent course.
+
+## In-App Management
+
+Professors manage agents from Course Settings -> "Chatbot Agents". They can add,
+edit, reorder, and disable agents. Disabling an agent hides it from students but
+keeps its documents and chat history. Agents are not hard-deleted.
+
+Creating the first agent on any course automatically creates that course's
+agent group.
+
+The Chatbot Settings, Knowledge Base, and Chatbot Questions settings pages show
+a "Managing:" selector when a course has agents. Use it to edit an individual
+agent's prompt, settings, documents, chunks, and questions.
+
+Staff of the parent course automatically have access to its agent courses. They
+do not need separate enrollment in the hidden courses.
