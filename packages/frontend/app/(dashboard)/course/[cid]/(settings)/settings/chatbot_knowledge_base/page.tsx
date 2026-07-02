@@ -20,6 +20,7 @@ import { AddDocumentChunkParams, SourceDocument } from '@koh/common'
 import { API } from '@/app/api'
 import ChatbotHelpTooltip from '../components/ChatbotHelpTooltip'
 import ChatbotAgentTargetSelect from '../components/ChatbotAgentTargetSelect'
+import { useChatbotTargetCourse } from '../components/useChatbotTargetCourse'
 
 interface FormValues {
   content: string
@@ -37,7 +38,7 @@ export default function ChatbotKnowledgeBase(
 ): ReactElement {
   const params = use(props.params)
   const courseId = Number(params.cid)
-  const [targetCourseId, setTargetCourseId] = useState(courseId)
+  const [targetCourseId, setTargetCourseId] = useChatbotTargetCourse(courseId)
   const [documents, setDocuments] = useState<SourceDocument[]>([])
   const [filteredDocuments, setFilteredDocuments] = useState<SourceDocument[]>(
     [],
@@ -50,10 +51,6 @@ export default function ChatbotKnowledgeBase(
   const [form] = Form.useForm()
   const [addDocChunkPopupVisible, setAddDocChunkPopupVisible] = useState(false)
   const [dataLoading, setDataLoading] = useState(false)
-
-  useEffect(() => {
-    setTargetCourseId(courseId)
-  }, [courseId])
 
   const addDocument = async (values: FormValues) => {
     const body: AddDocumentChunkParams = {

@@ -1,9 +1,7 @@
 import { SuperCoursePurpose } from '@koh/common';
 import { Injectable } from '@nestjs/common';
 import { Command } from 'nestjs-command';
-import { OrganizationChatbotSettingsModel } from 'chatbot/chatbot-infrastructure-models/organization-chatbot-settings.entity';
 import { CourseModel } from 'course/course.entity';
-import { CourseSettingsModel } from 'course/course_settings.entity';
 import { CourseService } from 'course/course.service';
 import { SuperCourseModel } from 'course/super-course.entity';
 import { OrganizationCourseModel } from 'organization/organization-course.entity';
@@ -48,7 +46,10 @@ const semesterName = '2026S Both Terms';
 
 @Injectable()
 export class SeedChatbotAgentGroupCommand {
-  constructor(private dataSource: DataSource) {}
+  constructor(
+    private dataSource: DataSource,
+    private readonly courseService: CourseService,
+  ) {}
 
   @Command({
     command: 'seed:chatbot-agent-group',
@@ -73,9 +74,15 @@ export class SeedChatbotAgentGroupCommand {
         organization.id,
       );
       const organizationChatbotSettings =
-        await this.getOrganizationChatbotSettings(manager, organization.id);
+        await this.courseService.getOrganizationChatbotSettingsForAgentCourse(
+          manager,
+          organization.id,
+        );
 
-      await this.attachCourseToGroup(
+      parentCourse.chatbotAgentName = null;
+      parentCourse.chatbotAgentDescription = null;
+      parentCourse.chatbotAgentOrder = null;
+      await this.courseService.attachChatbotAgentGroupCourse(
         manager,
         parentCourse,
         superCourse,
@@ -92,13 +99,13 @@ export class SeedChatbotAgentGroupCommand {
         course.chatbotAgentName = agent.name;
         course.chatbotAgentDescription = agent.description;
         course.chatbotAgentOrder = index + 1;
-        await this.attachCourseToGroup(
+        await this.courseService.attachChatbotAgentGroupCourse(
           manager,
           course,
           superCourse,
           organization.id,
         );
-        await this.upsertAgentCourseChatbotSettings(
+        await this.courseService.upsertAgentCourseChatbotSettings(
           manager,
           course.id,
           agent.prompt,
@@ -114,27 +121,6 @@ export class SeedChatbotAgentGroupCommand {
 
   private getAgentCourseName(agentName: string): string {
     return `${parentCourseName} ${agentName}`;
-  }
-
-  private async getOrganizationChatbotSettings(
-    manager: EntityManager,
-    organizationId: number,
-  ): Promise<OrganizationChatbotSettingsModel> {
-    const organizationChatbotSettings = await manager.findOne(
-      OrganizationChatbotSettingsModel,
-      {
-        where: { organizationId },
-        relations: { defaultProvider: true },
-      },
-    );
-
-    if (!organizationChatbotSettings?.defaultProvider?.defaultModelId) {
-      throw new Error(
-        `Cannot seed LANTERN chatbot settings for organization ${organizationId}: default chatbot provider/model is not configured.`,
-      );
-    }
-
-    return organizationChatbotSettings;
   }
 
   private async findOrCreateSuperCourse(
@@ -198,72 +184,6 @@ export class SeedChatbotAgentGroupCommand {
         enabled: true,
         courseInviteCode: crypto.randomBytes(6).toString('hex'),
       }),
-    );
-  }
-
-  private async attachCourseToGroup(
-    manager: EntityManager,
-    course: CourseModel,
-    superCourse: SuperCourseModel,
-    organizationId: number,
-  ): Promise<void> {
-    if (course.name === parentCourseName) {
-      course.chatbotAgentName = null;
-      course.chatbotAgentDescription = null;
-      course.chatbotAgentOrder = null;
-    }
-    await manager.save(CourseModel, course);
-    superCourse.courses = superCourse.courses ?? [];
-    if (
-      !superCourse.courses.some((groupCourse) => groupCourse.id === course.id)
-    ) {
-      superCourse.courses.push(course);
-      await manager.save(SuperCourseModel, superCourse);
-    }
-
-    if (
-      !(await manager.findOne(OrganizationCourseModel, {
-        where: { courseId: course.id, organizationId },
-      }))
-    ) {
-      await manager.save(
-        OrganizationCourseModel,
-        manager.create(OrganizationCourseModel, {
-          courseId: course.id,
-          organizationId,
-        }),
-      );
-    }
-
-    if (
-      !(await manager.findOne(CourseSettingsModel, {
-        where: { courseId: course.id },
-      }))
-    ) {
-      await manager.save(
-        CourseSettingsModel,
-        manager.create(CourseSettingsModel, {
-          courseId: course.id,
-          chatBotEnabled: true,
-          asyncQueueEnabled: true,
-          adsEnabled: true,
-          queueEnabled: true,
-        }),
-      );
-    }
-  }
-
-  private async upsertAgentCourseChatbotSettings(
-    manager: EntityManager,
-    courseId: number,
-    prompt: string,
-    organizationChatbotSettings: OrganizationChatbotSettingsModel,
-  ): Promise<void> {
-    await CourseService.upsertAgentCourseChatbotSettings(
-      manager,
-      courseId,
-      prompt,
-      organizationChatbotSettings,
     );
   }
 }

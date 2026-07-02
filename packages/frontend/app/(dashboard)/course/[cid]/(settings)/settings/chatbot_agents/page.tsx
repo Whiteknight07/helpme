@@ -59,17 +59,14 @@ export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
 
   const fetchAgents = useCallback(async () => {
     setDataLoading(true)
-    await API.chatbot.staffOnly
-      .getAgentsForStaff(courseId)
-      .then((response) => {
-        setAgents(response)
-      })
-      .catch((e) => {
-        message.error('Failed to load chatbot agents: ' + getErrorMessage(e))
-      })
-      .finally(() => {
-        setDataLoading(false)
-      })
+    try {
+      const response = await API.chatbot.staffOnly.getAgentsForStaff(courseId)
+      setAgents(response)
+    } catch (e) {
+      message.error('Failed to load chatbot agents: ' + getErrorMessage(e))
+    } finally {
+      setDataLoading(false)
+    }
   }, [courseId])
 
   useEffect(() => {
@@ -100,11 +97,6 @@ export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
 
   const handleSubmit = async (values: AgentFormValues) => {
     setSubmitting(true)
-    const createAgentParams = {
-      agentName: values.agentName,
-      agentDescription: values.agentDescription || undefined,
-      agentOrder: values.agentOrder,
-    }
 
     try {
       if (editingAgent) {
@@ -120,7 +112,9 @@ export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
         message.success('Chatbot agent updated.')
       } else {
         await API.chatbot.staffOnly.createAgent(courseId, {
-          ...createAgentParams,
+          agentName: values.agentName,
+          agentDescription: values.agentDescription || undefined,
+          agentOrder: values.agentOrder,
           initialPrompt: values.initialPrompt || undefined,
         } satisfies CreateChatbotAgentParams)
         message.success('Chatbot agent added.')
@@ -139,21 +133,20 @@ export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
     enabled: boolean,
   ) => {
     setUpdatingAgentCourseId(agent.courseId)
-    await API.chatbot.staffOnly
-      .updateAgent(courseId, agent.courseId, { enabled })
-      .then(() => {
-        message.success(`Chatbot agent ${enabled ? 'enabled' : 'disabled'}.`)
-        fetchAgents()
+    try {
+      await API.chatbot.staffOnly.updateAgent(courseId, agent.courseId, {
+        enabled,
       })
-      .catch((e) => {
-        message.error(
-          `Failed to ${enabled ? 'enable' : 'disable'} chatbot agent: ` +
-            getErrorMessage(e),
-        )
-      })
-      .finally(() => {
-        setUpdatingAgentCourseId(null)
-      })
+      message.success(`Chatbot agent ${enabled ? 'enabled' : 'disabled'}.`)
+      fetchAgents()
+    } catch (e) {
+      message.error(
+        `Failed to ${enabled ? 'enable' : 'disable'} chatbot agent: ` +
+          getErrorMessage(e),
+      )
+    } finally {
+      setUpdatingAgentCourseId(null)
+    }
   }
 
   const columns: TableProps<StaffChatbotAgentCourse>['columns'] = [

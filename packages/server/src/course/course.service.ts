@@ -2,6 +2,7 @@ import {
   BatchCourseCloneAttributes,
   BatchCourseCloneResponse,
   CreateChatbotAgentParams,
+  ChatbotAgentCourse,
   CourseCloneAttributes,
   EditCourseInfoParams,
   ERROR_MESSAGES,
@@ -564,30 +565,76 @@ export class CourseService {
     };
   }
 
-  async getChatbotAgentCourses(
-    parentCourseId: number,
-  ): Promise<StaffChatbotAgentCourse[]> {
+  private async getSortedChatbotAgentGroupCourses(courseId: number): Promise<{
+    superCourse: SuperCourseModel;
+    agentCourses: CourseModel[];
+  } | null> {
     const superCourse = await SuperCourseModel.findGroupForCourse(
-      parentCourseId,
+      courseId,
       SuperCoursePurpose.CHATBOT_AGENT_GROUP,
     );
 
     if (!superCourse) {
-      return [];
+      return null;
     }
 
-    return superCourse.courses
+    const agentCourses = superCourse.courses
       .filter((groupCourse) => groupCourse.chatbotAgentName)
       .sort(
         (a, b) =>
           (a.chatbotAgentOrder ?? Number.MAX_SAFE_INTEGER) -
             (b.chatbotAgentOrder ?? Number.MAX_SAFE_INTEGER) ||
           a.name.localeCompare(b.name),
-      )
-      .map((groupCourse) => this.toChatbotAgentCourse(groupCourse));
+      );
+
+    return { superCourse, agentCourses };
   }
 
-  private async attachChatbotAgentGroupCourse(
+  async getChatbotAgentCourses(
+    parentCourseId: number,
+  ): Promise<StaffChatbotAgentCourse[]> {
+    const group = await this.getSortedChatbotAgentGroupCourses(parentCourseId);
+
+    if (!group) {
+      return [];
+    }
+
+    return group.agentCourses.map((groupCourse) =>
+      this.toChatbotAgentCourse(groupCourse),
+    );
+  }
+
+  async getChatbotAgentCoursesForStudents(
+    courseId: number,
+  ): Promise<ChatbotAgentCourse[]> {
+    const group = await this.getSortedChatbotAgentGroupCourses(courseId);
+
+    if (!group) {
+      return [];
+    }
+
+    const requestedCourse = group.superCourse.courses.find(
+      (groupCourse) => groupCourse.id === courseId,
+    );
+    if (!requestedCourse) {
+      return [];
+    }
+    const showArchivedAgents = requestedCourse.enabled === false;
+
+    return group.agentCourses
+      .filter(
+        (groupCourse) => showArchivedAgents || groupCourse.enabled !== false,
+      )
+      .map((groupCourse) => ({
+        courseId: groupCourse.id,
+        name: groupCourse.name,
+        agentName: groupCourse.chatbotAgentName,
+        description: groupCourse.chatbotAgentDescription,
+        order: groupCourse.chatbotAgentOrder,
+      }));
+  }
+
+  async attachChatbotAgentGroupCourse(
     manager: EntityManager,
     course: CourseModel,
     superCourse: SuperCourseModel,
@@ -628,7 +675,7 @@ export class CourseService {
     }
   }
 
-  static async getOrganizationChatbotSettingsForAgentCourse(
+  async getOrganizationChatbotSettingsForAgentCourse(
     manager: EntityManager,
     organizationId: number,
   ): Promise<OrganizationChatbotSettingsModel> {
@@ -649,7 +696,7 @@ export class CourseService {
     return organizationChatbotSettings;
   }
 
-  static async upsertAgentCourseChatbotSettings(
+  async upsertAgentCourseChatbotSettings(
     manager: EntityManager,
     courseId: number,
     prompt: string | undefined,
@@ -658,6 +705,17 @@ export class CourseService {
     const existing = await manager.findOne(CourseChatbotSettingsModel, {
       where: { courseId },
     });
+
+    if (existing) {
+      if (prompt !== undefined) {
+        existing.prompt = prompt;
+      }
+      existing.usingDefaultPrompt =
+        prompt === undefined ? existing.usingDefaultPrompt : false;
+      await manager.save(CourseChatbotSettingsModel, existing);
+      return;
+    }
+
     const defaults = {
       ...CourseChatbotSettingsModel.getDefaults(manager),
       ...organizationChatbotSettings.transformDefaults(),
@@ -673,7 +731,6 @@ export class CourseService {
     const settings = manager.create(CourseChatbotSettingsModel, {
       ...defaults,
       ...usingDefaults,
-      ...existing,
       courseId,
       organizationSettingsId: organizationChatbotSettings.id,
       llmId: organizationChatbotSettings.defaultProvider.defaultModelId,
@@ -692,7 +749,7 @@ export class CourseService {
     return await this.dataSource.transaction(async (manager) => {
       const parentCourse = await manager.findOne(CourseModel, {
         where: { id: parentCourseId },
-        relations: { organizationCourse: true },
+        lock: { mode: 'pessimistic_write' },
       });
       if (!parentCourse) {
         throw new NotFoundException(
@@ -704,15 +761,21 @@ export class CourseService {
           'Cannot create a chatbot agent course from another chatbot agent course.',
         );
       }
-      if (!parentCourse.organizationCourse?.organizationId) {
+      const organizationCourse = await manager.findOne(
+        OrganizationCourseModel,
+        {
+          where: { courseId: parentCourseId },
+        },
+      );
+      if (!organizationCourse?.organizationId) {
         throw new BadRequestException(
           'Parent course is not associated with an organization.',
         );
       }
 
-      const organizationId = parentCourse.organizationCourse.organizationId;
+      const organizationId = organizationCourse.organizationId;
       const organizationChatbotSettings =
-        await CourseService.getOrganizationChatbotSettingsForAgentCourse(
+        await this.getOrganizationChatbotSettingsForAgentCourse(
           manager,
           organizationId,
         );
@@ -759,7 +822,7 @@ export class CourseService {
         superCourse,
         organizationId,
       );
-      await CourseService.upsertAgentCourseChatbotSettings(
+      await this.upsertAgentCourseChatbotSettings(
         manager,
         agentCourse.id,
         params.initialPrompt,

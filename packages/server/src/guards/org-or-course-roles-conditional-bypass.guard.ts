@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UserModel } from '../profile/user.entity';
 import { OrgOrCourseRolesGuard } from './org-or-course-roles.guard';
-import { addInheritedChatbotAgentCourseMembership } from './chatbot-agent-course-membership.helper';
+import { inheritedChatbotAgentCourseRole } from './chatbot-agent-course-membership.helper';
 
 @Injectable()
 export class OrgOrCourseRolesConditionalBypassGuard extends OrgOrCourseRolesGuard {
@@ -18,14 +18,7 @@ export class OrgOrCourseRolesConditionalBypassGuard extends OrgOrCourseRolesGuar
       where: { id: userId },
       relations: { courses: true },
     });
-    await addInheritedChatbotAgentCourseMembership(user, courseId);
-    const inheritedMembership = user?.courses.find(
-      (course) => Number(course.courseId) === Number(courseId),
-    );
-    if (!inheritedMembership) {
-      return false;
-    }
-
-    return roles.includes(inheritedMembership.role.toString());
+    const role = await inheritedChatbotAgentCourseRole(user, courseId);
+    return role !== null && roles.includes(role.toString());
   }
 }

@@ -120,6 +120,11 @@ const CourseSettingsMenu: React.FC<CourseSettingsManyProps> = ({
       label: 'Chatbot Settings',
     },
     {
+      key: CourseAdminOptions.CHATBOT_AGENTS,
+      icon: <RobotOutlined />,
+      label: 'Chatbot Agents',
+    },
+    {
       key: CourseAdminOptions.CHATBOT_KNOWLEDGE_BASE,
       icon: <RobotOutlined />,
       label: 'Chatbot Knowledge Base',
@@ -130,14 +135,6 @@ const CourseSettingsMenu: React.FC<CourseSettingsManyProps> = ({
       label: 'Edit Chatbot Questions',
     },
   ]
-
-  if (courseRole === Role.PROFESSOR) {
-    baseMenuItems.splice(5, 0, {
-      key: CourseAdminOptions.CHATBOT_AGENTS,
-      icon: <RobotOutlined />,
-      label: 'Chatbot Agents',
-    })
-  }
 
   const professorMenuItems: MenuItem[] = [
     {

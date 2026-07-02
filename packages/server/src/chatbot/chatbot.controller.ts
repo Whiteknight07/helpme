@@ -55,7 +55,6 @@ import {
   OrganizationRole,
   Role,
   StaffChatbotAgentCourse,
-  SuperCoursePurpose,
   UpdateChatbotAgentParams,
   UpdateChatbotProviderBody,
   UpdateChatbotQuestionParams,
@@ -73,7 +72,6 @@ import * as Sentry from '@sentry/nestjs';
 import { CourseRolesConditionalBypassGuard } from 'guards/course-roles-conditional-bypass.guard';
 import { LibreOffice, MarkdownConverter } from 'chromiumly';
 import { CourseModel } from 'course/course.entity';
-import { SuperCourseModel } from 'course/super-course.entity';
 import { generateHTMLForMarkdownToPDF } from './markdown-to-pdf-styles';
 import { ChatbotDocPdfModel } from './chatbot-doc-pdf.entity';
 import { Request, Response } from 'express';
@@ -234,42 +232,7 @@ export class ChatbotController {
   async getChatbotAgents(
     @Param('courseId', ParseIntPipe) courseId: number,
   ): Promise<ChatbotAgentCourse[]> {
-    const superCourse = await SuperCourseModel.findGroupForCourse(
-      courseId,
-      SuperCoursePurpose.CHATBOT_AGENT_GROUP,
-    );
-
-    if (!superCourse) {
-      return [];
-    }
-
-    const requestedCourse = superCourse.courses.find(
-      (groupCourse) => groupCourse.id === courseId,
-    );
-    if (!requestedCourse) {
-      return [];
-    }
-    const showArchivedAgents = requestedCourse.enabled === false;
-
-    return superCourse.courses
-      .filter(
-        (groupCourse) =>
-          groupCourse.chatbotAgentName &&
-          (showArchivedAgents || groupCourse.enabled !== false),
-      )
-      .sort(
-        (a, b) =>
-          (a.chatbotAgentOrder ?? Number.MAX_SAFE_INTEGER) -
-            (b.chatbotAgentOrder ?? Number.MAX_SAFE_INTEGER) ||
-          a.name.localeCompare(b.name),
-      )
-      .map((groupCourse) => ({
-        courseId: groupCourse.id,
-        name: groupCourse.name,
-        agentName: groupCourse.chatbotAgentName,
-        description: groupCourse.chatbotAgentDescription,
-        order: groupCourse.chatbotAgentOrder,
-      }));
+    return await this.courseService.getChatbotAgentCoursesForStudents(courseId);
   }
 
   @Post('course/:courseId/agents')

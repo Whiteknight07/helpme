@@ -28,6 +28,7 @@ import {
 import { ThumbsDown, ThumbsUp } from 'lucide-react'
 import ChatbotHelpTooltip from '../components/ChatbotHelpTooltip'
 import ChatbotAgentTargetSelect from '../components/ChatbotAgentTargetSelect'
+import { useChatbotTargetCourse } from '../components/useChatbotTargetCourse'
 
 export interface ChatbotQuestionFrontend {
   key: string
@@ -55,7 +56,7 @@ export default function ChatbotQuestions(
 ): ReactElement {
   const params = use(props.params)
   const courseId = Number(params.cid)
-  const [targetCourseId, setTargetCourseId] = useState(courseId)
+  const [targetCourseId, setTargetCourseId] = useChatbotTargetCourse(courseId)
   const [addModelOpen, setAddModelOpen] = useState(false)
   const { userInfo } = useUserInfo()
   const [search, setSearch] = useState('')
@@ -67,10 +68,6 @@ export default function ChatbotQuestions(
     [],
   )
   const [dataLoading, setDataLoading] = useState(false)
-
-  useEffect(() => {
-    setTargetCourseId(courseId)
-  }, [courseId])
 
   // choosing to manually control which antd table rows are expanded so that we can expand all children conversations when they click "show conversations"
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])

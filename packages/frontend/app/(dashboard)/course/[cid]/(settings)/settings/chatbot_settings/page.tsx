@@ -22,6 +22,7 @@ import ChatbotHelpTooltip from '../components/ChatbotHelpTooltip'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 import ChatbotSettingsModal from '@/app/(dashboard)/course/[cid]/(settings)/settings/chatbot_settings/components/ChatbotSettingsModal'
 import ChatbotAgentTargetSelect from '../components/ChatbotAgentTargetSelect'
+import { useChatbotTargetCourse } from '../components/useChatbotTargetCourse'
 
 interface ChatbotPanelProps {
   params: Promise<{ cid: string }>
@@ -32,7 +33,7 @@ export default function ChatbotSettings(
   const params = use(props.params)
   const { userInfo } = useUserInfo()
   const courseId = useMemo(() => Number(params.cid), [params.cid])
-  const [targetCourseId, setTargetCourseId] = useState(courseId)
+  const [targetCourseId, setTargetCourseId] = useChatbotTargetCourse(courseId)
   const [chatbotParameterModalOpen, setChatbotParameterModalOpen] =
     useState(false)
   const [addDocumentModalOpen, setAddDocumentModalOpen] = useState(false)
@@ -46,10 +47,6 @@ export default function ChatbotSettings(
   const [pageSize, setPageSize] = useState(10)
   const [courseServiceType, setCourseServiceType] =
     useState<ChatbotServiceType>()
-
-  useEffect(() => {
-    setTargetCourseId(courseId)
-  }, [courseId])
 
   const rowSelection: TableRowSelection<SourceDocument> = {
     type: 'checkbox',

@@ -1,30 +1,30 @@
-import { SuperCoursePurpose } from '@koh/common';
+import { Role, SuperCoursePurpose } from '@koh/common';
 import { CourseModel } from '../course/course.entity';
 import { UserModel } from '../profile/user.entity';
 import { SuperCourseModel } from '../course/super-course.entity';
-import { UserCourseModel } from '../profile/user-course.entity';
 
-export async function addInheritedChatbotAgentCourseMembership(
+export async function inheritedChatbotAgentCourseRole(
   user: UserModel | null,
   courseId: number | string,
-): Promise<void> {
+): Promise<Role | null> {
+  const cid = Number(courseId);
   if (!user) {
-    return;
+    return null;
   }
 
-  if (user.courses?.find((c) => Number(c.courseId) === Number(courseId))) {
-    return;
+  if (user.courses?.find((c) => Number(c.courseId) === cid)) {
+    return null;
   }
 
   const superCourse = await SuperCourseModel.findGroupForCourse(
-    Number(courseId),
+    cid,
     SuperCoursePurpose.CHATBOT_AGENT_GROUP,
   );
   const requestedCourse = superCourse?.courses.find(
-    (groupCourse: CourseModel) => Number(groupCourse.id) === Number(courseId),
+    (groupCourse: CourseModel) => Number(groupCourse.id) === cid,
   );
   if (!requestedCourse?.chatbotAgentName) {
-    return;
+    return null;
   }
 
   const parentMembership = user.courses.find((userCourse) =>
@@ -34,10 +34,9 @@ export async function addInheritedChatbotAgentCourseMembership(
         !groupCourse.chatbotAgentName,
     ),
   );
-  if (parentMembership) {
-    const inheritedMembership = new UserCourseModel();
-    inheritedMembership.courseId = Number(courseId);
-    inheritedMembership.role = parentMembership.role;
-    user.courses.push(inheritedMembership);
+  if (!parentMembership) {
+    return null;
   }
+
+  return parentMembership.role;
 }

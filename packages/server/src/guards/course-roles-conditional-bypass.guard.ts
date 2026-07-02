@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { RolesGuard } from './role.guard';
 import { UserModel } from '../profile/user.entity';
 import { Role } from '@koh/common';
-import { addInheritedChatbotAgentCourseMembership } from './chatbot-agent-course-membership.helper';
+import { inheritedChatbotAgentCourseRole } from './chatbot-agent-course-membership.helper';
 
 /* Functionally the same as CourseRolesGuard, but allows specific
 conditional chatbot access paths that do not have normal course membership. */
@@ -35,7 +35,10 @@ export class CourseRolesConditionalBypassGuard extends RolesGuard {
       });
     }
 
-    await addInheritedChatbotAgentCourseMembership(user, courseId);
+    const role = await inheritedChatbotAgentCourseRole(user, courseId);
+    if (role) {
+      user.courses.push({ courseId, role });
+    }
     return { courseId, user };
   }
 }
