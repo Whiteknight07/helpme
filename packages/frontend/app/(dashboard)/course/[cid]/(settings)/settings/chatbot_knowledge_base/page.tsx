@@ -19,6 +19,7 @@ import EditDocumentChunkModal from './components/EditChatbotDocumentChunkModal'
 import { AddDocumentChunkParams, SourceDocument } from '@koh/common'
 import { API } from '@/app/api'
 import ChatbotHelpTooltip from '../components/ChatbotHelpTooltip'
+import ChatbotAgentTargetSelect from '../components/ChatbotAgentTargetSelect'
 
 interface FormValues {
   content: string
@@ -36,6 +37,7 @@ export default function ChatbotKnowledgeBase(
 ): ReactElement {
   const params = use(props.params)
   const courseId = Number(params.cid)
+  const [targetCourseId, setTargetCourseId] = useState(courseId)
   const [documents, setDocuments] = useState<SourceDocument[]>([])
   const [filteredDocuments, setFilteredDocuments] = useState<SourceDocument[]>(
     [],
@@ -48,6 +50,10 @@ export default function ChatbotKnowledgeBase(
   const [form] = Form.useForm()
   const [addDocChunkPopupVisible, setAddDocChunkPopupVisible] = useState(false)
   const [dataLoading, setDataLoading] = useState(false)
+
+  useEffect(() => {
+    setTargetCourseId(courseId)
+  }, [courseId])
 
   const addDocument = async (values: FormValues) => {
     const body: AddDocumentChunkParams = {
@@ -62,7 +68,7 @@ export default function ChatbotKnowledgeBase(
       },
     }
     await API.chatbot.staffOnly
-      .addDocumentChunk(courseId, body)
+      .addDocumentChunk(targetCourseId, body)
       .then((addedDocs) => {
         message.success(
           `Document${addedDocs.length > 1 ? 's' : ''} added successfully.`,
@@ -92,10 +98,10 @@ export default function ChatbotKnowledgeBase(
   )
 
   const fetchDocuments = useCallback(async () => {
-    if (courseId) {
+    if (targetCourseId) {
       setDataLoading(true)
       await API.chatbot.staffOnly
-        .getAllDocumentChunks(courseId)
+        .getAllDocumentChunks(targetCourseId)
         .then((response) => {
           response = response.map((doc) => ({
             ...doc,
@@ -110,7 +116,7 @@ export default function ChatbotKnowledgeBase(
         })
     }
     setDataLoading(false)
-  }, [courseId, setDocuments, setFilteredDocuments, search])
+  }, [targetCourseId, setDocuments, setFilteredDocuments, search])
 
   useEffect(() => {
     fetchDocuments()
@@ -223,7 +229,7 @@ export default function ChatbotKnowledgeBase(
 
   const deleteDocument = async (documentId: string) => {
     await API.chatbot.staffOnly
-      .deleteDocumentChunk(courseId, documentId)
+      .deleteDocumentChunk(targetCourseId, documentId)
       .then(() => {
         fetchDocuments()
         message.success('Document deleted successfully.')
@@ -232,6 +238,14 @@ export default function ChatbotKnowledgeBase(
         const errorMessage = getErrorMessage(e)
         message.error('Failed to delete document: ' + errorMessage)
       })
+  }
+
+  const handleTargetCourseChange = (newCourseId: number) => {
+    setTargetCourseId(newCourseId)
+    setEditingRecord(null)
+    setEditRecordModalOpen(false)
+    setAddDocChunkPopupVisible(false)
+    form.resetFields()
   }
 
   return (
@@ -255,6 +269,11 @@ export default function ChatbotKnowledgeBase(
           </Button>
         </div>
       </div>
+      <ChatbotAgentTargetSelect
+        courseId={courseId}
+        value={targetCourseId}
+        onChange={handleTargetCourseChange}
+      />
       {addDocChunkPopupVisible && (
         <div className="h-70 top-50 fixed right-1 z-50 w-[360px] bg-white p-4 shadow-lg">
           <Form form={form} onFinish={addDocument}>
@@ -370,7 +389,7 @@ export default function ChatbotKnowledgeBase(
         <EditDocumentChunkModal
           open={editRecordModalOpen}
           editingRecord={editingRecord}
-          courseId={courseId}
+          courseId={targetCourseId}
           onCancel={() => {
             setEditingRecord(null)
             setEditRecordModalOpen(false)

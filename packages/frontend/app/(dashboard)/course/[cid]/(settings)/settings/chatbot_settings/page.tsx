@@ -21,6 +21,7 @@ import { useUserInfo } from '@/app/contexts/userContext'
 import ChatbotHelpTooltip from '../components/ChatbotHelpTooltip'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 import ChatbotSettingsModal from '@/app/(dashboard)/course/[cid]/(settings)/settings/chatbot_settings/components/ChatbotSettingsModal'
+import ChatbotAgentTargetSelect from '../components/ChatbotAgentTargetSelect'
 
 interface ChatbotPanelProps {
   params: Promise<{ cid: string }>
@@ -31,6 +32,7 @@ export default function ChatbotSettings(
   const params = use(props.params)
   const { userInfo } = useUserInfo()
   const courseId = useMemo(() => Number(params.cid), [params.cid])
+  const [targetCourseId, setTargetCourseId] = useState(courseId)
   const [chatbotParameterModalOpen, setChatbotParameterModalOpen] =
     useState(false)
   const [addDocumentModalOpen, setAddDocumentModalOpen] = useState(false)
@@ -45,6 +47,10 @@ export default function ChatbotSettings(
   const [courseServiceType, setCourseServiceType] =
     useState<ChatbotServiceType>()
 
+  useEffect(() => {
+    setTargetCourseId(courseId)
+  }, [courseId])
+
   const rowSelection: TableRowSelection<SourceDocument> = {
     type: 'checkbox',
     onChange: (newSelectedRowKeys: React.Key[]) => {
@@ -54,9 +60,10 @@ export default function ChatbotSettings(
   const hasSelected = selectedRowKeys.length > 0
 
   useEffect(() => {
+    setCourseServiceType(undefined)
     const getCourseServiceType = () => {
       return API.chatbot.staffOnly
-        .getCourseServiceType(courseId)
+        .getCourseServiceType(targetCourseId)
         .then((response) => {
           setCourseServiceType(response)
         })
@@ -67,12 +74,15 @@ export default function ChatbotSettings(
         )
     }
     getCourseServiceType().then()
-  }, [courseId])
+  }, [targetCourseId])
 
   const handleDeleteSelectedDocuments = async () => {
     try {
       for (const docId of selectedRowKeys) {
-        await API.chatbot.staffOnly.deleteDocument(courseId, docId.toString())
+        await API.chatbot.staffOnly.deleteDocument(
+          targetCourseId,
+          docId.toString(),
+        )
         setCountProcessed(countProcessed + 1)
       }
       message.success('Documents deleted.')
@@ -90,7 +100,7 @@ export default function ChatbotSettings(
   const handleDeleteDocument = async (record: any) => {
     setLoading(true)
     await API.chatbot.staffOnly
-      .deleteDocument(courseId, record.docId.toString())
+      .deleteDocument(targetCourseId, record.docId.toString())
       .then(() => {
         message.success('Document deleted.')
         getDocuments()
@@ -186,7 +196,7 @@ export default function ChatbotSettings(
 
   const getDocuments = useCallback(async () => {
     await API.chatbot.staffOnly
-      .getAllAggregateDocuments(courseId)
+      .getAllAggregateDocuments(targetCourseId)
       .then((response) => {
         const formattedDocuments = response.map((doc) => ({
           key: doc.id,
@@ -202,7 +212,7 @@ export default function ChatbotSettings(
         console.error(e)
         setChatbotDocuments([])
       })
-  }, [courseId, setChatbotDocuments])
+  }, [targetCourseId, setChatbotDocuments])
 
   useEffect(() => {
     getDocuments()
@@ -228,12 +238,21 @@ export default function ChatbotSettings(
     [filteredDocuments, page, pageSize],
   )
 
+  const handleTargetCourseChange = (newCourseId: number) => {
+    setTargetCourseId(newCourseId)
+    setChatbotParameterModalOpen(false)
+    setAddDocumentModalOpen(false)
+    setSelectViewEnabled(false)
+    setSelectedRowKeys([])
+    setPage(1)
+  }
+
   return (
     <div className="m-auto my-5">
       <title>{`HelpMe | Editing ${userInfo.courses.find((e) => e.course.id === courseId)?.course.name ?? ''} Chatbot`}</title>
       <AddChatbotDocumentModal
         open={addDocumentModalOpen}
-        courseId={courseId}
+        courseId={targetCourseId}
         onClose={() => setAddDocumentModalOpen(false)}
         getDocuments={getDocuments}
       />
@@ -267,6 +286,11 @@ export default function ChatbotSettings(
           </Button>
         </div>
       </div>
+      <ChatbotAgentTargetSelect
+        courseId={courseId}
+        value={targetCourseId}
+        onChange={handleTargetCourseChange}
+      />
       <hr className="my-5 w-full"></hr>
 
       <Input
@@ -300,13 +324,13 @@ export default function ChatbotSettings(
         (courseServiceType == ChatbotServiceType.LEGACY ? (
           <LegacyChatbotSettingsModal
             open={chatbotParameterModalOpen}
-            courseId={courseId}
+            courseId={targetCourseId}
             onClose={() => setChatbotParameterModalOpen(false)}
           />
         ) : (
           <ChatbotSettingsModal
             open={chatbotParameterModalOpen}
-            courseId={courseId}
+            courseId={targetCourseId}
             onClose={() => setChatbotParameterModalOpen(false)}
           />
         ))}

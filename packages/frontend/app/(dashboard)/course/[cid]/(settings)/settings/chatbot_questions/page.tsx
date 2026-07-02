@@ -27,6 +27,7 @@ import {
 } from '@koh/common'
 import { ThumbsDown, ThumbsUp } from 'lucide-react'
 import ChatbotHelpTooltip from '../components/ChatbotHelpTooltip'
+import ChatbotAgentTargetSelect from '../components/ChatbotAgentTargetSelect'
 
 export interface ChatbotQuestionFrontend {
   key: string
@@ -54,6 +55,7 @@ export default function ChatbotQuestions(
 ): ReactElement {
   const params = use(props.params)
   const courseId = Number(params.cid)
+  const [targetCourseId, setTargetCourseId] = useState(courseId)
   const [addModelOpen, setAddModelOpen] = useState(false)
   const { userInfo } = useUserInfo()
   const [search, setSearch] = useState('')
@@ -65,6 +67,10 @@ export default function ChatbotQuestions(
     [],
   )
   const [dataLoading, setDataLoading] = useState(false)
+
+  useEffect(() => {
+    setTargetCourseId(courseId)
+  }, [courseId])
 
   // choosing to manually control which antd table rows are expanded so that we can expand all children conversations when they click "show conversations"
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
@@ -104,7 +110,7 @@ export default function ChatbotQuestions(
 
   useEffect(() => {
     API.chatbot.staffOnly
-      .getAllAggregateDocuments(courseId)
+      .getAllAggregateDocuments(targetCourseId)
       .then((res) => {
         const formattedDocuments = res.map((doc) => ({
           key: doc.id,
@@ -119,7 +125,7 @@ export default function ChatbotQuestions(
       .catch((e) => {
         message.error('Failed to fetch documents: ' + getErrorMessage(e))
       })
-  }, [courseId])
+  }, [targetCourseId])
 
   const columns: any[] = [
     {
@@ -426,7 +432,7 @@ export default function ChatbotQuestions(
     // this becomes a really hard problem especially if you consider how the first question in an interaction can be a duplicate but subsequent questions can be different
     try {
       const { helpmeDB, chatbotDB } =
-        await API.chatbot.staffOnly.getInteractionsAndQuestions(courseId)
+        await API.chatbot.staffOnly.getInteractionsAndQuestions(targetCourseId)
 
       const processedQuestions = processQuestions(helpmeDB, chatbotDB)
 
@@ -436,7 +442,7 @@ export default function ChatbotQuestions(
       message.error('Failed to fetch questions: ' + errorMessage)
     }
     setDataLoading(false)
-  }, [courseId])
+  }, [targetCourseId])
 
   useEffect(() => {
     getQuestions()
@@ -444,7 +450,7 @@ export default function ChatbotQuestions(
 
   const deleteQuestion = async (questionId: string) => {
     await API.chatbot.staffOnly
-      .deleteQuestion(courseId, questionId)
+      .deleteQuestion(targetCourseId, questionId)
       .then(() => {
         getQuestions()
         message.success('Question successfully deleted')
@@ -452,6 +458,14 @@ export default function ChatbotQuestions(
       .catch((e) => {
         message.error('Failed to delete question: ' + getErrorMessage(e))
       })
+  }
+
+  const handleTargetCourseChange = (newCourseId: number) => {
+    setTargetCourseId(newCourseId)
+    setAddModelOpen(false)
+    setEditingRecord(null)
+    setEditRecordModalOpen(false)
+    setExpandedRowKeys([])
   }
 
   return (
@@ -463,7 +477,7 @@ export default function ChatbotQuestions(
       */}
       <AddChatbotQuestionModal
         open={addModelOpen}
-        courseId={courseId}
+        courseId={targetCourseId}
         existingDocuments={existingDocuments}
         onCancel={() => setAddModelOpen(false)}
         onAddSuccess={() => {
@@ -474,7 +488,7 @@ export default function ChatbotQuestions(
       {editingRecord && (
         <EditChatbotQuestionModal
           open={editRecordModalOpen}
-          cid={courseId}
+          cid={targetCourseId}
           editingRecord={editingRecord}
           onCancel={() => setEditRecordModalOpen(false)}
           onSuccessfulUpdate={() => {
@@ -508,6 +522,11 @@ export default function ChatbotQuestions(
           <Button onClick={() => setAddModelOpen(true)}>Add Question</Button>
         </div>
       </div>
+      <ChatbotAgentTargetSelect
+        courseId={courseId}
+        value={targetCourseId}
+        onChange={handleTargetCourseChange}
+      />
       <Divider className="my-3" />
       <Table
         columns={columns}
