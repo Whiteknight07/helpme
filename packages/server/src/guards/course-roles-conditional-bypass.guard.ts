@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { RolesGuard } from './role.guard';
 import { UserModel } from '../profile/user.entity';
-import { Role, SuperCoursePurpose } from '@koh/common';
-import { SuperCourseModel } from '../course/super-course.entity';
+import { Role } from '@koh/common';
+import { addInheritedChatbotAgentCourseMembership } from './chatbot-agent-course-membership.helper';
 
 /* Functionally the same as CourseRolesGuard, but allows specific
 conditional chatbot access paths that do not have normal course membership. */
@@ -35,32 +35,7 @@ export class CourseRolesConditionalBypassGuard extends RolesGuard {
       });
     }
 
-    // Agent courses are hidden from students, but students enrolled in the
-    // non-agent parent course should still be able to ask those agent chatbots.
-    if (!user?.courses?.find((c) => Number(c.courseId) === Number(courseId))) {
-      const superCourse = await SuperCourseModel.findGroupForCourse(
-        Number(courseId),
-        SuperCoursePurpose.CHATBOT_AGENT_GROUP,
-      );
-      const requestedCourse = superCourse?.courses.find(
-        (groupCourse) => Number(groupCourse.id) === Number(courseId),
-      );
-      if (requestedCourse?.chatbotAgentName) {
-        const parentMembership = user.courses.find((userCourse) =>
-          superCourse.courses.some(
-            (groupCourse) =>
-              Number(groupCourse.id) === Number(userCourse.courseId) &&
-              !groupCourse.chatbotAgentName,
-          ),
-        );
-        if (parentMembership) {
-          user.courses.push({
-            courseId,
-            role: parentMembership.role,
-          });
-        }
-      }
-    }
+    await addInheritedChatbotAgentCourseMembership(user, courseId);
     return { courseId, user };
   }
 }

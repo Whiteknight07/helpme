@@ -1,10 +1,10 @@
 import { SuperCoursePurpose } from '@koh/common';
 import { Injectable } from '@nestjs/common';
 import { Command } from 'nestjs-command';
-import { CourseChatbotSettingsModel } from 'chatbot/chatbot-infrastructure-models/course-chatbot-settings.entity';
 import { OrganizationChatbotSettingsModel } from 'chatbot/chatbot-infrastructure-models/organization-chatbot-settings.entity';
 import { CourseModel } from 'course/course.entity';
 import { CourseSettingsModel } from 'course/course_settings.entity';
+import { CourseService } from 'course/course.service';
 import { SuperCourseModel } from 'course/super-course.entity';
 import { OrganizationCourseModel } from 'organization/organization-course.entity';
 import { OrganizationModel } from 'organization/organization.entity';
@@ -259,33 +259,11 @@ export class SeedChatbotAgentGroupCommand {
     prompt: string,
     organizationChatbotSettings: OrganizationChatbotSettingsModel,
   ): Promise<void> {
-    const existing = await manager.findOne(CourseChatbotSettingsModel, {
-      where: { courseId },
-    });
-    const defaults = {
-      ...CourseChatbotSettingsModel.getDefaults(manager),
-      ...organizationChatbotSettings.transformDefaults(),
-    };
-    const usingDefaults = CourseChatbotSettingsModel.getPopulatedUsingDefaults({
-      usingDefaultModel: true,
-      usingDefaultPrompt: false,
-      usingDefaultTemperature: true,
-      usingDefaultTopK: true,
-      usingDefaultSimilarityThresholdDocuments: true,
-      usingDefaultSimilarityThresholdQuestions: true,
-    });
-    const settings = manager.create(CourseChatbotSettingsModel, {
-      ...defaults,
-      ...usingDefaults,
-      ...existing,
+    await CourseService.upsertAgentCourseChatbotSettings(
+      manager,
       courseId,
-      organizationSettingsId: organizationChatbotSettings.id,
-      llmId: organizationChatbotSettings.defaultProvider.defaultModelId,
       prompt,
-      usingDefaultModel: true,
-      usingDefaultPrompt: false,
-    });
-
-    await manager.save(CourseChatbotSettingsModel, settings);
+      organizationChatbotSettings,
+    );
   }
 }

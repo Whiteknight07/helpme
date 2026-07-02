@@ -40,9 +40,38 @@ import { CourseChatbotSettingsModel } from '../src/chatbot/chatbot-infrastructur
 import { UserModel } from '../src/profile/user.entity';
 import { ChatbotApiService } from '../src/chatbot/chatbot-api.service';
 import { SuperCourseModel } from '../src/course/super-course.entity';
+import { CourseSettingsModel } from '../src/course/course_settings.entity';
 
 describe('ChatbotController Integration', () => {
   const { supertest } = setupIntegrationTest(ChatbotModule);
+
+  const createOrganizationChatbotDefaults = async (
+    organization: OrganizationModel,
+  ) => {
+    const organizationSettings =
+      await OrganizationChatbotSettingsFactory.create({
+        organization,
+      });
+    const provider = await ChatbotProviderFactory.create({
+      organizationChatbotSettings: organizationSettings,
+      providerType: ChatbotServiceProvider.Ollama,
+      baseUrl: 'https://fake-url.com',
+      nickname: 'Ollama Provider',
+    });
+    const llm = await LLMTypeFactory.create({
+      provider,
+    });
+    provider.defaultModel = llm;
+    provider.defaultVisionModel = llm;
+    organizationSettings.defaultProvider = provider;
+    await provider.save();
+    await organizationSettings.save();
+    return {
+      organizationSettings,
+      provider,
+      llm,
+    };
+  };
 
   describe('PATCH /chatbot/questionScore/:courseId/:questionId', () => {
     it('should allow a student to update the score of a question', async () => {
@@ -367,6 +396,356 @@ describe('ChatbotController Integration', () => {
       await supertest({ userId: user.id })
         .get(`/chatbot/course/${parentCourse.id}/agents`)
         .expect(404);
+    });
+  });
+
+  describe('POST /chatbot/course/:courseId/agents', () => {
+    it('should allow a professor to create a chatbot agent course and auto-create the group', async () => {
+      const organization = await OrganizationFactory.create();
+      const parentCourse = await CourseFactory.create({
+        name: 'Research Lab',
+        timezone: 'America/Vancouver',
+        sectionGroupName: 'L1',
+      });
+      await OrganizationCourseFactory.create({
+        organization,
+        course: parentCourse,
+      });
+      const { organizationSettings, llm } =
+        await createOrganizationChatbotDefaults(organization);
+      const professor = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: professor,
+        course: parentCourse,
+        role: Role.PROFESSOR,
+      });
+
+      const response = await supertest({ userId: professor.id })
+        .post(`/chatbot/course/${parentCourse.id}/agents`)
+        .send({
+          agentName: 'Analyst',
+          agentDescription: 'Research methods and critical appraisal.',
+          agentOrder: 1,
+          initialPrompt: 'You are an analyst.',
+        })
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        name: 'Research Lab Analyst',
+        agentName: 'Analyst',
+        description: 'Research methods and critical appraisal.',
+        order: 1,
+        enabled: true,
+      });
+
+      const agentCourse = await CourseModel.findOneOrFail({
+        where: { id: response.body.courseId },
+      });
+      expect(agentCourse).toMatchObject({
+        name: 'Research Lab Analyst',
+        semesterId: parentCourse.semesterId,
+        timezone: parentCourse.timezone,
+        sectionGroupName: parentCourse.sectionGroupName,
+        enabled: true,
+        chatbotAgentName: 'Analyst',
+        chatbotAgentDescription: 'Research methods and critical appraisal.',
+        chatbotAgentOrder: 1,
+      });
+      expect(
+        await OrganizationCourseModel.findOne({
+          where: { organizationId: organization.id, courseId: agentCourse.id },
+        }),
+      ).toBeTruthy();
+      expect(
+        await CourseSettingsModel.findOne({
+          where: { courseId: agentCourse.id },
+        }),
+      ).toMatchObject({
+        chatBotEnabled: true,
+        asyncQueueEnabled: true,
+        adsEnabled: true,
+        queueEnabled: true,
+      });
+      expect(
+        await CourseChatbotSettingsModel.findOne({
+          where: { courseId: agentCourse.id },
+        }),
+      ).toMatchObject({
+        organizationSettingsId: organizationSettings.id,
+        llmId: llm.id,
+        prompt: 'You are an analyst.',
+        usingDefaultModel: true,
+        usingDefaultPrompt: false,
+      });
+
+      const group = await SuperCourseModel.findGroupForCourse(
+        parentCourse.id,
+        SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+      );
+      expect(group).toBeTruthy();
+      expect(group.courses.map((course) => course.id).sort()).toEqual(
+        [parentCourse.id, agentCourse.id].sort(),
+      );
+    });
+
+    it('should reject non-professors and non-members', async () => {
+      const organization = await OrganizationFactory.create();
+      const parentCourse = await CourseFactory.create({ name: 'Research Lab' });
+      await OrganizationCourseFactory.create({
+        organization,
+        course: parentCourse,
+      });
+      await createOrganizationChatbotDefaults(organization);
+      const body = { agentName: 'Analyst' };
+
+      const ta = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: ta,
+        course: parentCourse,
+        role: Role.TA,
+      });
+      await supertest({ userId: ta.id })
+        .post(`/chatbot/course/${parentCourse.id}/agents`)
+        .send(body)
+        .expect(403);
+
+      const student = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: student,
+        course: parentCourse,
+        role: Role.STUDENT,
+      });
+      await supertest({ userId: student.id })
+        .post(`/chatbot/course/${parentCourse.id}/agents`)
+        .send(body)
+        .expect(403);
+
+      const nonMember = await UserFactory.create();
+      await supertest({ userId: nonMember.id })
+        .post(`/chatbot/course/${parentCourse.id}/agents`)
+        .send(body)
+        .expect(404);
+    });
+
+    it('should reject creating an agent from an agent course', async () => {
+      const professor = await UserFactory.create();
+      const agentCourse = await CourseFactory.create({
+        name: 'Research Lab Analyst',
+        chatbotAgentName: 'Analyst',
+      });
+      await UserCourseFactory.create({
+        user: professor,
+        course: agentCourse,
+        role: Role.PROFESSOR,
+      });
+
+      await supertest({ userId: professor.id })
+        .post(`/chatbot/course/${agentCourse.id}/agents`)
+        .send({ agentName: 'Strategist' })
+        .expect(400);
+    });
+
+    it('should reject creating an agent when organization chatbot defaults are missing', async () => {
+      const organization = await OrganizationFactory.create();
+      const parentCourse = await CourseFactory.create({ name: 'Research Lab' });
+      await OrganizationCourseFactory.create({
+        organization,
+        course: parentCourse,
+      });
+      const professor = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: professor,
+        course: parentCourse,
+        role: Role.PROFESSOR,
+      });
+
+      const response = await supertest({ userId: professor.id })
+        .post(`/chatbot/course/${parentCourse.id}/agents`)
+        .send({ agentName: 'Analyst' })
+        .expect(400);
+      expect(response.body.message).toContain(
+        'default chatbot provider/model is not configured',
+      );
+    });
+  });
+
+  describe('PATCH /chatbot/course/:courseId/agents/:agentCourseId', () => {
+    it('should rename, disable, and include disabled agents in the staff list only', async () => {
+      const organization = await OrganizationFactory.create();
+      const parentCourse = await CourseFactory.create({ name: 'LANTERN' });
+      const agentCourse = await CourseFactory.create({
+        name: 'LANTERN Analyst',
+        enabled: true,
+        chatbotAgentName: 'Analyst',
+        chatbotAgentDescription: 'Research methods.',
+        chatbotAgentOrder: 1,
+      });
+      const professorCourse = await UserCourseFactory.create({
+        course: parentCourse,
+        role: Role.PROFESSOR,
+      });
+      const student = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: student,
+        course: parentCourse,
+        role: Role.STUDENT,
+      });
+      const agentGroup = await SuperCourseModel.create({
+        name: 'LANTERN Agents',
+        purpose: SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+        organization,
+      }).save();
+      agentGroup.courses = [parentCourse, agentCourse];
+      await agentGroup.save();
+
+      const response = await supertest({ userId: professorCourse.userId })
+        .patch(`/chatbot/course/${parentCourse.id}/agents/${agentCourse.id}`)
+        .send({
+          agentName: 'Strategist',
+          agentDescription: 'Grant strategy.',
+          agentOrder: 2,
+          enabled: false,
+        })
+        .expect(200);
+      expect(response.body).toMatchObject({
+        courseId: agentCourse.id,
+        name: 'LANTERN Strategist',
+        agentName: 'Strategist',
+        description: 'Grant strategy.',
+        order: 2,
+        enabled: false,
+      });
+
+      const updatedAgent = await CourseModel.findOneOrFail({
+        where: { id: agentCourse.id },
+      });
+      expect(updatedAgent.name).toEqual('LANTERN Strategist');
+      expect(updatedAgent.chatbotAgentName).toEqual('Strategist');
+      expect(updatedAgent.enabled).toEqual(false);
+
+      const studentResponse = await supertest({ userId: student.id })
+        .get(`/chatbot/course/${parentCourse.id}/agents`)
+        .expect(200);
+      expect(studentResponse.body).toEqual([]);
+
+      const staffResponse = await supertest({ userId: professorCourse.userId })
+        .get(`/chatbot/course/${parentCourse.id}/agents/all`)
+        .expect(200);
+      expect(staffResponse.body).toEqual([
+        {
+          courseId: agentCourse.id,
+          name: 'LANTERN Strategist',
+          agentName: 'Strategist',
+          description: 'Grant strategy.',
+          order: 2,
+          enabled: false,
+        },
+      ]);
+    });
+
+    it('should reject an agent course outside the parent group', async () => {
+      const organization = await OrganizationFactory.create();
+      const parentCourse = await CourseFactory.create({ name: 'LANTERN' });
+      const inGroupAgentCourse = await CourseFactory.create({
+        name: 'LANTERN Analyst',
+        chatbotAgentName: 'Analyst',
+      });
+      const outsideAgentCourse = await CourseFactory.create({
+        name: 'Other Strategist',
+        chatbotAgentName: 'Strategist',
+      });
+      const professor = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: professor,
+        course: parentCourse,
+        role: Role.PROFESSOR,
+      });
+      const agentGroup = await SuperCourseModel.create({
+        name: 'LANTERN Agents',
+        purpose: SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+        organization,
+      }).save();
+      agentGroup.courses = [parentCourse, inGroupAgentCourse];
+      await agentGroup.save();
+
+      await supertest({ userId: professor.id })
+        .patch(
+          `/chatbot/course/${parentCourse.id}/agents/${outsideAgentCourse.id}`,
+        )
+        .send({ agentName: 'Strategist' })
+        .expect(404);
+    });
+  });
+
+  describe('chatbot agent staff guard inheritance', () => {
+    it('should allow parent-course staff, but not students or unrelated professors, to read agent course settings', async () => {
+      const organization = await OrganizationFactory.create();
+      const parentCourse = await CourseFactory.create({ name: 'LANTERN' });
+      const agentCourse = await CourseFactory.create({
+        name: 'LANTERN Analyst',
+        chatbotAgentName: 'Analyst',
+      });
+      await OrganizationCourseFactory.create({
+        organization,
+        course: parentCourse,
+      });
+      await OrganizationCourseFactory.create({
+        organization,
+        course: agentCourse,
+      });
+      const { organizationSettings, llm } =
+        await createOrganizationChatbotDefaults(organization);
+      await CourseChatbotSettingsFactory.create({
+        course: agentCourse,
+        organizationSettings,
+        llmModel: llm,
+      });
+      const agentGroup = await SuperCourseModel.create({
+        name: 'LANTERN Agents',
+        purpose: SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+        organization,
+      }).save();
+      agentGroup.courses = [parentCourse, agentCourse];
+      await agentGroup.save();
+
+      const professor = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: professor,
+        course: parentCourse,
+        role: Role.PROFESSOR,
+      });
+      await OrganizationUserFactory.create({
+        organization,
+        organizationUser: professor,
+        role: OrganizationRole.MEMBER,
+      });
+      const student = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: student,
+        course: parentCourse,
+        role: Role.STUDENT,
+      });
+      await OrganizationUserFactory.create({
+        organization,
+        organizationUser: student,
+        role: OrganizationRole.MEMBER,
+      });
+      const unrelatedProfessor = await UserFactory.create();
+      await OrganizationUserFactory.create({
+        organization,
+        organizationUser: unrelatedProfessor,
+        role: OrganizationRole.MEMBER,
+      });
+
+      await supertest({ userId: professor.id })
+        .get(`/chatbot/course/${agentCourse.id}`)
+        .expect(200);
+      await supertest({ userId: student.id })
+        .get(`/chatbot/course/${agentCourse.id}`)
+        .expect(403);
+      await supertest({ userId: unrelatedProfessor.id })
+        .get(`/chatbot/course/${agentCourse.id}`)
+        .expect(403);
     });
   });
 

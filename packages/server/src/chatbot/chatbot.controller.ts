@@ -38,6 +38,7 @@ import {
   ChatbotSettingsUpdateParams,
   CourseChatbotSettings,
   CourseChatbotSettingsForm,
+  CreateChatbotAgentParams,
   CreateChatbotProviderBody,
   CreateLLMTypeBody,
   CreateOrganizationChatbotSettingsBody,
@@ -53,7 +54,9 @@ import {
   OrganizationChatbotSettingsDefaults,
   OrganizationRole,
   Role,
+  StaffChatbotAgentCourse,
   SuperCoursePurpose,
+  UpdateChatbotAgentParams,
   UpdateChatbotProviderBody,
   UpdateChatbotQuestionParams,
   UpdateDocumentChunkParams,
@@ -80,7 +83,7 @@ import { OrganizationChatbotSettingsModel } from './chatbot-infrastructure-model
 import { ChatbotProviderModel } from './chatbot-infrastructure-models/chatbot-provider.entity';
 import { LLMTypeModel } from './chatbot-infrastructure-models/llm-type.entity';
 import { CourseChatbotSettingsModel } from './chatbot-infrastructure-models/course-chatbot-settings.entity';
-import { OrgOrCourseRolesGuard } from '../guards/org-or-course-roles.guard';
+import { OrgOrCourseRolesConditionalBypassGuard } from '../guards/org-or-course-roles-conditional-bypass.guard';
 import { CourseRoles } from '../decorators/course-roles.decorator';
 import { OrgRoles } from '../decorators/org-roles.decorator';
 import { ChatbotLegacyEndpointGuard } from '../guards/chatbot-legacy-endpoint.guard';
@@ -90,6 +93,7 @@ import {
   IgnoreableClassSerializerInterceptor,
   IgnoreSerializer,
 } from '../interceptors/IgnoreableClassSerializerInterceptor';
+import { CourseService } from '../course/course.service';
 
 @Controller('chatbot')
 @UseGuards(JwtAuthGuard, EmailVerifiedGuard)
@@ -98,6 +102,7 @@ export class ChatbotController {
   constructor(
     private readonly chatbotService: ChatbotService,
     private readonly chatbotApiService: ChatbotApiService,
+    private readonly courseService: CourseService,
   ) {}
 
   //
@@ -214,6 +219,15 @@ export class ChatbotController {
     );
   }
 
+  @Get('course/:courseId/agents/all')
+  @UseGuards(CourseRolesGuard)
+  @Roles(Role.PROFESSOR, Role.TA)
+  async getChatbotAgentsForStaff(
+    @Param('courseId', ParseIntPipe) courseId: number,
+  ): Promise<StaffChatbotAgentCourse[]> {
+    return await this.courseService.getChatbotAgentCourses(courseId);
+  }
+
   @Get('course/:courseId/agents')
   @UseGuards(CourseRolesGuard)
   @Roles(Role.STUDENT, Role.TA, Role.PROFESSOR)
@@ -258,6 +272,31 @@ export class ChatbotController {
       }));
   }
 
+  @Post('course/:courseId/agents')
+  @UseGuards(CourseRolesGuard)
+  @Roles(Role.PROFESSOR)
+  async createChatbotAgent(
+    @Param('courseId', ParseIntPipe) courseId: number,
+    @Body() body: CreateChatbotAgentParams,
+  ): Promise<StaffChatbotAgentCourse> {
+    return await this.courseService.createChatbotAgentCourse(courseId, body);
+  }
+
+  @Patch('course/:courseId/agents/:agentCourseId')
+  @UseGuards(CourseRolesGuard)
+  @Roles(Role.PROFESSOR)
+  async updateChatbotAgent(
+    @Param('courseId', ParseIntPipe) courseId: number,
+    @Param('agentCourseId', ParseIntPipe) agentCourseId: number,
+    @Body() body: UpdateChatbotAgentParams,
+  ): Promise<StaffChatbotAgentCourse> {
+    return await this.courseService.updateChatbotAgentCourse(
+      courseId,
+      agentCourseId,
+      body,
+    );
+  }
+
   @Patch('questionScore/:courseId/:questionId')
   @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA, Role.STUDENT)
@@ -288,7 +327,7 @@ export class ChatbotController {
 
   // Settings endpoints
   @Get('settings/:courseId')
-  @UseGuards(CourseRolesGuard, ChatbotLegacyEndpointGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard, ChatbotLegacyEndpointGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async getChatbotSettings(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -302,7 +341,7 @@ export class ChatbotController {
   }
 
   @Patch('settings/:courseId')
-  @UseGuards(CourseRolesGuard, ChatbotLegacyEndpointGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard, ChatbotLegacyEndpointGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async updateChatbotSettings(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -318,7 +357,7 @@ export class ChatbotController {
   }
 
   @Patch('settings/:courseId/reset')
-  @UseGuards(CourseRolesGuard, ChatbotLegacyEndpointGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard, ChatbotLegacyEndpointGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async resetChatbotSettings(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -333,7 +372,7 @@ export class ChatbotController {
 
   // Question endpoints
   @Get('question/all/:courseId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async getInteractionsAndQuestions(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -352,7 +391,7 @@ export class ChatbotController {
   }
 
   @Post('question/:courseId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async addChatbotQuestion(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -370,7 +409,7 @@ export class ChatbotController {
   }
 
   @Patch('question/:courseId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async updateChatbotQuestion(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -386,7 +425,7 @@ export class ChatbotController {
   }
 
   @Delete('question/:courseId/:questionId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async deleteChatbotQuestion(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -402,7 +441,7 @@ export class ChatbotController {
   }
 
   @Get('models/:courseId')
-  @UseGuards(CourseRolesGuard, ChatbotLegacyEndpointGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard, ChatbotLegacyEndpointGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async getModels(
     @Param('courseId', ParseIntPipe) _courseId: number,
@@ -438,7 +477,7 @@ export class ChatbotController {
 
   // Document endpoints
   @Get('aggregateDocuments/:courseId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async getAllAggregateDocuments(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -453,7 +492,7 @@ export class ChatbotController {
   }
 
   @Get('documentChunks/:courseId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async getAllDocumentChunks(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -467,7 +506,7 @@ export class ChatbotController {
   }
 
   @Post('documentChunks/:courseId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async addDocumentChunk(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -483,7 +522,7 @@ export class ChatbotController {
   }
 
   @Patch('documentChunks/:courseId/:docId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async updateDocumentChunk(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -501,7 +540,7 @@ export class ChatbotController {
   }
 
   @Delete('documentChunks/:courseId/:docId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async deleteDocumentChunk(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -517,7 +556,7 @@ export class ChatbotController {
   }
 
   @Delete('document/:courseId/:docId')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async deleteDocument(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -663,7 +702,7 @@ export class ChatbotController {
 
   // TODO: eventually add tests for this I guess
   @Post('document/:courseId/upload')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -849,7 +888,7 @@ export class ChatbotController {
   }
 
   @Post('document/:courseId/github')
-  @UseGuards(CourseRolesGuard)
+  @UseGuards(CourseRolesConditionalBypassGuard)
   @Roles(Role.PROFESSOR, Role.TA)
   async addDocumentFromGithub(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -1141,7 +1180,7 @@ export class ChatbotController {
   }
 
   @Get('course/:courseId')
-  @UseGuards(OrgOrCourseRolesGuard)
+  @UseGuards(OrgOrCourseRolesConditionalBypassGuard)
   @OrgRoles(OrganizationRole.ADMIN)
   @CourseRoles(Role.PROFESSOR, Role.TA)
   async getCourseSettings(
@@ -1181,7 +1220,7 @@ export class ChatbotController {
   }
 
   @Get('course/:courseId/service')
-  @UseGuards(OrgOrCourseRolesGuard)
+  @UseGuards(OrgOrCourseRolesConditionalBypassGuard)
   @OrgRoles(OrganizationRole.ADMIN)
   @CourseRoles(Role.PROFESSOR, Role.TA)
   async getCourseServiceType(
@@ -1193,7 +1232,7 @@ export class ChatbotController {
   }
 
   @Post('course/:courseId')
-  @UseGuards(OrgOrCourseRolesGuard)
+  @UseGuards(OrgOrCourseRolesConditionalBypassGuard)
   @OrgRoles(OrganizationRole.ADMIN)
   @CourseRoles(Role.PROFESSOR, Role.TA)
   async upsertCourseSettings(
@@ -1221,7 +1260,7 @@ export class ChatbotController {
   }
 
   @Patch('course/:courseId/reset')
-  @UseGuards(OrgOrCourseRolesGuard)
+  @UseGuards(OrgOrCourseRolesConditionalBypassGuard)
   @OrgRoles(OrganizationRole.ADMIN)
   @CourseRoles(Role.PROFESSOR, Role.TA)
   async resetCourseSettings(
@@ -1231,7 +1270,7 @@ export class ChatbotController {
   }
 
   @Get('course/:courseId/default')
-  @UseGuards(OrgOrCourseRolesGuard)
+  @UseGuards(OrgOrCourseRolesConditionalBypassGuard)
   @OrgRoles(OrganizationRole.ADMIN)
   @CourseRoles(Role.PROFESSOR, Role.TA)
   async getCourseSettingsDefaults(
@@ -1241,7 +1280,7 @@ export class ChatbotController {
   }
 
   @Get('course/:courseId/provider')
-  @UseGuards(OrgOrCourseRolesGuard)
+  @UseGuards(OrgOrCourseRolesConditionalBypassGuard)
   @OrgRoles(OrganizationRole.ADMIN)
   @CourseRoles(Role.PROFESSOR, Role.TA)
   async getCourseOrganizationProviders(

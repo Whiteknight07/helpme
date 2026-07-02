@@ -7,11 +7,17 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ChatbotDataSourceService } from './chatbot-datasource/chatbot-datasource.service';
 import { ChatbotDataSourceModule } from './chatbot-datasource/chatbot-datasource.module';
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
+import { CourseService } from '../course/course.service';
 
 @Module({
   controllers: [ChatbotController],
   imports: [CacheModule.register(), ChatbotDataSourceModule],
-  providers: [ChatbotService, ChatbotApiService, ChatbotSettingsSubscriber],
+  providers: [
+    ChatbotService,
+    ChatbotApiService,
+    ChatbotSettingsSubscriber,
+    CourseService,
+  ],
 })
 export class ChatbotModule {
   static forRoot(connectionOptions: PostgresConnectionOptions) {
@@ -21,7 +27,12 @@ export class ChatbotModule {
         CacheModule.register(),
         ChatbotDataSourceModule.forRoot(connectionOptions),
       ],
-      providers: [ChatbotService, ChatbotApiService, ChatbotSettingsSubscriber],
+      providers: [
+        ChatbotService,
+        ChatbotApiService,
+        ChatbotSettingsSubscriber,
+        CourseService,
+      ],
     };
   }
 }

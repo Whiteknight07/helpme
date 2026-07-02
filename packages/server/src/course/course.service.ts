@@ -1,6 +1,7 @@
 import {
   BatchCourseCloneAttributes,
   BatchCourseCloneResponse,
+  CreateChatbotAgentParams,
   CourseCloneAttributes,
   EditCourseInfoParams,
   ERROR_MESSAGES,
@@ -10,10 +11,12 @@ import {
   QueueConfig,
   QueueTypes,
   Role,
+  StaffChatbotAgentCourse,
   SuperCoursePurpose,
   TACheckinPair,
   TACheckinTimesResponse,
   TAAwayPair,
+  UpdateChatbotAgentParams,
   UserCourse,
   UserPartial,
   ExtraTAStatus,
@@ -49,6 +52,8 @@ import { ChatbotDocPdfModel } from 'chatbot/chatbot-doc-pdf.entity';
 import { URLSearchParams } from 'node:url';
 import { QueueStaffModel } from 'queue/queue-staff/queue-staff.entity';
 import * as crypto from 'crypto';
+import { CourseChatbotSettingsModel } from '../chatbot/chatbot-infrastructure-models/course-chatbot-settings.entity';
+import { OrganizationChatbotSettingsModel } from '../chatbot/chatbot-infrastructure-models/organization-chatbot-settings.entity';
 
 @Injectable()
 export class CourseService {
@@ -546,6 +551,287 @@ export class CourseService {
       ...courses.filter((course) => !existingCourseIds.has(course.id)),
     ];
     await manager.save(superCourse);
+  }
+
+  private toChatbotAgentCourse(course: CourseModel): StaffChatbotAgentCourse {
+    return {
+      courseId: course.id,
+      name: course.name,
+      agentName: course.chatbotAgentName,
+      description: course.chatbotAgentDescription,
+      order: course.chatbotAgentOrder,
+      enabled: course.enabled !== false,
+    };
+  }
+
+  async getChatbotAgentCourses(
+    parentCourseId: number,
+  ): Promise<StaffChatbotAgentCourse[]> {
+    const superCourse = await SuperCourseModel.findGroupForCourse(
+      parentCourseId,
+      SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+    );
+
+    if (!superCourse) {
+      return [];
+    }
+
+    return superCourse.courses
+      .filter((groupCourse) => groupCourse.chatbotAgentName)
+      .sort(
+        (a, b) =>
+          (a.chatbotAgentOrder ?? Number.MAX_SAFE_INTEGER) -
+            (b.chatbotAgentOrder ?? Number.MAX_SAFE_INTEGER) ||
+          a.name.localeCompare(b.name),
+      )
+      .map((groupCourse) => this.toChatbotAgentCourse(groupCourse));
+  }
+
+  private async attachChatbotAgentGroupCourse(
+    manager: EntityManager,
+    course: CourseModel,
+    superCourse: SuperCourseModel,
+    organizationId: number,
+  ): Promise<void> {
+    await manager.save(CourseModel, course);
+    await this.addCoursesToSuperCourse(manager, superCourse, [course]);
+
+    if (
+      !(await manager.findOne(OrganizationCourseModel, {
+        where: { courseId: course.id, organizationId },
+      }))
+    ) {
+      await manager.save(
+        OrganizationCourseModel,
+        manager.create(OrganizationCourseModel, {
+          courseId: course.id,
+          organizationId,
+        }),
+      );
+    }
+
+    if (
+      !(await manager.findOne(CourseSettingsModel, {
+        where: { courseId: course.id },
+      }))
+    ) {
+      await manager.save(
+        CourseSettingsModel,
+        manager.create(CourseSettingsModel, {
+          courseId: course.id,
+          chatBotEnabled: true,
+          asyncQueueEnabled: true,
+          adsEnabled: true,
+          queueEnabled: true,
+        }),
+      );
+    }
+  }
+
+  static async getOrganizationChatbotSettingsForAgentCourse(
+    manager: EntityManager,
+    organizationId: number,
+  ): Promise<OrganizationChatbotSettingsModel> {
+    const organizationChatbotSettings = await manager.findOne(
+      OrganizationChatbotSettingsModel,
+      {
+        where: { organizationId },
+        relations: { defaultProvider: true },
+      },
+    );
+
+    if (!organizationChatbotSettings?.defaultProvider?.defaultModelId) {
+      throw new BadRequestException(
+        `Cannot create chatbot agent settings for organization ${organizationId}: default chatbot provider/model is not configured.`,
+      );
+    }
+
+    return organizationChatbotSettings;
+  }
+
+  static async upsertAgentCourseChatbotSettings(
+    manager: EntityManager,
+    courseId: number,
+    prompt: string | undefined,
+    organizationChatbotSettings: OrganizationChatbotSettingsModel,
+  ): Promise<void> {
+    const existing = await manager.findOne(CourseChatbotSettingsModel, {
+      where: { courseId },
+    });
+    const defaults = {
+      ...CourseChatbotSettingsModel.getDefaults(manager),
+      ...organizationChatbotSettings.transformDefaults(),
+    };
+    const usingDefaults = CourseChatbotSettingsModel.getPopulatedUsingDefaults({
+      usingDefaultModel: true,
+      usingDefaultPrompt: prompt === undefined,
+      usingDefaultTemperature: true,
+      usingDefaultTopK: true,
+      usingDefaultSimilarityThresholdDocuments: true,
+      usingDefaultSimilarityThresholdQuestions: true,
+    });
+    const settings = manager.create(CourseChatbotSettingsModel, {
+      ...defaults,
+      ...usingDefaults,
+      ...existing,
+      courseId,
+      organizationSettingsId: organizationChatbotSettings.id,
+      llmId: organizationChatbotSettings.defaultProvider.defaultModelId,
+      prompt: prompt ?? defaults.prompt,
+      usingDefaultModel: true,
+      usingDefaultPrompt: prompt === undefined,
+    });
+
+    await manager.save(CourseChatbotSettingsModel, settings);
+  }
+
+  async createChatbotAgentCourse(
+    parentCourseId: number,
+    params: CreateChatbotAgentParams,
+  ): Promise<StaffChatbotAgentCourse> {
+    return await this.dataSource.transaction(async (manager) => {
+      const parentCourse = await manager.findOne(CourseModel, {
+        where: { id: parentCourseId },
+        relations: { organizationCourse: true },
+      });
+      if (!parentCourse) {
+        throw new NotFoundException(
+          `Course with id ${parentCourseId} not found`,
+        );
+      }
+      if (parentCourse.chatbotAgentName) {
+        throw new BadRequestException(
+          'Cannot create a chatbot agent course from another chatbot agent course.',
+        );
+      }
+      if (!parentCourse.organizationCourse?.organizationId) {
+        throw new BadRequestException(
+          'Parent course is not associated with an organization.',
+        );
+      }
+
+      const organizationId = parentCourse.organizationCourse.organizationId;
+      const organizationChatbotSettings =
+        await CourseService.getOrganizationChatbotSettingsForAgentCourse(
+          manager,
+          organizationId,
+        );
+
+      let superCourse = await SuperCourseModel.findGroupForCourse(
+        parentCourse.id,
+        SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+        manager,
+      );
+      if (!superCourse) {
+        superCourse = await manager.save(
+          manager.create(SuperCourseModel, {
+            name: `${parentCourse.name} Agents`,
+            organizationId,
+            purpose: SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+            courses: [],
+          }),
+        );
+        await this.attachChatbotAgentGroupCourse(
+          manager,
+          parentCourse,
+          superCourse,
+          organizationId,
+        );
+      }
+
+      const agentCourse = await manager.save(
+        CourseModel,
+        manager.create(CourseModel, {
+          name: `${parentCourse.name} ${params.agentName}`,
+          semesterId: parentCourse.semesterId,
+          timezone: parentCourse.timezone,
+          sectionGroupName: parentCourse.sectionGroupName,
+          enabled: true,
+          courseInviteCode: this.generateRandomInviteCode(),
+          chatbotAgentName: params.agentName,
+          chatbotAgentDescription: params.agentDescription,
+          chatbotAgentOrder: params.agentOrder,
+        }),
+      );
+      await this.attachChatbotAgentGroupCourse(
+        manager,
+        agentCourse,
+        superCourse,
+        organizationId,
+      );
+      await CourseService.upsertAgentCourseChatbotSettings(
+        manager,
+        agentCourse.id,
+        params.initialPrompt,
+        organizationChatbotSettings,
+      );
+
+      return this.toChatbotAgentCourse(agentCourse);
+    });
+  }
+
+  async updateChatbotAgentCourse(
+    parentCourseId: number,
+    agentCourseId: number,
+    params: UpdateChatbotAgentParams,
+  ): Promise<StaffChatbotAgentCourse> {
+    return await this.dataSource.transaction(async (manager) => {
+      const parentCourse = await manager.findOne(CourseModel, {
+        where: { id: parentCourseId },
+      });
+      if (!parentCourse) {
+        throw new NotFoundException(
+          `Course with id ${parentCourseId} not found`,
+        );
+      }
+      if (parentCourse.chatbotAgentName) {
+        throw new BadRequestException(
+          'Cannot manage chatbot agent courses from another chatbot agent course.',
+        );
+      }
+
+      const superCourse = await SuperCourseModel.findGroupForCourse(
+        parentCourse.id,
+        SuperCoursePurpose.CHATBOT_AGENT_GROUP,
+        manager,
+      );
+      if (!superCourse) {
+        throw new NotFoundException(
+          `Chatbot agent group for course ${parentCourseId} not found`,
+        );
+      }
+
+      const agentCourse = superCourse.courses.find(
+        (course) => course.id === agentCourseId,
+      );
+      if (!agentCourse) {
+        throw new NotFoundException(
+          `Chatbot agent course ${agentCourseId} was not found in this course's agent group`,
+        );
+      }
+      if (!agentCourse.chatbotAgentName) {
+        throw new BadRequestException(
+          `Course ${agentCourseId} is not a chatbot agent course`,
+        );
+      }
+
+      if (params.agentName !== undefined) {
+        agentCourse.chatbotAgentName = params.agentName;
+        agentCourse.name = `${parentCourse.name} ${params.agentName}`;
+      }
+      if (params.agentDescription !== undefined) {
+        agentCourse.chatbotAgentDescription = params.agentDescription;
+      }
+      if (params.agentOrder !== undefined) {
+        agentCourse.chatbotAgentOrder = params.agentOrder;
+      }
+      if (params.enabled !== undefined) {
+        agentCourse.enabled = params.enabled;
+      }
+
+      const updated = await manager.save(CourseModel, agentCourse);
+      return this.toChatbotAgentCourse(updated);
+    });
   }
 
   private async associateCourseCloneWithOriginal(

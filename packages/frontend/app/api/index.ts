@@ -28,6 +28,7 @@ import {
   CreateAlertParams,
   CreateAlertResponse,
   CreateAsyncQuestions,
+  CreateChatbotAgentParams,
   CreateChatbotProviderBody,
   CreateLLMTypeBody,
   CreateLtiPlatform,
@@ -104,6 +105,7 @@ import {
   SemesterPartial,
   setQueueConfigResponse,
   SourceDocument,
+  StaffChatbotAgentCourse,
   StudentAssignmentProgress,
   StudentTaskProgressWithUser,
   TACheckinTimesResponse,
@@ -114,6 +116,7 @@ import {
   UBCOuserParam,
   UnreadAsyncQuestionResponse,
   UpdateAsyncQuestions,
+  UpdateChatbotAgentParams,
   UserPartial,
   UpdateChatbotProviderBody,
   UpdateChatbotQuestionParams,
@@ -418,6 +421,31 @@ export class APIClient {
           `/api/v1/chatbot/document/${courseId}/github`,
           undefined,
           { url },
+        ),
+      getAgentsForStaff: async (
+        courseId: number,
+      ): Promise<StaffChatbotAgentCourse[]> =>
+        this.req('GET', `/api/v1/chatbot/course/${courseId}/agents/all`),
+      createAgent: async (
+        courseId: number,
+        params: CreateChatbotAgentParams,
+      ): Promise<StaffChatbotAgentCourse> =>
+        this.req(
+          'POST',
+          `/api/v1/chatbot/course/${courseId}/agents`,
+          undefined,
+          params,
+        ),
+      updateAgent: async (
+        courseId: number,
+        agentCourseId: number,
+        params: UpdateChatbotAgentParams,
+      ): Promise<StaffChatbotAgentCourse> =>
+        this.req(
+          'PATCH',
+          `/api/v1/chatbot/course/${courseId}/agents/${agentCourseId}`,
+          undefined,
+          params,
         ),
       getCourseOrganizationProviders: async (
         courseId: number,

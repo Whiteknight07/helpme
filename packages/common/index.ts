@@ -504,6 +504,45 @@ export interface ChatbotAgentCourse {
   order?: number
 }
 
+export interface StaffChatbotAgentCourse extends ChatbotAgentCourse {
+  enabled: boolean
+}
+
+export class CreateChatbotAgentParams {
+  @IsString()
+  agentName!: string
+
+  @IsString()
+  @IsOptional()
+  agentDescription?: string
+
+  @IsInt()
+  @IsOptional()
+  agentOrder?: number
+
+  @IsString()
+  @IsOptional()
+  initialPrompt?: string
+}
+
+export class UpdateChatbotAgentParams {
+  @IsString()
+  @IsOptional()
+  agentName?: string
+
+  @IsString()
+  @IsOptional()
+  agentDescription?: string
+
+  @IsInt()
+  @IsOptional()
+  agentOrder?: number
+
+  @IsBoolean()
+  @IsOptional()
+  enabled?: boolean
+}
+
 export interface AddDocumentChunkParams {
   documentText: string
   metadata: {
