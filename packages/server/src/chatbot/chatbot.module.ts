@@ -9,15 +9,17 @@ import { ChatbotDataSourceModule } from './chatbot-datasource/chatbot-datasource
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
 import { CourseService } from '../course/course.service';
 
+const chatbotProviders = [
+  ChatbotService,
+  ChatbotApiService,
+  ChatbotSettingsSubscriber,
+  CourseService,
+];
+
 @Module({
   controllers: [ChatbotController],
   imports: [CacheModule.register(), ChatbotDataSourceModule],
-  providers: [
-    ChatbotService,
-    ChatbotApiService,
-    ChatbotSettingsSubscriber,
-    CourseService,
-  ],
+  providers: chatbotProviders,
 })
 export class ChatbotModule {
   static forRoot(connectionOptions: PostgresConnectionOptions) {
@@ -27,12 +29,7 @@ export class ChatbotModule {
         CacheModule.register(),
         ChatbotDataSourceModule.forRoot(connectionOptions),
       ],
-      providers: [
-        ChatbotService,
-        ChatbotApiService,
-        ChatbotSettingsSubscriber,
-        CourseService,
-      ],
+      providers: chatbotProviders,
     };
   }
 }

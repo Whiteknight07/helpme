@@ -30,13 +30,6 @@ type ChatbotAgentsProps = {
   params: Promise<{ cid: string }>
 }
 
-type AgentFormValues = {
-  agentName: string
-  agentDescription?: string
-  agentOrder?: number
-  initialPrompt?: string
-}
-
 export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
   const params = use(props.params)
   const courseId = Number(params.cid)
@@ -55,7 +48,7 @@ export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingAgent, setEditingAgent] =
     useState<StaffChatbotAgentCourse | null>(null)
-  const [form] = Form.useForm<AgentFormValues>()
+  const [form] = Form.useForm<CreateChatbotAgentParams>()
 
   const fetchAgents = useCallback(async () => {
     setDataLoading(true)
@@ -95,7 +88,7 @@ export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
     form.resetFields()
   }
 
-  const handleSubmit = async (values: AgentFormValues) => {
+  const handleSubmit = async (values: CreateChatbotAgentParams) => {
     setSubmitting(true)
 
     try {
@@ -263,7 +256,7 @@ export default function ChatbotAgents(props: ChatbotAgentsProps): ReactElement {
         confirmLoading={submitting}
         okText={editingAgent ? 'Save' : 'Add Agent'}
       >
-        <Form<AgentFormValues>
+        <Form<CreateChatbotAgentParams>
           form={form}
           layout="vertical"
           onFinish={handleSubmit}

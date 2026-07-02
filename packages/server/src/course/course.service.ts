@@ -735,8 +735,6 @@ export class CourseService {
       organizationSettingsId: organizationChatbotSettings.id,
       llmId: organizationChatbotSettings.defaultProvider.defaultModelId,
       prompt: prompt ?? defaults.prompt,
-      usingDefaultModel: true,
-      usingDefaultPrompt: prompt === undefined,
     });
 
     await manager.save(CourseChatbotSettingsModel, settings);
