@@ -27,6 +27,7 @@ enum CourseAdminOptions {
   SETTINGS = 'SETTINGS',
   LMS_SETTINGS = 'LMS_SETTINGS',
   CHATBOT_SETTINGS = 'CHATBOT_SETTINGS',
+  CHATBOT_AGENTS = 'CHATBOT_AGENTS',
   CHATBOT_KNOWLEDGE_BASE = 'CHATBOT_KNOWLEDGE_BASE',
   CHATBOT_QUESTIONS = 'CHATBOT_QUESTIONS',
 }
@@ -71,6 +72,9 @@ const CourseSettingsMenu: React.FC<CourseSettingsManyProps> = ({
         break
       case CourseAdminOptions.CHATBOT_SETTINGS:
         router.push(`${basePath}/chatbot_settings`)
+        break
+      case CourseAdminOptions.CHATBOT_AGENTS:
+        router.push(`${basePath}/chatbot_agents`)
         break
       case CourseAdminOptions.CHATBOT_KNOWLEDGE_BASE:
         router.push(`${basePath}/chatbot_knowledge_base`)
@@ -126,6 +130,14 @@ const CourseSettingsMenu: React.FC<CourseSettingsManyProps> = ({
       label: 'Edit Chatbot Questions',
     },
   ]
+
+  if (courseRole === Role.PROFESSOR) {
+    baseMenuItems.splice(5, 0, {
+      key: CourseAdminOptions.CHATBOT_AGENTS,
+      icon: <RobotOutlined />,
+      label: 'Chatbot Agents',
+    })
+  }
 
   const professorMenuItems: MenuItem[] = [
     {
