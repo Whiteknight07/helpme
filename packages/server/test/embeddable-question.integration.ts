@@ -9,6 +9,11 @@ import {
 import { Role } from '@koh/common';
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
+import {
+  buildUserPrompt,
+  STRICT_SYSTEM_PROMPT,
+} from '../src/lti/embeddable/question/indg-grading';
+import { computeMechanicalFacts } from '../src/lti/embeddable/question/deterministic-checks';
 
 describe('Embeddable Question Integration', () => {
   const mockChatbotApiService = {
@@ -175,22 +180,43 @@ describe('Embeddable Question Integration', () => {
         maxSentences: 5,
       }).save();
 
-      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue(
-        JSON.stringify({
-          score: 2,
-          comment: 'The reflection is thoughtful and meets requirements.',
-          reasons: ['meets_requirements'],
-          needs_human_review: false,
-        }),
-      );
+      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
+        score: 2,
+        comment: 'The reflection is thoughtful and meets requirements.',
+        reasons: ['meets_requirements'],
+        needs_human_review: false,
+      });
 
       const draft =
         'First sentence on Indigenous history. Second sentence discussing culture. Third sentence reflecting on learnings.';
+
+      const expectedFacts = computeMechanicalFacts(
+        draft,
+        question.minSentences ?? 3,
+        question.maxSentences ?? 5,
+      );
+      const expectedUserPrompt = buildUserPrompt(
+        question.questionText,
+        question.criteriaText,
+        draft,
+        expectedFacts,
+        question.instructions,
+      );
 
       const res = await supertest({ userId: student.id })
         .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
         .send({ responseText: draft })
         .expect(201);
+
+      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledWith(
+        expectedUserPrompt,
+        course.id,
+        'feedback',
+        { systemPrompt: STRICT_SYSTEM_PROMPT },
+      );
 
       expect(res.body.comment).toBe(
         'The reflection is thoughtful and meets requirements.',
@@ -198,9 +224,9 @@ describe('Embeddable Question Integration', () => {
       expect(res.body.score).toBe(2);
       expect(res.body.reasons).toEqual(['meets_requirements']);
       expect(res.body.needsHumanReview).toBe(false);
-      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
-        1,
-      );
+
+      const savedCount = await EmbeddableQuestionFeedbackModel.count();
+      expect(savedCount).toBe(1);
 
       const saved = await EmbeddableQuestionFeedbackModel.findOne({
         where: { questionId: question.id, userId: student.id },
@@ -210,6 +236,10 @@ describe('Embeddable Question Integration', () => {
       expect(saved!.courseId).toBe(course.id);
       expect(saved!.reasons).toEqual(['meets_requirements']);
       expect(saved!.needsHumanReview).toBe(false);
+      expect(saved!.aiFeedback).toBe(
+        'The reflection is thoughtful and meets requirements.',
+      );
+      expect(saved!.submission).toBe(draft);
     });
 
     it('caps score at 1 and prepends fixed sentence comment when draft is too short', async () => {
@@ -230,14 +260,12 @@ describe('Embeddable Question Integration', () => {
         maxSentences: 5,
       }).save();
 
-      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue(
-        JSON.stringify({
-          score: 2,
-          comment: 'Good points raised.',
-          reasons: ['meets_requirements'],
-          needs_human_review: false,
-        }),
-      );
+      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
+        score: 2,
+        comment: 'Good points raised.',
+        reasons: ['meets_requirements'],
+        needs_human_review: false,
+      });
 
       const draft = 'Only one short sentence.';
 
@@ -260,7 +288,7 @@ describe('Embeddable Question Integration', () => {
       expect(saved!.reasons).toContain('too_short');
     });
 
-    it('retries once on invalid model output and fails without saving if retry is also invalid', async () => {
+    it('returns 500, calls adapter once, and saves zero rows on invalid INDG payload', async () => {
       const student = await UserFactory.create();
       const course = await CourseFactory.create();
       await UserCourseFactory.create({
@@ -278,9 +306,12 @@ describe('Embeddable Question Integration', () => {
         maxSentences: 5,
       }).save();
 
-      mockChatbotApiService.queryChatbotForCourse
-        .mockResolvedValueOnce('Invalid non-json output')
-        .mockResolvedValueOnce('Still invalid output after repair prompt');
+      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
+        score: 3,
+        comment: 'Unsupported score value.',
+        reasons: ['meets_requirements'],
+        needs_human_review: false,
+      });
 
       const draft = 'Sentence one. Sentence two. Sentence three.';
 
@@ -290,14 +321,14 @@ describe('Embeddable Question Integration', () => {
         .expect(500);
 
       expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
-        2,
+        1,
       );
 
       const savedCount = await EmbeddableQuestionFeedbackModel.count();
       expect(savedCount).toBe(0);
     });
 
-    it('retries once on invalid model output and succeeds and saves if retry is valid', async () => {
+    it('maps rejected chatbot call to 500, calls once, and saves zero rows', async () => {
       const student = await UserFactory.create();
       const course = await CourseFactory.create();
       await UserCourseFactory.create({
@@ -315,38 +346,23 @@ describe('Embeddable Question Integration', () => {
         maxSentences: 5,
       }).save();
 
-      mockChatbotApiService.queryChatbotForCourse
-        .mockResolvedValueOnce('Malformed first response')
-        .mockResolvedValueOnce(
-          JSON.stringify({
-            score: 2,
-            comment: 'Valid response after repair.',
-            reasons: ['meets_requirements'],
-            needs_human_review: false,
-          }),
-        );
+      mockChatbotApiService.queryChatbotForCourse.mockRejectedValue(
+        new Error('Chatbot service failure'),
+      );
 
       const draft = 'Sentence one. Sentence two. Sentence three.';
 
-      const res = await supertest({ userId: student.id })
+      await supertest({ userId: student.id })
         .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
         .send({ responseText: draft })
-        .expect(201);
+        .expect(500);
 
-      expect(res.body.comment).toBe('Valid response after repair.');
-      expect(res.body.score).toBe(2);
-      expect(res.body.reasons).toEqual(['meets_requirements']);
-      expect(res.body.needsHumanReview).toBe(false);
       expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
-        2,
+        1,
       );
 
-      const saved = await EmbeddableQuestionFeedbackModel.findOne({
-        where: { questionId: question.id, userId: student.id },
-      });
-      expect(saved).not.toBeNull();
-      expect(saved!.aiFeedback).toBe('Valid response after repair.');
-      expect(saved!.aiGrade).toBe(2);
+      const savedCount = await EmbeddableQuestionFeedbackModel.count();
+      expect(savedCount).toBe(0);
     });
   });
 });
