@@ -42,7 +42,7 @@ export default function EmbeddableQuestionFeedback({
         questionId,
         trimmed,
       )
-      setFeedback(response.feedback)
+      setFeedback(response.comment)
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response
         ?.status

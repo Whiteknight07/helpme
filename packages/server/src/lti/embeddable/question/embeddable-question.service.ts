@@ -50,7 +50,6 @@ export class EmbeddableQuestionService {
       where: {
         id: questionId,
         courseId,
-        isWeak: false,
       },
     });
 
@@ -85,6 +84,7 @@ export class EmbeddableQuestionService {
       question.criteriaText,
       trimmed,
       facts,
+      question.instructions,
     );
     const initialQuery = buildInitialQuery(userPrompt);
 
@@ -159,7 +159,7 @@ export class EmbeddableQuestionService {
    */
   async findAllForCourse(courseId: number): Promise<EmbeddableQuestionModel[]> {
     return await EmbeddableQuestionModel.find({
-      where: { courseId, isWeak: false },
+      where: { courseId },
       order: { createdAt: 'ASC' },
     });
   }
@@ -172,7 +172,7 @@ export class EmbeddableQuestionService {
     questionId: number,
   ): Promise<EmbeddableQuestionModel> {
     const question = await EmbeddableQuestionModel.findOne({
-      where: { id: questionId, courseId, isWeak: false },
+      where: { id: questionId, courseId },
     });
     if (!question) {
       throw new NotFoundException(ERROR_MESSAGES.embeddableModule.notFound);
@@ -188,14 +188,71 @@ export class EmbeddableQuestionService {
     params: UpsertEmbeddableQuestionParams,
     questionId?: number,
   ): Promise<EmbeddableQuestionModel> {
+    const trimmedName = params.name?.trim() || undefined;
+    const trimmedQuestionText = params.questionText?.trim();
+    const trimmedCriteriaText = params.criteriaText?.trim();
+    const trimmedInstructions = params.instructions?.trim() || undefined;
+
+    if (!trimmedQuestionText || !trimmedCriteriaText) {
+      throw new BadRequestException('Question and criteria text are required');
+    }
+
+    if (
+      params.availableFrom &&
+      params.availableUntil &&
+      new Date(params.availableUntil).getTime() <
+        new Date(params.availableFrom).getTime()
+    ) {
+      throw new BadRequestException(
+        'availableUntil cannot be before availableFrom',
+      );
+    }
+
     if (questionId) {
       const existing = await this.findOne(courseId, questionId);
-      Object.assign(existing, {
-        ...params,
-        minSentences: params.minSentences ?? existing.minSentences ?? 3,
-        maxSentences: params.maxSentences ?? existing.maxSentences ?? 5,
-      });
+      const finalMin = params.minSentences ?? existing.minSentences ?? 3;
+      const finalMax = params.maxSentences ?? existing.maxSentences ?? 5;
+      if (finalMin > finalMax) {
+        throw new BadRequestException(
+          'minSentences cannot be greater than maxSentences',
+        );
+      }
+      const availableFrom =
+        params.availableFrom !== undefined
+          ? params.availableFrom
+          : existing.availableFrom;
+      const availableUntil =
+        params.availableUntil !== undefined
+          ? params.availableUntil
+          : existing.availableUntil;
+      if (
+        availableFrom &&
+        availableUntil &&
+        new Date(availableUntil).getTime() < new Date(availableFrom).getTime()
+      ) {
+        throw new BadRequestException(
+          'availableUntil cannot be before availableFrom',
+        );
+      }
+
+      existing.name = trimmedName !== undefined ? trimmedName : existing.name;
+      existing.questionText = trimmedQuestionText;
+      existing.criteriaText = trimmedCriteriaText;
+      existing.instructions = trimmedInstructions;
+      existing.availableFrom = availableFrom;
+      existing.availableUntil = availableUntil;
+      existing.minSentences = finalMin;
+      existing.maxSentences = finalMax;
+
       return await existing.save();
+    }
+
+    const minSentences = params.minSentences ?? 3;
+    const maxSentences = params.maxSentences ?? 5;
+    if (minSentences > maxSentences) {
+      throw new BadRequestException(
+        'minSentences cannot be greater than maxSentences',
+      );
     }
 
     const count = await EmbeddableQuestionModel.count({
@@ -204,10 +261,14 @@ export class EmbeddableQuestionService {
 
     const question = EmbeddableQuestionModel.create({
       courseId,
-      ...params,
-      name: params.name || `Question ${count + 1}`,
-      minSentences: params.minSentences ?? 3,
-      maxSentences: params.maxSentences ?? 5,
+      name: trimmedName || `Question ${count + 1}`,
+      questionText: trimmedQuestionText,
+      criteriaText: trimmedCriteriaText,
+      instructions: trimmedInstructions,
+      availableFrom: params.availableFrom,
+      availableUntil: params.availableUntil,
+      minSentences,
+      maxSentences,
     });
 
     return await question.save();

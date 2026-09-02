@@ -29,6 +29,5 @@ import { EmbeddableModule } from './embeddable/embeddable.module';
       }),
     }),
   ],
-  exports: [EmbeddableModule],
 })
 export class LtiModule {}

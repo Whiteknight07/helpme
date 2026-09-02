@@ -192,9 +192,12 @@ describe('Embeddable Question Integration', () => {
         .send({ responseText: draft })
         .expect(201);
 
-      expect(res.body.feedback).toBe(
+      expect(res.body.comment).toBe(
         'The reflection is thoughtful and meets requirements.',
       );
+      expect(res.body.score).toBe(2);
+      expect(res.body.reasons).toEqual(['meets_requirements']);
+      expect(res.body.needsHumanReview).toBe(false);
       expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
         1,
       );
@@ -243,10 +246,12 @@ describe('Embeddable Question Integration', () => {
         .send({ responseText: draft })
         .expect(201);
 
-      expect(res.body.feedback).toContain(
+      expect(res.body.comment).toContain(
         'This answer does not meet the sentence requirements noted in the question.',
       );
-      expect(res.body.feedback).toContain('Good points raised.');
+      expect(res.body.comment).toContain('Good points raised.');
+      expect(res.body.score).toBe(1);
+      expect(res.body.reasons).toContain('too_short');
 
       const saved = await EmbeddableQuestionFeedbackModel.findOne({
         where: { questionId: question.id, userId: student.id },
@@ -328,7 +333,10 @@ describe('Embeddable Question Integration', () => {
         .send({ responseText: draft })
         .expect(201);
 
-      expect(res.body.feedback).toBe('Valid response after repair.');
+      expect(res.body.comment).toBe('Valid response after repair.');
+      expect(res.body.score).toBe(2);
+      expect(res.body.reasons).toEqual(['meets_requirements']);
+      expect(res.body.needsHumanReview).toBe(false);
       expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
         2,
       );

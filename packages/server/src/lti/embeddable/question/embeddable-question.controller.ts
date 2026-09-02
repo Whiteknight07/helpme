@@ -17,7 +17,9 @@ import { CourseRolesGuard } from '../../../guards/course-roles.guard';
 import { Roles } from '../../../decorators/roles.decorator';
 import {
   EmbeddableQuestionFeedbackParams,
-  EmbeddableQuestionFeedbackResponse,
+  IndigenousFeedback,
+  IndigenousReason,
+  IndigenousScore,
   Role,
   UpsertEmbeddableQuestionParams,
 } from '@koh/common';
@@ -68,7 +70,7 @@ export class EmbeddableQuestionController {
     @Param('questionId', ParseIntPipe) questionId: number,
     @Body() body: EmbeddableQuestionFeedbackParams,
     @UserId() userId: number,
-  ): Promise<EmbeddableQuestionFeedbackResponse> {
+  ): Promise<IndigenousFeedback> {
     const responseText = body?.responseText?.trim();
     if (!responseText) {
       throw new BadRequestException('Input is required');
@@ -82,8 +84,10 @@ export class EmbeddableQuestionController {
     );
 
     return {
-      feedback: feedback.aiFeedback,
-      grade: feedback.aiGrade,
+      score: feedback.aiGrade as IndigenousScore,
+      comment: feedback.aiFeedback,
+      reasons: (feedback.reasons || []) as IndigenousReason[],
+      needsHumanReview: feedback.needsHumanReview,
     };
   }
 

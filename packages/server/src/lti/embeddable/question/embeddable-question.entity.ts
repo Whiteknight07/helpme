@@ -34,8 +34,8 @@ export class EmbeddableQuestionModel extends BaseEntity {
   @Column({ type: 'integer', nullable: false })
   courseId: number;
 
-  @Column({ type: 'text', nullable: false })
-  name: string;
+  @Column({ type: 'text', nullable: true })
+  name?: string;
 
   @Column({ type: 'text', nullable: false })
   questionText: string;
@@ -58,7 +58,4 @@ export class EmbeddableQuestionModel extends BaseEntity {
   )
   @Exclude()
   submissions: EmbeddableQuestionFeedbackModel[];
-
-  @Column({ type: 'boolean', default: false })
-  isWeak: boolean;
 }

@@ -1,4 +1,5 @@
 import {
+  buildUserPrompt,
   extractJsonObject,
   GradeParseError,
   normalizeScore,
@@ -32,6 +33,8 @@ describe('INDG Grading Logic', () => {
       expect(normalizeScore(true)).toBeNull();
       expect(normalizeScore(false)).toBeNull();
       expect(normalizeScore('abc')).toBeNull();
+      expect(normalizeScore('1 garbage')).toBeNull();
+      expect(normalizeScore('2.0abc')).toBeNull();
       expect(normalizeScore(null)).toBeNull();
       expect(normalizeScore(undefined)).toBeNull();
     });
@@ -108,6 +111,32 @@ describe('INDG Grading Logic', () => {
       ]);
     });
 
+    it('forces needsHumanReview to true for off_topic, sensitive_content, or terminology_review', () => {
+      const offTopic = validateGradePayload({
+        score: 0,
+        comment: 'Off topic response.',
+        reasons: ['off_topic'],
+        needs_human_review: false,
+      });
+      expect(offTopic.needsHumanReview).toBe(true);
+
+      const sensitive = validateGradePayload({
+        score: 0,
+        comment: 'Sensitive content detected.',
+        reasons: ['sensitive_content'],
+        needs_human_review: false,
+      });
+      expect(sensitive.needsHumanReview).toBe(true);
+
+      const terminology = validateGradePayload({
+        score: 1,
+        comment: 'Check terminology.',
+        reasons: ['terminology_review'],
+        needs_human_review: false,
+      });
+      expect(terminology.needsHumanReview).toBe(true);
+    });
+
     it('rejects score 2 combined with deduction reasons', () => {
       const raw = {
         score: 2,
@@ -146,6 +175,53 @@ describe('INDG Grading Logic', () => {
         needs_human_review: false,
       };
       expect(() => validateGradePayload(raw)).toThrow(GradeParseError);
+    });
+  });
+
+  describe('buildUserPrompt', () => {
+    it('includes question, criteria, submission, mechanical facts, and instructions when provided', () => {
+      const facts: MechanicalFacts = {
+        sentenceCount: 3,
+        requiredMinimum: 3,
+        requiredMaximum: 5,
+        belowMinimum: false,
+        aboveMaximum: false,
+        indigenousCapitalizationVariants: [],
+      };
+      const prompt = buildUserPrompt(
+        'Question text here',
+        'Rubric criteria here',
+        'Student answer here.',
+        facts,
+        'Grade leniently on minor spelling.',
+      );
+      expect(prompt).toContain('Question:\nQuestion text here');
+      expect(prompt).toContain('Rubric / Criteria:\nRubric criteria here');
+      expect(prompt).toContain(
+        'Instructions:\nGrade leniently on minor spelling.',
+      );
+      expect(prompt).toContain('Student answer:\nStudent answer here.');
+      expect(prompt).toContain('- sentence_count: 3');
+    });
+
+    it('omits instructions and criteria when not provided', () => {
+      const facts: MechanicalFacts = {
+        sentenceCount: 3,
+        requiredMinimum: 3,
+        requiredMaximum: 5,
+        belowMinimum: false,
+        aboveMaximum: false,
+        indigenousCapitalizationVariants: [],
+      };
+      const prompt = buildUserPrompt(
+        'Question text here',
+        undefined,
+        'Student answer here.',
+        facts,
+        undefined,
+      );
+      expect(prompt).not.toContain('Instructions:');
+      expect(prompt).not.toContain('Rubric / Criteria:');
     });
   });
 

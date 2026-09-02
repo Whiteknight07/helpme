@@ -11,13 +11,12 @@ export class IndgEmbeddableQuestion1788000000000 implements MigrationInterface {
         "availableFrom" TIMESTAMP WITH TIME ZONE,
         "availableUntil" TIMESTAMP WITH TIME ZONE,
         "courseId" integer NOT NULL,
-        "name" text NOT NULL,
+        "name" text,
         "questionText" text NOT NULL,
         "criteriaText" text NOT NULL,
         "instructions" text,
         "minSentences" integer NOT NULL DEFAULT 3,
         "maxSentences" integer NOT NULL DEFAULT 5,
-        "isWeak" boolean NOT NULL DEFAULT false,
         CONSTRAINT "PK_embeddable_question_model" PRIMARY KEY ("id")
       )`,
     );
@@ -34,8 +33,6 @@ export class IndgEmbeddableQuestion1788000000000 implements MigrationInterface {
         "aiGrade" double precision,
         "reasons" text,
         "needsHumanReview" boolean NOT NULL DEFAULT false,
-        "humanGrade" double precision,
-        "humanFeedback" text,
         CONSTRAINT "PK_embeddable_question_feedback_model" PRIMARY KEY ("id")
       )`,
     );

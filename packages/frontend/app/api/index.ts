@@ -39,7 +39,7 @@ import {
   DesktopNotifPartial,
   EditCourseInfoParams,
   EmbeddableQuestion,
-  EmbeddableQuestionFeedbackResponse,
+  IndigenousFeedback,
   UpsertEmbeddableQuestionParams,
   AssignmentFeedbackExtractTextResponse,
   AssignmentFeedbackRequest,
@@ -1857,7 +1857,7 @@ export class APIClient {
         courseId: number,
         questionId: number,
         responseText: string,
-      ): Promise<EmbeddableQuestionFeedbackResponse> =>
+      ): Promise<IndigenousFeedback> =>
         this.req(
           'POST',
           `/api/v1/lti/embeddable-question/${courseId}/${questionId}/feedback`,

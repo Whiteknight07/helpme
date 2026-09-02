@@ -13,7 +13,9 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   Validate,
   ValidateIf,
@@ -562,103 +564,101 @@ export class EmbeddableQuestion {
   maxSentences?: number
 }
 
+@ValidatorConstraint({ name: 'validSentenceBounds', async: false })
+export class ValidSentenceBoundsConstraint implements ValidatorConstraintInterface {
+  validate(_value: any, args: ValidationArguments) {
+    const obj = args.object as UpsertEmbeddableQuestionParams
+    if (
+      obj.minSentences !== undefined &&
+      obj.maxSentences !== undefined &&
+      obj.minSentences !== null &&
+      obj.maxSentences !== null
+    ) {
+      return obj.minSentences <= obj.maxSentences
+    }
+    return true
+  }
+
+  defaultMessage(_args: ValidationArguments) {
+    return 'minSentences cannot be greater than maxSentences.'
+  }
+}
+
+@ValidatorConstraint({ name: 'validAvailabilityDates', async: false })
+export class ValidAvailabilityDatesConstraint implements ValidatorConstraintInterface {
+  validate(_value: any, args: ValidationArguments) {
+    const obj = args.object as UpsertEmbeddableQuestionParams
+    if (obj.availableFrom && obj.availableUntil) {
+      const from = new Date(obj.availableFrom).getTime()
+      const until = new Date(obj.availableUntil).getTime()
+      return from <= until
+    }
+    return true
+  }
+
+  defaultMessage(_args: ValidationArguments) {
+    return 'availableUntil cannot be before availableFrom.'
+  }
+}
+
 export class UpsertEmbeddableQuestionParams {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsOptional()
+  @MaxLength(255)
   name?: string
 
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @MaxLength(15000)
   questionText!: string
 
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @MaxLength(15000)
   criteriaText!: string
 
   @IsDate()
   @IsOptional()
   @Type(() => Date)
+  @Validate(ValidAvailabilityDatesConstraint)
   availableFrom?: Date
 
   @IsDate()
   @IsOptional()
   @Type(() => Date)
+  @Validate(ValidAvailabilityDatesConstraint)
   availableUntil?: Date
 
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsOptional()
+  @MaxLength(15000)
   instructions?: string
 
   @IsInt()
   @IsOptional()
+  @Min(1)
+  @Max(100)
+  @Validate(ValidSentenceBoundsConstraint)
   minSentences?: number
 
   @IsInt()
   @IsOptional()
+  @Min(1)
+  @Max(100)
+  @Validate(ValidSentenceBoundsConstraint)
   maxSentences?: number
 }
 
 export class EmbeddableQuestionFeedbackParams {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
+  @MaxLength(15000)
   responseText!: string
-}
-
-export class EmbeddableQuestionFeedbackResponse {
-  @IsString()
-  feedback!: string
-
-  @IsNumber()
-  @IsOptional()
-  grade?: number
-}
-
-export class EmbeddableFeedback {
-  @IsInt()
-  id!: number
-
-  @IsDate()
-  @Type(() => Date)
-  createdAt!: Date
-
-  @IsInt()
-  courseId!: number
-
-  @IsInt()
-  questionId!: number
-
-  @IsInt()
-  userId!: number
-
-  @IsString()
-  submission!: string
-
-  @IsString()
-  aiFeedback!: string
-
-  @IsNumber()
-  @IsOptional()
-  aiGrade?: number
-
-  @IsArray()
-  @IsOptional()
-  reasons?: string[]
-
-  @IsBoolean()
-  @IsOptional()
-  needsHumanReview?: boolean
-
-  @IsNumber()
-  @IsOptional()
-  humanGrade?: number
-
-  @IsString()
-  @IsOptional()
-  humanFeedback?: string
-
-  @IsInstance(UserPartial)
-  @IsOptional()
-  user?: UserPartial
 }
 
 export interface ChatbotAgentCourse {

@@ -122,16 +122,20 @@ export interface ValidatedGradePayload {
 }
 
 export function normalizeScore(val: unknown): IndigenousScore | null {
-  if (typeof val === 'boolean') return null;
+  if (typeof val === 'boolean' || val === null || val === undefined) {
+    return null;
+  }
   let num: number;
   if (typeof val === 'number') {
     num = val;
   } else if (typeof val === 'string') {
-    num = parseFloat(val.trim());
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    num = Number(trimmed);
   } else {
     return null;
   }
-  if (isNaN(num)) return null;
+  if (!Number.isFinite(num)) return null;
   if ((ALLOWED_INDIGENOUS_SCORES as readonly number[]).includes(num)) {
     return num as IndigenousScore;
   }
@@ -208,16 +212,22 @@ export function validateGradePayload(raw: unknown): ValidatedGradePayload {
   if (typeof comment !== 'string' || !comment.trim()) {
     throw new GradeParseError('comment must be a non-empty string');
   }
-  const boundedComment = comment.trim().slice(0, 5000);
+  const boundedComment = comment.trim().slice(0, 15000);
 
   const rawReasons = obj.reasons;
-  if (!Array.isArray(rawReasons) || rawReasons.length === 0) {
-    throw new GradeParseError('reasons must be a non-empty list');
+  if (
+    !Array.isArray(rawReasons) ||
+    rawReasons.length === 0 ||
+    rawReasons.length > 20
+  ) {
+    throw new GradeParseError(
+      'reasons must be a non-empty list of at most 20 items',
+    );
   }
 
   const cleanedReasons: IndigenousReason[] = [];
   for (const r of rawReasons) {
-    if (typeof r !== 'string' || !r.trim()) {
+    if (typeof r !== 'string' || !r.trim() || r.length > 200) {
       throw new GradeParseError(`Unknown reason value: ${JSON.stringify(r)}`);
     }
     const key = r.trim().toLowerCase();
@@ -230,9 +240,18 @@ export function validateGradePayload(raw: unknown): ValidatedGradePayload {
     }
   }
 
-  const needsReview = obj.needs_human_review ?? obj.needsHumanReview;
-  if (typeof needsReview !== 'boolean') {
+  const rawNeedsReview = obj.needs_human_review ?? obj.needsHumanReview;
+  if (typeof rawNeedsReview !== 'boolean') {
     throw new GradeParseError('needs_human_review must be a boolean');
+  }
+
+  let needsReview = rawNeedsReview;
+  if (
+    cleanedReasons.includes('off_topic') ||
+    cleanedReasons.includes('sensitive_content') ||
+    cleanedReasons.includes('terminology_review')
+  ) {
+    needsReview = true;
   }
 
   if (
@@ -277,6 +296,7 @@ export function buildUserPrompt(
   criteriaText: string | undefined,
   submission: string,
   facts: MechanicalFacts,
+  instructions?: string,
 ): string {
   const variantText =
     facts.indigenousCapitalizationVariants.length > 0
@@ -286,6 +306,7 @@ export function buildUserPrompt(
   const lines = [
     `Question:\n${questionText}`,
     criteriaText ? `Rubric / Criteria:\n${criteriaText}` : '',
+    instructions ? `Instructions:\n${instructions}` : '',
     `Student answer:\n${submission}`,
     'Mechanical facts (computed by code, not by you):',
     `- sentence_count: ${facts.sentenceCount}`,
@@ -349,11 +370,17 @@ export function postProcessFeedback(
     finalComment = `${TOO_SHORT_COMMENT}\n\n${validated.comment}`.trim();
   }
 
+  const needsHumanReview =
+    validated.needsHumanReview ||
+    reasons.includes('off_topic') ||
+    reasons.includes('sensitive_content') ||
+    reasons.includes('terminology_review');
+
   return {
     score: finalScore,
     llmScore: validated.score,
     comment: finalComment,
     reasons,
-    needsHumanReview: validated.needsHumanReview,
+    needsHumanReview,
   };
 }
