@@ -1,6 +1,5 @@
 import {
   buildUserPrompt,
-  extractJsonObject,
   GradeParseError,
   normalizeScore,
   postProcessFeedback,
@@ -38,47 +37,6 @@ describe('INDG Grading Logic', () => {
       expect(normalizeScore('2.0abc')).toBeNull();
       expect(normalizeScore(null)).toBeNull();
       expect(normalizeScore(undefined)).toBeNull();
-    });
-  });
-
-  describe('extractJsonObject', () => {
-    it('parses direct JSON string', () => {
-      const jsonStr =
-        '{"score": 2, "comment": "Good job", "reasons": ["meets_requirements"], "needs_human_review": false}';
-      expect(extractJsonObject(jsonStr)).toEqual({
-        score: 2,
-        comment: 'Good job',
-        reasons: ['meets_requirements'],
-        needs_human_review: false,
-      });
-    });
-
-    it('strips <think> tags and markdown fences', () => {
-      const text =
-        '<think>Let me evaluate this carefully.</think>```json\n{"score": 1, "comment": "Capitalize Indigenous", "reasons": ["indigenous_capitalization"], "needs_human_review": false}\n```';
-      expect(extractJsonObject(text)).toEqual({
-        score: 1,
-        comment: 'Capitalize Indigenous',
-        reasons: ['indigenous_capitalization'],
-        needs_human_review: false,
-      });
-    });
-
-    it('finds JSON with surrounding conversational prose', () => {
-      const text =
-        'Here is my feedback:\n{"score": 2, "comment": "Great answer", "reasons": ["meets_requirements"], "needs_human_review": false}\nHope that helps!';
-      expect(extractJsonObject(text)).toEqual({
-        score: 2,
-        comment: 'Great answer',
-        reasons: ['meets_requirements'],
-        needs_human_review: false,
-      });
-    });
-
-    it('throws GradeParseError for non-JSON text', () => {
-      expect(() => extractJsonObject('No JSON here at all')).toThrow(
-        GradeParseError,
-      );
     });
   });
 

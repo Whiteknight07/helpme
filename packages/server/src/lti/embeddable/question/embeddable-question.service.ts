@@ -9,14 +9,15 @@ import {
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
 import { ERROR_MESSAGES, UpsertEmbeddableQuestionParams } from '@koh/common';
 import { EmbeddableQuestionFeedbackModel } from './embeddable-question-feedback.entity';
-import { ChatbotApiService } from '../../../chatbot/chatbot-api.service';
+import {
+  ChatbotApiService,
+  FeedbackAnswer,
+} from '../../../chatbot/chatbot-api.service';
 import { computeMechanicalFacts } from './deterministic-checks';
 import {
-  buildInitialQuery,
-  buildRetryQuery,
   buildUserPrompt,
-  extractJsonObject,
   postProcessFeedback,
+  STRICT_SYSTEM_PROMPT,
   validateGradePayload,
   ValidatedGradePayload,
 } from './indg-grading';
@@ -86,14 +87,14 @@ export class EmbeddableQuestionService {
       facts,
       question.instructions,
     );
-    const initialQuery = buildInitialQuery(userPrompt);
 
-    let firstText: string;
+    let chatbotAnswer: FeedbackAnswer;
     try {
-      firstText = await this.chatbotApiService.queryChatbotForCourse(
-        initialQuery,
+      chatbotAnswer = await this.chatbotApiService.queryChatbotForCourse(
+        userPrompt,
         courseId,
-        'default',
+        'feedback',
+        { systemPrompt: STRICT_SYSTEM_PROMPT },
       );
     } catch (err) {
       this.logger.error(`Chatbot service call failed: ${err}`);
@@ -104,38 +105,12 @@ export class EmbeddableQuestionService {
 
     let validatedPayload: ValidatedGradePayload;
     try {
-      const parsedJson = extractJsonObject(firstText);
-      validatedPayload = validateGradePayload(parsedJson);
-    } catch (firstParseErr) {
-      this.logger.warn(
-        `Model output invalid on first attempt, retrying once: ${firstParseErr}`,
+      validatedPayload = validateGradePayload(chatbotAnswer);
+    } catch {
+      this.logger.error('INDG semantic validation failed');
+      throw new InternalServerErrorException(
+        'Model output was not valid feedback JSON.',
       );
-      const retryQuery = buildRetryQuery(userPrompt, firstText);
-      let retryText: string;
-      try {
-        retryText = await this.chatbotApiService.queryChatbotForCourse(
-          retryQuery,
-          courseId,
-          'default',
-        );
-      } catch (err) {
-        this.logger.error(`Chatbot service retry call failed: ${err}`);
-        throw new InternalServerErrorException(
-          'Failed to connect to chatbot service',
-        );
-      }
-
-      try {
-        const retryJson = extractJsonObject(retryText);
-        validatedPayload = validateGradePayload(retryJson);
-      } catch (retryParseErr) {
-        this.logger.error(
-          `Model output invalid after retry, failing without saving: ${retryParseErr}`,
-        );
-        throw new InternalServerErrorException(
-          'Model output was not valid feedback JSON after retry.',
-        );
-      }
     }
 
     const postProcessed = postProcessFeedback(validatedPayload, facts);

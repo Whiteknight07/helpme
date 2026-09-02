@@ -95,13 +95,6 @@ export const REASON_ALIASES: Record<string, IndigenousReason> = {
   spelling: 'proofreading_note',
 };
 
-export const REPAIR_INSTRUCTION =
-  'Your previous output was not valid JSON for the grading schema. ' +
-  'Reply with JSON only, no markdown, using keys score, comment, reasons, needs_human_review. ' +
-  'score must be 0, 0.5, 1, 1.5, or 2. reasons must be a non-empty list using ONLY these exact strings: ' +
-  'blank, too_short, indigenous_capitalization, terminology_review, unreadable, off_topic, sensitive_content, ' +
-  'meets_requirements, proofreading_note. needs_human_review must be true or false.';
-
 export class GradeParseError extends Error {
   constructor(message: string) {
     super(message);
@@ -135,59 +128,6 @@ export function normalizeScore(val: unknown): IndigenousScore | null {
     return num as IndigenousScore;
   }
   return null;
-}
-
-export function extractJsonObject(text: string): Record<string, unknown> {
-  if (typeof text !== 'string' || !text.trim()) {
-    throw new GradeParseError('Empty model output');
-  }
-
-  const cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-  // 1. Try regex fenced code block ```json { ... } ```
-  const fencedMatch = cleaned.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/i);
-  if (fencedMatch) {
-    try {
-      const parsed = JSON.parse(fencedMatch[1].trim());
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  // 2. Try direct JSON.parse
-  try {
-    const parsed = JSON.parse(cleaned);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // fall through
-  }
-
-  // 3. Find outer braces
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) {
-    throw new GradeParseError(
-      `No JSON object found in model output: ${text.slice(0, 300)}`,
-    );
-  }
-
-  try {
-    const parsed = JSON.parse(cleaned.slice(start, end + 1));
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch (err) {
-    throw new GradeParseError(
-      `Invalid JSON in model output: ${text.slice(0, 300)}`,
-    );
-  }
-
-  throw new GradeParseError('Parsed JSON is not an object');
 }
 
 export function validateGradePayload(raw: unknown): ValidatedGradePayload {
@@ -314,27 +254,6 @@ export function buildUserPrompt(
   ].filter(Boolean);
 
   return lines.join('\n\n');
-}
-
-export function buildInitialQuery(userPrompt: string): string {
-  return (
-    `[SYSTEM]\n${STRICT_SYSTEM_PROMPT}\n\n` +
-    `[USER]\n${userPrompt}\n\n` +
-    `[FORMAT]\nReturn ONLY a single valid JSON object that matches the schema: {"score": 2, "comment": "string", "reasons": ["meets_requirements"], "needs_human_review": false}. Do not include code fences, markdown, or any prose before or after the JSON.`
-  );
-}
-
-export function buildRetryQuery(
-  userPrompt: string,
-  firstResponseText: string,
-): string {
-  return (
-    `[SYSTEM]\n${STRICT_SYSTEM_PROMPT}\n\n` +
-    `[USER]\n${userPrompt}\n\n` +
-    `[ASSISTANT]\n${firstResponseText}\n\n` +
-    `[USER]\n${REPAIR_INSTRUCTION}\n\n` +
-    `[FORMAT]\nReturn ONLY a single valid JSON object. Do not include markdown code fences or any prose.`
-  );
 }
 
 export interface PostProcessedFeedback {
