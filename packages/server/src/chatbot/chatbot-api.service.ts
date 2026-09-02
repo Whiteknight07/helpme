@@ -12,6 +12,18 @@ import {
 } from '@koh/common';
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { z } from 'zod';
+
+const feedbackResponseSchema = z.object({
+  answer: z.object({
+    score: z.number().finite(),
+    comment: z.string(),
+    reasons: z.array(z.string()),
+    needs_human_review: z.boolean(),
+  }),
+});
+
+export type FeedbackAnswer = z.infer<typeof feedbackResponseSchema>['answer'];
 
 @Injectable()
 /* This is a list of all endpoints from the chatbot repo.
@@ -163,17 +175,46 @@ export class ChatbotApiService {
    * I'm assuming this is the case because stuff like abstract generation wouldn't need big models that the prof may pick.
    * So for the AI Assignment/Essay Feedback feature, it will need its own ChatbotQueryType eventually.
    */
+  queryChatbotForCourse(
+    query: string,
+    courseId: number,
+    type?: 'default' | 'abstract',
+  ): Promise<string>;
+  queryChatbotForCourse(
+    query: string,
+    courseId: number,
+    type: 'feedback',
+    params: { systemPrompt: string },
+  ): Promise<FeedbackAnswer>;
   async queryChatbotForCourse(
     query: string,
     courseId: number,
-    type: 'default' | 'abstract' = 'default',
-  ): Promise<string> {
-    const resp: { answer: string } = await this.request(
-      'POST',
-      `chatbot/query`,
-      '',
-      { query, type, courseId },
-    );
+    type: 'default' | 'abstract' | 'feedback' = 'default',
+    params?: { systemPrompt: string },
+  ): Promise<string | FeedbackAnswer> {
+    const data =
+      type === 'feedback'
+        ? { query, type, courseId, params }
+        : { query, type, courseId };
+
+    const resp: unknown = await this.request('POST', `chatbot/query`, '', data);
+
+    if (type === 'feedback') {
+      return feedbackResponseSchema.parse(resp).answer;
+    }
+
+    if (
+      typeof resp !== 'object' ||
+      resp === null ||
+      !('answer' in resp) ||
+      typeof resp.answer !== 'string'
+    ) {
+      throw new HttpException(
+        'Invalid response from chatbot service: expected string answer',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
     return resp.answer;
   }
 
