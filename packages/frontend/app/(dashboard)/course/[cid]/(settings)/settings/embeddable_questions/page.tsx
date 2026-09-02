@@ -1,13 +1,6 @@
 'use client'
 
-import {
-  ReactElement,
-  use,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react'
+import { ReactElement, use, useCallback, useEffect, useState } from 'react'
 import {
   Button,
   Card,
@@ -39,7 +32,7 @@ export default function EmbeddableQuestionsPage(
   props: EmbeddableQuestionsPageProps,
 ): ReactElement {
   const params = use(props.params)
-  const courseId = useMemo(() => Number(params.cid), [params.cid])
+  const courseId = Number(params.cid)
 
   const [questions, setQuestions] = useState<EmbeddableQuestion[]>([])
   const [loading, setLoading] = useState(true)
@@ -98,10 +91,14 @@ export default function EmbeddableQuestionsPage(
     return `<iframe src="${url}" width="100%" height="450" style="border:0;" allow="clipboard-write"></iframe>`
   }
 
-  const copyEmbedHtml = (q: EmbeddableQuestion) => {
-    const embedCode = getIFrameHtml(q)
-    navigator.clipboard.writeText(embedCode)
-    message.success('Canvas embed HTML copied to clipboard!')
+  const copyEmbedHtml = async (q: EmbeddableQuestion) => {
+    try {
+      const embedCode = getIFrameHtml(q)
+      await navigator.clipboard.writeText(embedCode)
+      message.success('Canvas embed HTML copied to clipboard!')
+    } catch (err: unknown) {
+      message.error(`Failed to copy embed HTML: ${getErrorMessage(err)}`)
+    }
   }
 
   const columns = [

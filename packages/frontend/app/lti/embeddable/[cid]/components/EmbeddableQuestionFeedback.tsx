@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Alert, Button, Input, message, Spin } from 'antd'
+import { Alert, Button, Input, message } from 'antd'
+import axios from 'axios'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -44,9 +45,7 @@ export default function EmbeddableQuestionFeedback({
       )
       setFeedback(response.comment)
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response
-        ?.status
-      if (status === 429) {
+      if (axios.isAxiosError(err) && err.response?.status === 429) {
         const rateLimitMessage =
           'Too many attempts. Please wait a few minutes before requesting more feedback.'
         setError(rateLimitMessage)
@@ -83,13 +82,6 @@ export default function EmbeddableQuestionFeedback({
       >
         Get Feedback
       </Button>
-
-      {isLoading && (
-        <div className="flex items-center gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2">
-          <Spin size="small" />
-          <span className="text-sm text-zinc-600">Generating feedback...</span>
-        </div>
-      )}
 
       {error && (
         <Alert

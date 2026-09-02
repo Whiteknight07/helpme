@@ -151,14 +151,14 @@ export class EmbeddableQuestionService {
       needsHumanReview: postProcessed.needsHumanReview,
     });
 
-    return await feedback.save();
+    return feedback.save();
   }
 
   /**
    * Finds all embeddable questions for a given course.
    */
   async findAllForCourse(courseId: number): Promise<EmbeddableQuestionModel[]> {
-    return await EmbeddableQuestionModel.find({
+    return EmbeddableQuestionModel.find({
       where: { courseId },
       order: { createdAt: 'ASC' },
     });
@@ -241,7 +241,7 @@ export class EmbeddableQuestionService {
       existing.minSentences = minSentences;
       existing.maxSentences = maxSentences;
 
-      return await existing.save();
+      return existing.save();
     }
 
     const count = await EmbeddableQuestionModel.count({
@@ -260,7 +260,7 @@ export class EmbeddableQuestionService {
       maxSentences,
     });
 
-    return await question.save();
+    return question.save();
   }
 
   /**

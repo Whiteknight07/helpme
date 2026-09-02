@@ -1,5 +1,5 @@
 import { Card } from 'antd'
-import React, { useMemo } from 'react'
+import React from 'react'
 import { EmbeddableQuestion } from '@koh/common'
 
 const dateFormat: Intl.DateTimeFormatOptions = {
@@ -16,23 +16,19 @@ export const DateIssue: React.FC<{
   item: EmbeddableQuestion
   type: 'late' | 'early'
 }> = ({ item, type }) => {
-  const title = useMemo(
-    () =>
-      type === 'late'
-        ? 'This Question has closed.'
-        : 'This Question has not opened yet.',
-    [type],
-  )
+  const title =
+    type === 'late'
+      ? 'This Question has closed.'
+      : 'This Question has not opened yet.'
 
-  const text = useMemo(() => {
-    return type === 'early'
+  const text =
+    type === 'early'
       ? `This question is not available yet. It will become available after ${new Date(
           item.availableFrom ?? Date.now(),
         ).toLocaleDateString('en-US', dateFormat)}.`
       : `This question is no longer available. It closed after ${new Date(
           item.availableUntil ?? Date.now(),
         ).toLocaleDateString('en-US', dateFormat)}.`
-  }, [item, type])
 
   return (
     <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">
@@ -45,7 +41,6 @@ export const DateIssue: React.FC<{
 
 export const ErrorMessage: React.FC<{
   error?: string
-  item?: EmbeddableQuestion
 }> = ({ error }) => {
   return (
     <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">

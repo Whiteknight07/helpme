@@ -245,7 +245,6 @@ describe('INDG Grading Logic', () => {
 
       const result = postProcessFeedback(validated, facts);
       expect(result.score).toBe(1);
-      expect(result.llmScore).toBe(2);
       expect(result.reasons).toContain('too_short');
       expect(result.comment).toContain(
         'This answer does not meet the sentence requirements noted in the question.',
@@ -271,7 +270,6 @@ describe('INDG Grading Logic', () => {
 
       const result = postProcessFeedback(validated, facts);
       expect(result.score).toBe(2);
-      expect(result.llmScore).toBe(2);
       expect(result.comment).toBe('Answer addressed the question.');
       expect(result.reasons).toEqual(['meets_requirements']);
     });

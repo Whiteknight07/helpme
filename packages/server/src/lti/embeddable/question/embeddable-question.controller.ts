@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   ClassSerializerInterceptor,
   Controller,
@@ -41,7 +40,7 @@ export class EmbeddableQuestionController {
   async findAll(
     @Param('courseId', ParseIntPipe) courseId: number,
   ): Promise<EmbeddableQuestionModel[]> {
-    return await this.embeddableQuestionService.findAllForCourse(courseId);
+    return this.embeddableQuestionService.findAllForCourse(courseId);
   }
 
   /**
@@ -54,7 +53,7 @@ export class EmbeddableQuestionController {
     @Param('courseId', ParseIntPipe) courseId: number,
     @Param('questionId', ParseIntPipe) questionId: number,
   ): Promise<EmbeddableQuestionModel> {
-    return await this.embeddableQuestionService.findOne(courseId, questionId);
+    return this.embeddableQuestionService.findOne(courseId, questionId);
   }
 
   /**
@@ -69,13 +68,8 @@ export class EmbeddableQuestionController {
     @Body() body: EmbeddableQuestionFeedbackParams,
     @UserId() userId: number,
   ): Promise<IndigenousFeedback> {
-    const responseText = body?.responseText?.trim();
-    if (!responseText) {
-      throw new BadRequestException('Input is required');
-    }
-
     const feedback = await this.embeddableQuestionService.getFeedback(
-      responseText,
+      body.responseText,
       questionId,
       courseId,
       userId,
@@ -99,7 +93,7 @@ export class EmbeddableQuestionController {
     @Param('courseId', ParseIntPipe) courseId: number,
     @Body() body: UpsertEmbeddableQuestionParams,
   ): Promise<EmbeddableQuestionModel> {
-    return await this.embeddableQuestionService.upsert(courseId, body);
+    return this.embeddableQuestionService.upsert(courseId, body);
   }
 
   /**
@@ -113,11 +107,7 @@ export class EmbeddableQuestionController {
     @Param('questionId', ParseIntPipe) questionId: number,
     @Body() body: UpsertEmbeddableQuestionParams,
   ): Promise<EmbeddableQuestionModel> {
-    return await this.embeddableQuestionService.upsert(
-      courseId,
-      body,
-      questionId,
-    );
+    return this.embeddableQuestionService.upsert(courseId, body, questionId);
   }
 
   /**
@@ -130,6 +120,6 @@ export class EmbeddableQuestionController {
     @Param('courseId', ParseIntPipe) courseId: number,
     @Param('questionId', ParseIntPipe) questionId: number,
   ): Promise<void> {
-    await this.embeddableQuestionService.delete(courseId, questionId);
+    return this.embeddableQuestionService.delete(courseId, questionId);
   }
 }

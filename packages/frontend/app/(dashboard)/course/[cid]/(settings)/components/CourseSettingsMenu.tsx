@@ -16,6 +16,7 @@ import { ReactNode } from 'react'
 
 type MenuItem = Required<MenuProps>['items'][number]
 type MenuOption = { key: string; label: ReactNode }
+type MenuClickItem = Parameters<NonNullable<MenuProps['onClick']>>[0]
 
 enum CourseAdminOptions {
   CHECK_IN = 'CHECK_IN',
@@ -45,7 +46,7 @@ const CourseSettingsMenu: React.FC<CourseSettingsManyProps> = ({
   const router = useRouter()
   const pathname = usePathname()
 
-  const handleMenuClick = (item: any) => {
+  const handleMenuClick = (item: MenuClickItem) => {
     const basePath = `/course/${courseId}/settings`
     switch (item.key) {
       case CourseAdminOptions.SETTINGS:
@@ -182,7 +183,11 @@ const CourseSettingsMenu: React.FC<CourseSettingsManyProps> = ({
       <div className="md:hidden">
         <Select
           value={currentMenuItem}
-          onChange={(value) => handleMenuClick({ key: value })}
+          onChange={(value) =>
+            handleMenuClick({
+              key: value,
+            } as MenuClickItem)
+          }
           className="w-full"
           options={mobileOptions}
         />

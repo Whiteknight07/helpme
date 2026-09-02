@@ -100,7 +100,6 @@ export default function EmbeddableQuestionForm({
         payload.minSentences > payload.maxSentences
       ) {
         message.error('Minimum sentences cannot be greater than maximum.')
-        setIsLoading(false)
         return
       }
 
@@ -177,18 +176,10 @@ export default function EmbeddableQuestionForm({
             </div>
           }
           rules={[
-            { required: true, message: 'Question text is required.' },
             {
-              validator: (_, value) => {
-                if (value && !value.trim()) {
-                  return Promise.reject(
-                    new Error(
-                      'Question text cannot be only whitespace characters.',
-                    ),
-                  )
-                }
-                return Promise.resolve()
-              },
+              required: true,
+              whitespace: true,
+              message: 'Question text is required.',
             },
           ]}
         >
@@ -218,18 +209,10 @@ export default function EmbeddableQuestionForm({
             </div>
           }
           rules={[
-            { required: true, message: 'Criteria text is required.' },
             {
-              validator: (_, value) => {
-                if (value && !value.trim()) {
-                  return Promise.reject(
-                    new Error(
-                      'Criteria text cannot be only whitespace characters.',
-                    ),
-                  )
-                }
-                return Promise.resolve()
-              },
+              required: true,
+              whitespace: true,
+              message: 'Criteria text is required.',
             },
           ]}
         >

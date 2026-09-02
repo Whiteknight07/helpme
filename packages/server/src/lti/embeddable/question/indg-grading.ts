@@ -71,11 +71,6 @@ export const DEDUCTION_REASONS: ReadonlySet<IndigenousReason> = new Set([
   'sensitive_content',
 ]);
 
-export const FULL_MARK_REASONS: ReadonlySet<IndigenousReason> = new Set([
-  'meets_requirements',
-  'proofreading_note',
-]);
-
 export const TOO_SHORT_COMMENT =
   'This answer does not meet the sentence requirements noted in the question.';
 
@@ -344,7 +339,6 @@ export function buildRetryQuery(
 
 export interface PostProcessedFeedback {
   score: IndigenousScore;
-  llmScore: IndigenousScore;
   comment: string;
   reasons: IndigenousReason[];
   needsHumanReview: boolean;
@@ -380,7 +374,6 @@ export function postProcessFeedback(
 
   return {
     score: finalScore,
-    llmScore: validated.score,
     comment: finalComment,
     reasons,
     needsHumanReview,

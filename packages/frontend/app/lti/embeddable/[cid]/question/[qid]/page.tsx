@@ -40,7 +40,12 @@ export default function EmbeddableQuestionPage(): ReactElement {
   }, [question])
 
   useEffect(() => {
-    if (!questionId || !courseId || isNaN(questionId) || isNaN(courseId)) {
+    if (
+      !questionId ||
+      !courseId ||
+      Number.isNaN(questionId) ||
+      Number.isNaN(courseId)
+    ) {
       setError('Invalid course or question ID')
       setLoadingQuestion(false)
       return
@@ -60,7 +65,7 @@ export default function EmbeddableQuestionPage(): ReactElement {
   }
 
   if (error || !question) {
-    return <ErrorMessage error={error} item={question} />
+    return <ErrorMessage error={error} />
   }
 
   if (!isOpen) {
