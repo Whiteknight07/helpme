@@ -87,6 +87,14 @@ describe('LtiService', () => {
     await dataSource.synchronize(true);
   });
 
+  it('allows LTI cookies over HTTP in development', () => {
+    expect(LtiService.cookieOptions).toEqual({
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+    });
+  });
+
   describe('get provider()', () => {
     it("should throw error if provider wasn't initialized", () => {
       expect(() => service.provider).toThrow(

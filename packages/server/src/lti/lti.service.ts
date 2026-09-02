@@ -7,7 +7,7 @@ import { UserCourseModel } from '../profile/user-course.entity';
 import { UserModel } from '../profile/user.entity';
 import { IdToken, Provider } from '@bhunt02/lti-typescript';
 import { LMSCourseIntegrationModel } from '../lmsIntegration/lmsCourseIntegration.entity';
-import { ERROR_MESSAGES, Role } from '@koh/common';
+import { ERROR_MESSAGES, isProd, Role } from '@koh/common';
 import { JwtService } from '@nestjs/jwt';
 import { CookieOptions } from 'express';
 import { LtiCourseInviteModel } from './lti-course-invite.entity';
@@ -23,8 +23,8 @@ import { Not } from 'typeorm';
 export class LtiService {
   static readonly cookieOptions: CookieOptions = {
     httpOnly: true,
-    secure: true,
-    sameSite: 'none',
+    secure: isProd(),
+    sameSite: isProd() ? 'none' : 'lax',
   };
   constructor(private jwtService: JwtService) {}
 

@@ -155,11 +155,7 @@ export default class LtiMiddleware {
           },
           autoActivate: true,
         },
-        cookies: {
-          httpOnly: true,
-          secure: true,
-          sameSite: 'none',
-        },
+        cookies: LtiService.cookieOptions,
         tokenMaxAge: 30,
         debug: !isProd(),
         cors: true,
@@ -215,6 +211,10 @@ export default class LtiMiddleware {
       },
       {
         route: /\/auth.*/,
+        method: 'ALL',
+      },
+      {
+        route: /^\/embeddable-question(?:\/|$)/,
         method: 'ALL',
       },
       `/static`,

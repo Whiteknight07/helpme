@@ -9,19 +9,18 @@ export function CookieWrapper({ children }: { children: React.ReactNode }) {
   const [hasCookieAccess, setHasCookieAccess] = useState<boolean>(true)
 
   useEffect(() => {
-    const checkThirdPartyCookieStatus = async () => {
+    const checkThirdPartyCookieStatus = () => {
       try {
-        const storageAccessible =
-          document.hasStorageAccess &&
-          typeof document.hasStorageAccess === 'function'
-            ? await document.hasStorageAccess()
-            : false
-        setHasCookieAccess(storageAccessible)
-      } catch (err: any) {
+        const testCookie = '__helpme_cookie_test=1'
+        document.cookie = `${testCookie}; path=/`
+        setHasCookieAccess(document.cookie.split('; ').includes(testCookie))
+        document.cookie = '__helpme_cookie_test=; Max-Age=0; path=/'
+      } catch (err: unknown) {
         console.error(err)
+        setHasCookieAccess(false)
       }
     }
-    checkThirdPartyCookieStatus().then()
+    checkThirdPartyCookieStatus()
   }, [])
 
   if (!hasCookieAccess) {
