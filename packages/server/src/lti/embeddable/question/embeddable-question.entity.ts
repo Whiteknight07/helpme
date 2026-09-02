@@ -21,10 +21,10 @@ export class EmbeddableQuestionModel extends BaseEntity {
   createdAt: Date;
 
   @Column({ type: 'timestamptz', nullable: true })
-  availableFrom?: Date;
+  availableFrom: Date | null;
 
   @Column({ type: 'timestamptz', nullable: true })
-  availableUntil?: Date;
+  availableUntil: Date | null;
 
   @ManyToOne(() => CourseModel, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
@@ -35,7 +35,7 @@ export class EmbeddableQuestionModel extends BaseEntity {
   courseId: number;
 
   @Column({ type: 'text', nullable: true })
-  name?: string;
+  name: string | null;
 
   @Column({ type: 'text', nullable: false })
   questionText: string;
@@ -44,7 +44,7 @@ export class EmbeddableQuestionModel extends BaseEntity {
   criteriaText: string;
 
   @Column({ type: 'text', nullable: true })
-  instructions?: string;
+  instructions: string | null;
 
   @Column({ type: 'integer', nullable: false, default: 3 })
   minSentences: number;

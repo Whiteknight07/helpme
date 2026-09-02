@@ -293,10 +293,10 @@ export function validateGradePayload(raw: unknown): ValidatedGradePayload {
 
 export function buildUserPrompt(
   questionText: string,
-  criteriaText: string | undefined,
+  criteriaText: string | undefined | null,
   submission: string,
   facts: MechanicalFacts,
-  instructions?: string,
+  instructions?: string | null,
 ): string {
   const variantText =
     facts.indigenousCapitalizationVariants.length > 0
@@ -367,7 +367,9 @@ export function postProcessFeedback(
       if (proofIdx !== -1) reasons.splice(proofIdx, 1);
       reasons.unshift('too_short');
     }
-    finalComment = `${TOO_SHORT_COMMENT}\n\n${validated.comment}`.trim();
+    finalComment = `${TOO_SHORT_COMMENT}\n\n${validated.comment}`
+      .trim()
+      .slice(0, 15000);
   }
 
   const needsHumanReview =

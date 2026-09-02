@@ -30,8 +30,8 @@ export class IndgEmbeddableQuestion1788000000000 implements MigrationInterface {
         "userId" integer NOT NULL,
         "submission" text NOT NULL,
         "aiFeedback" text NOT NULL,
-        "aiGrade" double precision,
-        "reasons" text,
+        "aiGrade" double precision NOT NULL,
+        "reasons" text NOT NULL,
         "needsHumanReview" boolean NOT NULL DEFAULT false,
         CONSTRAINT "PK_embeddable_question_feedback_model" PRIMARY KEY ("id")
       )`,

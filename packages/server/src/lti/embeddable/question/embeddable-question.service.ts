@@ -188,63 +188,37 @@ export class EmbeddableQuestionService {
     params: UpsertEmbeddableQuestionParams,
     questionId?: number,
   ): Promise<EmbeddableQuestionModel> {
-    const trimmedName = params.name?.trim() || undefined;
+    const trimmedName =
+      typeof params.name === 'string' && params.name.trim().length > 0
+        ? params.name.trim()
+        : null;
     const trimmedQuestionText = params.questionText?.trim();
     const trimmedCriteriaText = params.criteriaText?.trim();
-    const trimmedInstructions = params.instructions?.trim() || undefined;
+    const trimmedInstructions =
+      typeof params.instructions === 'string' &&
+      params.instructions.trim().length > 0
+        ? params.instructions.trim()
+        : null;
 
     if (!trimmedQuestionText || !trimmedCriteriaText) {
       throw new BadRequestException('Question and criteria text are required');
     }
 
+    const availableFrom = params.availableFrom
+      ? new Date(params.availableFrom)
+      : null;
+    const availableUntil = params.availableUntil
+      ? new Date(params.availableUntil)
+      : null;
+
     if (
-      params.availableFrom &&
-      params.availableUntil &&
-      new Date(params.availableUntil).getTime() <
-        new Date(params.availableFrom).getTime()
+      availableFrom &&
+      availableUntil &&
+      availableUntil.getTime() < availableFrom.getTime()
     ) {
       throw new BadRequestException(
         'availableUntil cannot be before availableFrom',
       );
-    }
-
-    if (questionId) {
-      const existing = await this.findOne(courseId, questionId);
-      const finalMin = params.minSentences ?? existing.minSentences ?? 3;
-      const finalMax = params.maxSentences ?? existing.maxSentences ?? 5;
-      if (finalMin > finalMax) {
-        throw new BadRequestException(
-          'minSentences cannot be greater than maxSentences',
-        );
-      }
-      const availableFrom =
-        params.availableFrom !== undefined
-          ? params.availableFrom
-          : existing.availableFrom;
-      const availableUntil =
-        params.availableUntil !== undefined
-          ? params.availableUntil
-          : existing.availableUntil;
-      if (
-        availableFrom &&
-        availableUntil &&
-        new Date(availableUntil).getTime() < new Date(availableFrom).getTime()
-      ) {
-        throw new BadRequestException(
-          'availableUntil cannot be before availableFrom',
-        );
-      }
-
-      existing.name = trimmedName !== undefined ? trimmedName : existing.name;
-      existing.questionText = trimmedQuestionText;
-      existing.criteriaText = trimmedCriteriaText;
-      existing.instructions = trimmedInstructions;
-      existing.availableFrom = availableFrom;
-      existing.availableUntil = availableUntil;
-      existing.minSentences = finalMin;
-      existing.maxSentences = finalMax;
-
-      return await existing.save();
     }
 
     const minSentences = params.minSentences ?? 3;
@@ -253,6 +227,21 @@ export class EmbeddableQuestionService {
       throw new BadRequestException(
         'minSentences cannot be greater than maxSentences',
       );
+    }
+
+    if (questionId) {
+      const existing = await this.findOne(courseId, questionId);
+
+      existing.name = trimmedName;
+      existing.questionText = trimmedQuestionText;
+      existing.criteriaText = trimmedCriteriaText;
+      existing.instructions = trimmedInstructions;
+      existing.availableFrom = availableFrom;
+      existing.availableUntil = availableUntil;
+      existing.minSentences = minSentences;
+      existing.maxSentences = maxSentences;
+
+      return await existing.save();
     }
 
     const count = await EmbeddableQuestionModel.count({
@@ -265,8 +254,8 @@ export class EmbeddableQuestionService {
       questionText: trimmedQuestionText,
       criteriaText: trimmedCriteriaText,
       instructions: trimmedInstructions,
-      availableFrom: params.availableFrom,
-      availableUntil: params.availableUntil,
+      availableFrom,
+      availableUntil,
       minSentences,
       maxSentences,
     });

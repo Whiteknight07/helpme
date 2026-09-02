@@ -4,6 +4,7 @@ import {
   GradeParseError,
   normalizeScore,
   postProcessFeedback,
+  TOO_SHORT_COMMENT,
   validateGradePayload,
 } from './indg-grading';
 import { MechanicalFacts } from './deterministic-checks';
@@ -273,6 +274,28 @@ describe('INDG Grading Logic', () => {
       expect(result.llmScore).toBe(2);
       expect(result.comment).toBe('Answer addressed the question.');
       expect(result.reasons).toEqual(['meets_requirements']);
+    });
+
+    it('bounds final comment to 15000 characters when prepending too short comment', () => {
+      const longComment = 'A'.repeat(15000);
+      const validated = {
+        score: 2 as const,
+        comment: longComment,
+        reasons: ['meets_requirements' as const],
+        needsHumanReview: false,
+      };
+      const facts: MechanicalFacts = {
+        sentenceCount: 1,
+        requiredMinimum: 3,
+        requiredMaximum: 5,
+        belowMinimum: true,
+        aboveMaximum: false,
+        indigenousCapitalizationVariants: [],
+      };
+
+      const result = postProcessFeedback(validated, facts);
+      expect(result.comment.length).toBe(15000);
+      expect(result.comment.startsWith(TOO_SHORT_COMMENT)).toBe(true);
     });
   });
 });

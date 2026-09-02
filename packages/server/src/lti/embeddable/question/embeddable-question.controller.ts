@@ -18,8 +18,6 @@ import { Roles } from '../../../decorators/roles.decorator';
 import {
   EmbeddableQuestionFeedbackParams,
   IndigenousFeedback,
-  IndigenousReason,
-  IndigenousScore,
   Role,
   UpsertEmbeddableQuestionParams,
 } from '@koh/common';
@@ -84,9 +82,9 @@ export class EmbeddableQuestionController {
     );
 
     return {
-      score: feedback.aiGrade as IndigenousScore,
+      score: feedback.aiGrade,
       comment: feedback.aiFeedback,
-      reasons: (feedback.reasons || []) as IndigenousReason[],
+      reasons: feedback.reasons,
       needsHumanReview: feedback.needsHumanReview,
     };
   }

@@ -26,13 +26,13 @@ interface EmbeddableQuestionFormProps {
 }
 
 interface FormValues {
-  name?: string
+  name?: string | null
   questionText: string
   criteriaText: string
-  instructions?: string
+  instructions?: string | null
   minSentences?: number
   maxSentences?: number
-  availabilityDates?: [dayjs.Dayjs | null, dayjs.Dayjs | null]
+  availabilityDates?: [dayjs.Dayjs | null, dayjs.Dayjs | null] | null
 }
 
 export default function EmbeddableQuestionForm({
@@ -49,10 +49,10 @@ export default function EmbeddableQuestionForm({
     if (open) {
       if (editingQuestion) {
         form.setFieldsValue({
-          name: editingQuestion.name,
+          name: editingQuestion.name ?? undefined,
           questionText: editingQuestion.questionText,
           criteriaText: editingQuestion.criteriaText,
-          instructions: editingQuestion.instructions,
+          instructions: editingQuestion.instructions ?? undefined,
           minSentences: editingQuestion.minSentences ?? 3,
           maxSentences: editingQuestion.maxSentences ?? 5,
           availabilityDates: [
@@ -80,18 +80,18 @@ export default function EmbeddableQuestionForm({
 
     try {
       const payload: UpsertEmbeddableQuestionParams = {
-        name: values.name?.trim() || undefined,
+        name: values.name?.trim() || null,
         questionText: values.questionText.trim(),
         criteriaText: values.criteriaText.trim(),
-        instructions: values.instructions?.trim() || undefined,
+        instructions: values.instructions?.trim() || null,
         minSentences: values.minSentences ?? 3,
         maxSentences: values.maxSentences ?? 5,
         availableFrom: values.availabilityDates?.[0]
           ? values.availabilityDates[0].toDate()
-          : undefined,
+          : null,
         availableUntil: values.availabilityDates?.[1]
           ? values.availabilityDates[1].toDate()
-          : undefined,
+          : null,
       }
 
       if (
@@ -160,7 +160,10 @@ export default function EmbeddableQuestionForm({
             </div>
           }
         >
-          <Input placeholder="e.g. Reflection 1 - Indigenous Perspectives" />
+          <Input
+            maxLength={255}
+            placeholder="e.g. Reflection 1 - Indigenous Perspectives"
+          />
         </Form.Item>
 
         <Form.Item
@@ -191,6 +194,7 @@ export default function EmbeddableQuestionForm({
         >
           <Input.TextArea
             rows={3}
+            maxLength={15000}
             placeholder="e.g. Reflect on how the reading connects to Indigenous governance principles."
           />
         </Form.Item>
@@ -231,6 +235,7 @@ export default function EmbeddableQuestionForm({
         >
           <Input.TextArea
             rows={3}
+            maxLength={15000}
             placeholder="e.g. The response should identify at least two core principles and provide specific examples."
           />
         </Form.Item>
@@ -248,6 +253,7 @@ export default function EmbeddableQuestionForm({
         >
           <Input.TextArea
             rows={2}
+            maxLength={15000}
             placeholder="e.g. Offer encouragement and point out positive aspects before suggesting improvements."
           />
         </Form.Item>

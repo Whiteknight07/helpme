@@ -526,7 +526,7 @@ export class EmbeddableQuestion {
 
   @IsString()
   @IsOptional()
-  name?: string
+  name?: string | null
 
   @IsDate()
   @Type(() => Date)
@@ -535,12 +535,12 @@ export class EmbeddableQuestion {
   @IsDate()
   @IsOptional()
   @Type(() => Date)
-  availableFrom?: Date
+  availableFrom?: Date | null
 
   @IsDate()
   @IsOptional()
   @Type(() => Date)
-  availableUntil?: Date
+  availableUntil?: Date | null
 
   @IsInt()
   courseId!: number
@@ -553,7 +553,7 @@ export class EmbeddableQuestion {
 
   @IsString()
   @IsOptional()
-  instructions?: string
+  instructions?: string | null
 
   @IsInt()
   @IsOptional()
@@ -566,8 +566,11 @@ export class EmbeddableQuestion {
 
 @ValidatorConstraint({ name: 'validSentenceBounds', async: false })
 export class ValidSentenceBoundsConstraint implements ValidatorConstraintInterface {
-  validate(_value: any, args: ValidationArguments) {
-    const obj = args.object as UpsertEmbeddableQuestionParams
+  validate(_value: unknown, args: ValidationArguments) {
+    if (!(args.object instanceof UpsertEmbeddableQuestionParams)) {
+      return true
+    }
+    const obj = args.object
     if (
       obj.minSentences !== undefined &&
       obj.maxSentences !== undefined &&
@@ -586,8 +589,11 @@ export class ValidSentenceBoundsConstraint implements ValidatorConstraintInterfa
 
 @ValidatorConstraint({ name: 'validAvailabilityDates', async: false })
 export class ValidAvailabilityDatesConstraint implements ValidatorConstraintInterface {
-  validate(_value: any, args: ValidationArguments) {
-    const obj = args.object as UpsertEmbeddableQuestionParams
+  validate(_value: unknown, args: ValidationArguments) {
+    if (!(args.object instanceof UpsertEmbeddableQuestionParams)) {
+      return true
+    }
+    const obj = args.object
     if (obj.availableFrom && obj.availableUntil) {
       const from = new Date(obj.availableFrom).getTime()
       const until = new Date(obj.availableUntil).getTime()
@@ -606,7 +612,7 @@ export class UpsertEmbeddableQuestionParams {
   @IsString()
   @IsOptional()
   @MaxLength(255)
-  name?: string
+  name?: string | null
 
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
@@ -624,19 +630,19 @@ export class UpsertEmbeddableQuestionParams {
   @IsOptional()
   @Type(() => Date)
   @Validate(ValidAvailabilityDatesConstraint)
-  availableFrom?: Date
+  availableFrom?: Date | null
 
   @IsDate()
   @IsOptional()
   @Type(() => Date)
   @Validate(ValidAvailabilityDatesConstraint)
-  availableUntil?: Date
+  availableUntil?: Date | null
 
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsOptional()
   @MaxLength(15000)
-  instructions?: string
+  instructions?: string | null
 
   @IsInt()
   @IsOptional()
