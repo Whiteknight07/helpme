@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { Alert, Button, Input, message } from 'antd'
 import axios from 'axios'
+import { IndigenousFeedback } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -22,7 +23,7 @@ export default function EmbeddableQuestionFeedback({
   placeholder = 'Type your response here...',
 }: EmbeddableQuestionFeedbackProps): React.ReactElement {
   const [inputText, setInputText] = useState('')
-  const [feedback, setFeedback] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<IndigenousFeedback | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -43,7 +44,7 @@ export default function EmbeddableQuestionFeedback({
         questionId,
         trimmed,
       )
-      setFeedback(response.comment)
+      setFeedback(response)
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.status === 429) {
         const rateLimitMessage =
@@ -98,8 +99,15 @@ export default function EmbeddableQuestionFeedback({
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-zinc-700">Feedback</p>
           <div className="w-full whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
-            {feedback}
+            {feedback.comment}
           </div>
+          <p className="text-sm font-medium text-zinc-700">
+            {`Provisional score: ${feedback.score}/2`}
+          </p>
+          <p className="text-xs text-zinc-500">
+            This is feedback only, not your final grade. Submit the full quiz to
+            receive your final grade.
+          </p>
         </div>
       )}
     </div>
