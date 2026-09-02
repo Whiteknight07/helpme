@@ -38,6 +38,9 @@ import {
   DesktopNotifBody,
   DesktopNotifPartial,
   EditCourseInfoParams,
+  EmbeddableQuestion,
+  EmbeddableQuestionFeedbackResponse,
+  UpsertEmbeddableQuestionParams,
   AssignmentFeedbackExtractTextResponse,
   AssignmentFeedbackRequest,
   AssignmentFeedbackResponse,
@@ -1828,6 +1831,55 @@ export class APIClient {
         this.req('PATCH', `/api/v1/lti/platform/${id}/toggle`),
       checkRegistration: async (id: string): Promise<LtiPlatform> =>
         this.req('GET', `/api/v1/lti/platform/${id}/registration`),
+    },
+    embeddableQuestion: {
+      create: async (
+        courseId: number,
+        body: UpsertEmbeddableQuestionParams,
+      ): Promise<EmbeddableQuestion> =>
+        this.req(
+          'POST',
+          `/api/v1/lti/embeddable-question/${courseId}`,
+          undefined,
+          body,
+        ),
+      getAll: async (courseId: number): Promise<EmbeddableQuestion[]> =>
+        this.req('GET', `/api/v1/lti/embeddable-question/${courseId}`),
+      getOne: async (
+        courseId: number,
+        questionId: number,
+      ): Promise<EmbeddableQuestion> =>
+        this.req(
+          'GET',
+          `/api/v1/lti/embeddable-question/${courseId}/${questionId}`,
+        ),
+      getFeedback: async (
+        courseId: number,
+        questionId: number,
+        responseText: string,
+      ): Promise<EmbeddableQuestionFeedbackResponse> =>
+        this.req(
+          'POST',
+          `/api/v1/lti/embeddable-question/${courseId}/${questionId}/feedback`,
+          undefined,
+          { responseText },
+        ),
+      update: async (
+        courseId: number,
+        questionId: number,
+        body: UpsertEmbeddableQuestionParams,
+      ): Promise<EmbeddableQuestion> =>
+        this.req(
+          'PATCH',
+          `/api/v1/lti/embeddable-question/${courseId}/${questionId}`,
+          undefined,
+          body,
+        ),
+      delete: async (courseId: number, questionId: number): Promise<void> =>
+        this.req(
+          'DELETE',
+          `/api/v1/lti/embeddable-question/${courseId}/${questionId}`,
+        ),
     },
   }
 }

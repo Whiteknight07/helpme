@@ -494,6 +494,173 @@ export interface ChatbotAskSuggestedParams {
   vectorStoreId: string
 }
 
+export const INDIGENOUS_REASON_CODES = [
+  'blank',
+  'too_short',
+  'indigenous_capitalization',
+  'terminology_review',
+  'unreadable',
+  'off_topic',
+  'sensitive_content',
+  'meets_requirements',
+  'proofreading_note',
+] as const
+
+export type IndigenousReason = (typeof INDIGENOUS_REASON_CODES)[number]
+
+export const ALLOWED_INDIGENOUS_SCORES = [0, 0.5, 1, 1.5, 2] as const
+export type IndigenousScore = (typeof ALLOWED_INDIGENOUS_SCORES)[number]
+
+export interface IndigenousFeedback {
+  score: IndigenousScore
+  comment: string
+  reasons: IndigenousReason[]
+  needsHumanReview: boolean
+}
+
+export class EmbeddableQuestion {
+  @IsInt()
+  id!: number
+
+  @IsString()
+  @IsOptional()
+  name?: string
+
+  @IsDate()
+  @Type(() => Date)
+  createdAt!: Date
+
+  @IsDate()
+  @IsOptional()
+  @Type(() => Date)
+  availableFrom?: Date
+
+  @IsDate()
+  @IsOptional()
+  @Type(() => Date)
+  availableUntil?: Date
+
+  @IsInt()
+  courseId!: number
+
+  @IsString()
+  questionText!: string
+
+  @IsString()
+  criteriaText!: string
+
+  @IsString()
+  @IsOptional()
+  instructions?: string
+
+  @IsInt()
+  @IsOptional()
+  minSentences?: number
+
+  @IsInt()
+  @IsOptional()
+  maxSentences?: number
+}
+
+export class UpsertEmbeddableQuestionParams {
+  @IsString()
+  @IsOptional()
+  name?: string
+
+  @IsString()
+  @IsNotEmpty()
+  questionText!: string
+
+  @IsString()
+  @IsNotEmpty()
+  criteriaText!: string
+
+  @IsDate()
+  @IsOptional()
+  @Type(() => Date)
+  availableFrom?: Date
+
+  @IsDate()
+  @IsOptional()
+  @Type(() => Date)
+  availableUntil?: Date
+
+  @IsString()
+  @IsOptional()
+  instructions?: string
+
+  @IsInt()
+  @IsOptional()
+  minSentences?: number
+
+  @IsInt()
+  @IsOptional()
+  maxSentences?: number
+}
+
+export class EmbeddableQuestionFeedbackParams {
+  @IsString()
+  @IsNotEmpty()
+  responseText!: string
+}
+
+export class EmbeddableQuestionFeedbackResponse {
+  @IsString()
+  feedback!: string
+
+  @IsNumber()
+  @IsOptional()
+  grade?: number
+}
+
+export class EmbeddableFeedback {
+  @IsInt()
+  id!: number
+
+  @IsDate()
+  @Type(() => Date)
+  createdAt!: Date
+
+  @IsInt()
+  courseId!: number
+
+  @IsInt()
+  questionId!: number
+
+  @IsInt()
+  userId!: number
+
+  @IsString()
+  submission!: string
+
+  @IsString()
+  aiFeedback!: string
+
+  @IsNumber()
+  @IsOptional()
+  aiGrade?: number
+
+  @IsArray()
+  @IsOptional()
+  reasons?: string[]
+
+  @IsBoolean()
+  @IsOptional()
+  needsHumanReview?: boolean
+
+  @IsNumber()
+  @IsOptional()
+  humanGrade?: number
+
+  @IsString()
+  @IsOptional()
+  humanFeedback?: string
+
+  @IsInstance(UserPartial)
+  @IsOptional()
+  user?: UserPartial
+}
+
 export interface ChatbotAgentCourse {
   courseId: number
   name: string
@@ -5114,6 +5281,14 @@ export const ERROR_MESSAGES = {
       `Members with role ${role} are not allowed to alter semesters`,
     notAllowedToDeleteSemester: (role: OrganizationRole) =>
       `Members with role ${role} are not allowed to delete semesters`,
+  },
+  embeddableModule: {
+    notFound: 'Question not found.',
+    feedbackNotFound: 'Feedback not found.',
+    notAvailableYet:
+      'This assessment/question is not available to receive feedback for yet.',
+    noLongerAvailable:
+      'This assessment/question can no longer receive feedback.',
   },
 }
 
