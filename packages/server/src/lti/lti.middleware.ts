@@ -1,6 +1,6 @@
 import { HttpException, INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DataSource } from 'typeorm';
+import { DataSource, getMetadataArgsStorage } from 'typeorm';
 import {
   NextFunction,
   Request as ExpressRequest,
@@ -8,6 +8,7 @@ import {
 } from 'express';
 import { isProd } from '@koh/common';
 import {
+  ContextTokenModel,
   Database,
   Debug,
   DynamicRegistrationSecondaryOptions,
@@ -144,6 +145,18 @@ export default class LtiMiddleware {
       'https://canvas.instructure.com/lti/privacy_level': 'public',
     } as DynamicRegistrationSecondaryOptions & any;
 
+    // @bhunt02/lti-typescript@0.1.7 marks resource NOT NULL but saves undefined
+    // for resourceless Deep Linking launches; mark nullable before register()
+    // so synchronize keeps it nullable on fresh and existing databases.
+    const resourceColumn = getMetadataArgsStorage().columns.find(
+      (column) =>
+        column.target === ContextTokenModel &&
+        column.propertyName === 'resource',
+    );
+    if (resourceColumn) {
+      resourceColumn.options.nullable = true;
+    }
+
     const provider = await register(
       variables.secret,
       {
@@ -177,11 +190,6 @@ export default class LtiMiddleware {
         cors: true,
         prefix: this.prefix,
       },
-    );
-
-    // @bhunt02/lti-typescript@0.1.7 saves resource=undefined for Canvas Deep Linking launches (no resource_link claim), violating NOT NULL.
-    await Database.dataSource.query(
-      'ALTER TABLE "context_token_model" ALTER COLUMN "resource" DROP NOT NULL',
     );
 
     provider.onConnect(this.onConnectHandler);
