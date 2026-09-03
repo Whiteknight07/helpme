@@ -88,7 +88,7 @@ export default function EmbeddableQuestionsPage(
 
   const getIFrameHtml = (q: EmbeddableQuestion) => {
     const url = getIFrameUrl(q)
-    return `<iframe src="${url}" width="100%" height="450" style="border:0;" allow="clipboard-write"></iframe>`
+    return `<iframe src="${url}" width="100%" height="280" style="border:0;display:block;" allow="clipboard-write"></iframe>`
   }
 
   const copyEmbedHtml = async (q: EmbeddableQuestion) => {
@@ -294,7 +294,7 @@ export default function EmbeddableQuestionsPage(
                   src={getIFrameUrl(previewQuestion)}
                   title={previewQuestion.name || 'Question Preview'}
                   width="100%"
-                  height="360"
+                  height="280"
                   className="border-0"
                 />
               </div>
