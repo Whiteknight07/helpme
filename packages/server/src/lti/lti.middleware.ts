@@ -25,6 +25,39 @@ const dynRegScopes = [
   'https://purl.imsglobal.org/spec/lti-reg/scope/registration.readonly',
 ];
 
+// LIS roles allowed to see the Canvas Rich Content Editor button.
+const deepLinkingInstructorRoles = [
+  'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
+  'http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant',
+];
+
+export const ltiMessages = (
+  targetLinkUri: string,
+): (LtiMessageRegistration & Record<string, unknown>)[] => [
+  {
+    type: 'LtiResourceLinkRequest',
+    placements: [
+      'link_selection',
+      'course_home_sub_navigation',
+      'course_navigation',
+      'module_menu',
+    ],
+    'https://canvas.instructure.com/lti/launch_height': '100%',
+    'https://canvas.instructure.com/lti/launch_width': '100%',
+    'https://canvas.instructure.com/lti/display_type': 'full_width_in_context',
+  },
+  {
+    type: 'LtiDeepLinkingRequest',
+    target_link_uri: targetLinkUri,
+    label: 'HelpMe',
+    placements: ['editor_button'],
+    roles: deepLinkingInstructorRoles,
+    preferred_presentation: 'iframe',
+    iframe: { width: 800, height: 600 },
+    'https://canvas.instructure.com/lti/visibility': 'admins',
+  },
+];
+
 export default class LtiMiddleware {
   private prefix: string;
   private reservedRoutes: {
@@ -105,24 +138,7 @@ export default class LtiMiddleware {
       ].join(' '),
       client_name: 'HelpMe',
       'https://purl.imsglobal.org/spec/lti-tool-configuration': {
-        messages: [
-          {
-            type: 'LtiResourceLinkRequest',
-            placements: [
-              // CANVAS
-              'link_selection',
-              'course_home_sub_navigation',
-              'course_navigation',
-              'module_menu',
-            ],
-            // CANVAS PROPERTIES
-            'https://canvas.instructure.com/lti/launch_height': '100%',
-            'https://canvas.instructure.com/lti/launch_width': '100%',
-            // possible values: "default" | "full_width" | "full_width_in_context" | "full_width_with_nav" | "in_nav_context" | "borderless" | "new_window"
-            'https://canvas.instructure.com/lti/display_type':
-              'full_width_in_context',
-          },
-        ] as (LtiMessageRegistration & any)[],
+        messages: ltiMessages(this.baseRoute()),
       },
       // CANVAS PROPERTIES
       'https://canvas.instructure.com/lti/privacy_level': 'public',
@@ -164,6 +180,22 @@ export default class LtiMiddleware {
     );
 
     provider.onConnect(this.onConnectHandler);
+
+    // Runs only after the provider verifies a Deep Linking launch. Instructors
+    // are authorized (never provisioned) before the verified ltik is carried
+    // to the picker page.
+    provider.onDeepLinking(async (token, _, res) => {
+      try {
+        await this.ltiService.authorizeDeepLinking(token);
+        return provider.redirect(res, '/lti/deep-link');
+      } catch (err) {
+        Debug.log(this, err);
+        if (err instanceof HttpException) {
+          return res.status(err.getStatus()).send(err.getResponse());
+        }
+        return res.status(500).send(err);
+      }
+    });
 
     provider.onDynamicRegistration(
       async (req: ExpressRequest, res: ExpressResponse) => {
@@ -244,7 +276,10 @@ export default class LtiMiddleware {
             const registration =
               await provider.DynamicRegistration.getRegistration(platform);
             if (hasWriteScope && registration != undefined) {
-              await provider.DynamicRegistration.updateRegistration(platform);
+              await provider.DynamicRegistration.updateRegistration(
+                platform,
+                secondaryOptions,
+              );
             }
           } catch (err) {
             // Delete platforms with 'not found' registrations

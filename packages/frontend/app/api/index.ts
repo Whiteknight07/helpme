@@ -1832,6 +1832,20 @@ export class APIClient {
       checkRegistration: async (id: string): Promise<LtiPlatform> =>
         this.req('GET', `/api/v1/lti/platform/${id}/registration`),
     },
+    deepLink: {
+      getQuestions: async (ltik: string): Promise<EmbeddableQuestion[]> =>
+        this.req(
+          'GET',
+          '/api/v1/lti/deep-link/questions',
+          undefined,
+          undefined,
+          {
+            ltik,
+          },
+        ),
+      selectAction: (ltik: string): string =>
+        `/api/v1/lti/deep-link/selection?ltik=${encodeURIComponent(ltik)}`,
+    },
     embeddableQuestion: {
       create: async (
         courseId: number,

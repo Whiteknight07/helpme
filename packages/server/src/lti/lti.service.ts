@@ -1,12 +1,17 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserCourseModel } from '../profile/user-course.entity';
 import { UserModel } from '../profile/user.entity';
-import { IdToken, Provider } from '@bhunt02/lti-typescript';
+import {
+  IdToken,
+  LtiResourceLinkContentItem,
+  Provider,
+} from '@bhunt02/lti-typescript';
 import { LMSCourseIntegrationModel } from '../lmsIntegration/lmsCourseIntegration.entity';
 import { ERROR_MESSAGES, isProd, OrganizationRole, Role } from '@koh/common';
 import { JwtService } from '@nestjs/jwt';
@@ -20,6 +25,7 @@ import { LMSAuthStateModel } from '../lmsIntegration/lms-auth-state.entity';
 import { pick } from 'lodash';
 import { Not } from 'typeorm';
 import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
+import { EmbeddableQuestionService } from './embeddable/question/embeddable-question.service';
 import { OrganizationUserModel } from '../organization/organization-user.entity';
 import { OrganizationCourseModel } from '../organization/organization-course.entity';
 
@@ -34,7 +40,10 @@ export class LtiService {
     secure: isProd(),
     sameSite: isProd() ? 'none' : 'lax',
   };
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private embeddableQuestionService?: EmbeddableQuestionService,
+  ) {}
 
   private _provider: Provider | undefined;
   get provider(): Provider {
@@ -523,5 +532,125 @@ export class LtiService {
       courseId,
       questionId,
     };
+  }
+
+  /**
+   * Authorizes a verified Deep Linking launch for the question picker.
+   * Instructors are never provisioned or elevated: the HelpMe user and the
+   * Professor/TA enrollment must already exist.
+   */
+  async authorizeDeepLinking(
+    token: IdToken,
+  ): Promise<{ userId: number; courseId: number }> {
+    if (token.platformContext?.messageType !== 'LtiDeepLinkingRequest') {
+      throw new BadRequestException('Expected an LTI Deep Linking request');
+    }
+
+    if (!token.platformContext?.deepLinkingSettings?.deep_link_return_url) {
+      throw new BadRequestException(
+        'Deep Linking request is missing its return settings',
+      );
+    }
+
+    if (token.platformInfo?.product_family_code !== 'canvas') {
+      throw new BadRequestException(
+        'Deep Linking is only supported for Canvas',
+      );
+    }
+
+    const platform = await this.provider.getPlatform(token.iss, token.clientId);
+    if (!platform || !platform.active) {
+      throw new ForbiddenException('Canvas platform is not active');
+    }
+
+    const platformCourseId = LtiService.extractCourseId(token);
+    if (typeof platformCourseId !== 'string' || platformCourseId.length === 0) {
+      throw new BadRequestException(
+        'Canvas course ID custom parameter is missing',
+      );
+    }
+
+    const lmsIntegration = await LMSCourseIntegrationModel.findOne({
+      where: {
+        apiCourseId: platformCourseId,
+      },
+    });
+    if (!lmsIntegration) {
+      throw new NotFoundException(
+        'Canvas course is not mapped to a HelpMe course',
+      );
+    }
+    const courseId = lmsIntegration.courseId;
+
+    const { userId } = await LtiService.findMatchingUserAndCourse(token);
+    if (userId === undefined) {
+      throw new ForbiddenException(
+        'No HelpMe account is linked to this Canvas user',
+      );
+    }
+
+    const enrollment = await UserCourseModel.findOne({
+      where: {
+        userId,
+        courseId,
+      },
+    });
+    if (
+      !enrollment ||
+      (enrollment.role !== Role.PROFESSOR && enrollment.role !== Role.TA)
+    ) {
+      throw new ForbiddenException(
+        'Deep Linking requires a Professor or TA enrollment in the mapped course',
+      );
+    }
+
+    return { userId, courseId };
+  }
+
+  /**
+   * Lists the mapped course's existing embeddable questions for the picker.
+   */
+  async getDeepLinkingQuestions(
+    token: IdToken,
+  ): Promise<EmbeddableQuestionModel[]> {
+    const { courseId } = await this.authorizeDeepLinking(token);
+    return this.embeddableQuestionService.findAllForCourse(courseId);
+  }
+
+  /**
+   * Returns the library-signed Deep Linking form carrying exactly one
+   * `ltiResourceLink` that re-enters the ordinary question launch. The
+   * question is reloaded under the trusted mapped course so cross-course ids
+   * are rejected.
+   */
+  async createDeepLinkingResponse(
+    token: IdToken,
+    questionId: number,
+  ): Promise<string> {
+    if (!Number.isSafeInteger(questionId) || questionId <= 0) {
+      throw new BadRequestException('A valid question selection is required');
+    }
+
+    const { courseId } = await this.authorizeDeepLinking(token);
+    const question = await this.embeddableQuestionService.findOne(
+      courseId,
+      questionId,
+    );
+
+    const launchUrl = token.platformContext.targetLinkUri;
+    const item: LtiResourceLinkContentItem = {
+      type: 'ltiResourceLink',
+      title: question.name ?? `HelpMe Question ${question.id}`,
+      url: launchUrl,
+      custom: {
+        [HELPME_QUESTION_ID_PARAM]: String(question.id),
+      },
+      // Sized for the existing feedback UI.
+      iframe: { src: launchUrl, width: 800, height: 600 },
+    };
+
+    return this.provider.DeepLinkingService.createDeepLinkingForm(token, item, {
+      message: 'HelpMe question linked',
+    });
   }
 }

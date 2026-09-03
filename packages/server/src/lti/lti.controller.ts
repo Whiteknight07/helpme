@@ -6,6 +6,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Patch,
   Post,
@@ -46,6 +47,7 @@ import { CourseModel } from '../course/course.entity';
 import { UserCourseModel } from '../profile/user-course.entity';
 import { restrictPaths } from './lti-auth.controller';
 import { LoginService } from '../login/login.service';
+import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
 
 @Controller('lti')
 @UseInterceptors(IgnoreableClassSerializerInterceptor)
@@ -168,6 +170,39 @@ export class LtiController {
         expiresIn: 60 * 10,
         redirect: `/lti${course ? `/${course.id}` : ''}${qry.size > 0 ? '?' + qry.toString() : ''}`,
       },
+    );
+  }
+
+  /**
+   * Lists the mapped course's embeddable questions for the Canvas Deep
+   * Linking picker. Authorized from the verified launch behind `ltik`; no
+   * HelpMe session is required or created.
+   */
+  @Get('deep-link/questions')
+  @UseGuards(LtiGuard)
+  @IgnoreSerializer()
+  async getDeepLinkQuestions(
+    @LtiToken() token: IdToken,
+  ): Promise<EmbeddableQuestionModel[]> {
+    return this.ltiService.getDeepLinkingQuestions(token);
+  }
+
+  /**
+   * Accepts the picker's single question selection and returns the
+   * library-signed Deep Linking form as HTML. The frontend posts here with a
+   * native form so the returned document auto-submits to Canvas.
+   */
+  @Post('deep-link/selection')
+  @UseGuards(LtiGuard)
+  @Header('Content-Type', 'text/html')
+  @IgnoreSerializer()
+  async selectDeepLinkQuestion(
+    @LtiToken() token: IdToken,
+    @Body() body: { questionId?: number | string },
+  ): Promise<string> {
+    return this.ltiService.createDeepLinkingResponse(
+      token,
+      Number(body?.questionId),
     );
   }
 

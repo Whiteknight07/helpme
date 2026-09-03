@@ -16,10 +16,10 @@ import {
   UserFactory,
   UserLtiIdentityFactory,
 } from '../../test/util/factories';
-import { LtiService } from './lti.service';
+import { HELPME_QUESTION_ID_PARAM, LtiService } from './lti.service';
 import { IdToken, Provider } from '@bhunt02/lti-typescript';
 import { JwtModule, JwtService } from '@nestjs/jwt';
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ERROR_MESSAGES, Role } from '@koh/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModel } from '../profile/user.entity';
@@ -28,6 +28,7 @@ import { LtiCourseInviteModel } from './lti-course-invite.entity';
 import { LtiIdentityTokenModel } from './lti_identity_token.entity';
 import { UserLtiIdentityModel } from './user_lti_identity.entity';
 import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
+import { EmbeddableQuestionService } from './embeddable/question/embeddable-question.service';
 import { UserCourseModel } from '../profile/user-course.entity';
 
 const idToken = {
@@ -61,6 +62,10 @@ describe('LtiService', () => {
   let service: LtiService;
   let dataSource: DataSource;
   let jwtService: JwtService;
+  const embeddableQuestionService = {
+    findAllForCourse: jest.fn(),
+    findOne: jest.fn(),
+  };
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -76,7 +81,13 @@ describe('LtiService', () => {
           }),
         }),
       ],
-      providers: [LtiService],
+      providers: [
+        LtiService,
+        {
+          provide: EmbeddableQuestionService,
+          useValue: embeddableQuestionService,
+        },
+      ],
     }).compile();
 
     service = module.get<LtiService>(LtiService);
@@ -806,6 +817,200 @@ describe('LtiService', () => {
       expect(await UserModel.count()).toBe(0);
       expect(await UserCourseModel.count()).toBe(0);
       expect(await UserLtiIdentityModel.count()).toBe(0);
+    });
+  });
+
+  describe('deep linking', () => {
+    const canvasCourseId = 'canvas-course-deep-link';
+    const instructorEmail = 'instructor@example.com';
+    const instructorSub = 'instructor-sub-1';
+    const launchUrl = 'http://helpme.test/api/v1/lti';
+    const createDeepLinkingForm = jest.fn();
+    const getPlatform = jest.fn();
+
+    const buildToken = (
+      overrides: { user?: string; email?: string } = {},
+    ): IdToken =>
+      ({
+        iss: 'http://canvas.docker/',
+        clientId: 'helpme-client-id',
+        deploymentId: 'deployment-1',
+        platformId: 'platform-1',
+        platformContext: {
+          messageType: 'LtiDeepLinkingRequest',
+          deepLinkingSettings: {
+            deep_link_return_url: 'https://canvas.docker/deep-link-return',
+            accept_types: ['ltiResourceLink'],
+            accept_presentation_document_targets: ['iframe'],
+          },
+          custom: { canvas_course_id: canvasCourseId },
+          targetLinkUri: launchUrl,
+        },
+        platformInfo: { product_family_code: 'canvas' },
+        user: overrides.user ?? instructorSub,
+        userInfo: { email: overrides.email ?? instructorEmail },
+      }) as unknown as IdToken;
+
+    const seedMappedCourse = async () => {
+      const course = await CourseFactory.create();
+      await lmsCourseIntFactory.create({
+        course,
+        apiCourseId: canvasCourseId,
+      });
+      return course;
+    };
+
+    const seedInstructor = async (course: CourseModel, role: Role) => {
+      const user = await UserFactory.create({ email: instructorEmail });
+      await UserLtiIdentityFactory.create({
+        user,
+        issuer: 'http://canvas.docker/',
+        ltiUserId: instructorSub,
+      });
+      await UserCourseFactory.create({ user, course, role });
+      return user;
+    };
+
+    beforeEach(() => {
+      getPlatform.mockReset().mockResolvedValue({ active: true });
+      createDeepLinkingForm.mockReset();
+      embeddableQuestionService.findAllForCourse.mockReset();
+      embeddableQuestionService.findOne.mockReset();
+      service.provider = {
+        getPlatform,
+        DeepLinkingService: { createDeepLinkingForm },
+      } as unknown as Provider;
+    });
+
+    it.each([Role.PROFESSOR, Role.TA])(
+      'authorizes an existing %s enrollment without provisioning',
+      async (role) => {
+        const course = await seedMappedCourse();
+        const user = await seedInstructor(course, role);
+        const userCount = await UserModel.count();
+        const enrollmentCount = await UserCourseModel.count();
+
+        await expect(
+          service.authorizeDeepLinking(buildToken()),
+        ).resolves.toEqual({ userId: user.id, courseId: course.id });
+        expect(await UserModel.count()).toBe(userCount);
+        expect(await UserCourseModel.count()).toBe(enrollmentCount);
+      },
+    );
+
+    it('rejects a student without elevating the enrollment', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.STUDENT);
+
+      await expect(service.authorizeDeepLinking(buildToken())).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(
+        await UserCourseModel.findOneBy({ courseId: course.id }),
+      ).toMatchObject({ role: Role.STUDENT });
+    });
+
+    it('rejects an instructor enrolled only in another course', async () => {
+      const mappedCourse = await seedMappedCourse();
+      const otherCourse = await CourseFactory.create();
+      const user = await seedInstructor(otherCourse, Role.PROFESSOR);
+
+      await expect(service.authorizeDeepLinking(buildToken())).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(
+        await UserCourseModel.findOneBy({
+          userId: user.id,
+          courseId: mappedCourse.id,
+        }),
+      ).toBeNull();
+    });
+
+    it('rejects an unknown Canvas identity without provisioning it', async () => {
+      await seedMappedCourse();
+
+      await expect(
+        service.authorizeDeepLinking(
+          buildToken({ user: 'unknown', email: 'unknown@example.com' }),
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(await UserModel.count()).toBe(0);
+    });
+
+    it('rejects a launch from an inactive Canvas platform', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.PROFESSOR);
+      getPlatform.mockResolvedValue({ active: false });
+
+      await expect(service.authorizeDeepLinking(buildToken())).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('lists questions only through the mapped HelpMe course', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.PROFESSOR);
+      const questions = [EmbeddableQuestionModel.create({ id: 7 })];
+      embeddableQuestionService.findAllForCourse.mockResolvedValue(questions);
+
+      await expect(service.getDeepLinkingQuestions(buildToken())).resolves.toBe(
+        questions,
+      );
+      expect(embeddableQuestionService.findAllForCourse).toHaveBeenCalledWith(
+        course.id,
+      );
+    });
+
+    it('returns one library-signed ungraded Resource Link for the selected question', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.TA);
+      const token = buildToken();
+      const question = EmbeddableQuestionModel.create({
+        id: 42,
+        courseId: course.id,
+        name: 'Week 3',
+      });
+      embeddableQuestionService.findOne.mockResolvedValue(question);
+      createDeepLinkingForm.mockResolvedValue('<form>deep-link</form>');
+
+      await expect(
+        service.createDeepLinkingResponse(token, question.id),
+      ).resolves.toBe('<form>deep-link</form>');
+      expect(embeddableQuestionService.findOne).toHaveBeenCalledWith(
+        course.id,
+        question.id,
+      );
+      expect(createDeepLinkingForm).toHaveBeenCalledWith(
+        token,
+        {
+          type: 'ltiResourceLink',
+          title: 'Week 3',
+          url: launchUrl,
+          custom: { [HELPME_QUESTION_ID_PARAM]: '42' },
+          iframe: { src: launchUrl, width: 800, height: 600 },
+        },
+        { message: 'HelpMe question linked' },
+      );
+      expect(createDeepLinkingForm.mock.calls[0][1]).not.toHaveProperty(
+        'lineItem',
+      );
+    });
+
+    it('rejects a cross-course question before signing', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.PROFESSOR);
+      embeddableQuestionService.findOne.mockRejectedValue(
+        new NotFoundException('Question not found'),
+      );
+
+      await expect(
+        service.createDeepLinkingResponse(buildToken(), 1234),
+      ).rejects.toThrow(NotFoundException);
+      expect(embeddableQuestionService.findOne).toHaveBeenCalledWith(
+        course.id,
+        1234,
+      );
+      expect(createDeepLinkingForm).not.toHaveBeenCalled();
     });
   });
 });
