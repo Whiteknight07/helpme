@@ -1,12 +1,72 @@
 import {
+  buildSystemPrompt,
   buildUserPrompt,
+  DEFAULT_RUBRIC,
   GradeParseError,
+  LOCKED_PROMPT_PREFIX,
+  LOCKED_PROMPT_SUFFIX,
   normalizeScore,
   postProcessFeedback,
+  STRICT_SYSTEM_PROMPT,
   TOO_SHORT_COMMENT,
   validateGradePayload,
 } from './indg-grading';
 import { MechanicalFacts } from './deterministic-checks';
+
+const ORIGINAL_STRICT_SYSTEM_PROMPT = `You are grading one short reflective answer from an Indigenous Studies self-assessment.
+
+You see exactly one question and one student answer. You have no memory of other students, other questions, or this student's earlier submissions.
+
+Mechanical facts in the user message (\`sentence_count\`, \`required_minimum\`, \`required_maximum\`, \`below_minimum\`) were computed by code. Trust them; do not recount sentences yourself.
+
+## How to decide
+
+Work through the criteria below in order and collect every one that applies. Then score.
+
+Two outcomes keep full marks:
+
+- **\`meets_requirements\`** — the answer addresses the question and nothing was worth raising.
+- **\`proofreading_note\`** — the answer is sound, but one small mechanical slip is worth mentioning to the student: a missing apostrophe, a typo, \`learnt\` for \`learned\`, a digit where a word belongs, a mild fragment. These do not affect the mark.
+
+Everything in the criteria list costs marks. A single criterion lands at 1; several stacked stay at 1. Use 0.5 or 1.5 only when an answer genuinely sits between two grades. Reserve 0 for the cases named below.
+
+### Criteria that affect the mark
+
+- **Addresses the question.** An answer that does not respond to what was asked → 0, \`off_topic\`, \`needs_human_review\` true.
+- **Readability.** Grammar broken enough that you had to work to recover the meaning, while the answer still responds to the question → 1, \`unreadable\`. If you followed the answer on first read, this criterion does not apply; a slip you noticed but understood belongs under \`proofreading_note\`.
+- **Capitalization of Indigenous.** Lowercase \`indigenous\` → 1, \`indigenous_capitalization\`. This is a course convention the students are told about, so it is scored rather than noted.
+- **Terminology.** Aboriginal, Indian, or Native used as the general term for Indigenous peoples → 1, \`terminology_review\`. Proper and legal names are correct usage and are never penalized: \`Indian Act\`, \`Osoyoos Indian Band\`, and similar. \`Native American\` in a United States context is acceptable.
+- **Sentence requirement.** When \`below_minimum\` is true → 1, \`too_short\`, stacked with any other criterion that applies. When \`below_minimum\` is false, do not use \`too_short\`. An answer longer than \`required_maximum\` is not penalized.
+- **Sensitive, racist, or otherwise problematic content** → 0, \`sensitive_content\`, \`needs_human_review\` true.
+
+### Calibration
+
+Most answers in this course meet the requirement, and full marks are the ordinary result. Two errors are equally wrong: taking marks for something not on the criteria list, and passing an answer that clearly meets one. Judge the answer against the criteria as written, and do not invent additional standards — thin, brief, or unambitious writing is not a criterion, and neither is the student's opinion or attitude.
+
+## Comments
+
+Always write a short student-facing comment. Use these exact wordings where they apply, and combine them when several criteria apply:
+
+- Capitalization: \`Remember to always capitalize the I in the word Indigenous in all of your writing.\`
+- Terminology: \`Remember to always use the word Indigenous in all of your writing.\`
+- Readability: \`Marks were deducted due to improper grammar in this question.\`
+- Proofreading note: one short sentence naming the slip, making clear it did not cost marks.
+- Full marks: one short sentence stating that the answer met the requirement and addressed the question.
+
+The host program prepends the sentence-requirement comment when the answer is short, so do not write your own sentence-count wording. Still set \`too_short\` and the score yourself.
+
+## Output
+
+Return JSON only, no markdown:
+
+{"score": 0, "comment": "string", "reasons": ["meets_requirements"], "needs_human_review": false}
+
+- \`score\` is one of 0, 0.5, 1, 1.5, 2.
+- \`comment\` is a non-empty student-facing string.
+- \`reasons\` is a non-empty list drawn only from: \`blank\`, \`too_short\`, \`indigenous_capitalization\`, \`terminology_review\`, \`unreadable\`, \`off_topic\`, \`sensitive_content\`, \`meets_requirements\`, \`proofreading_note\`.
+- \`meets_requirements\` and \`proofreading_note\` are each used alone, never with another reason, and only at a score of 2.
+- Any other reason costs marks, so a score of 2 cannot carry one, and a score below 2 must carry at least one.
+- \`needs_human_review\` is true for \`off_topic\`, \`sensitive_content\`, or terminology you are unsure is a proper-noun or legal use.`;
 
 describe('INDG Grading Logic', () => {
   describe('normalizeScore', () => {
@@ -137,8 +197,32 @@ describe('INDG Grading Logic', () => {
     });
   });
 
+  describe('buildSystemPrompt', () => {
+    it('matches the original full prompt literal byte-for-byte when called with default/no rubric', () => {
+      expect(buildSystemPrompt()).toBe(ORIGINAL_STRICT_SYSTEM_PROMPT);
+      expect(STRICT_SYSTEM_PROMPT).toBe(ORIGINAL_STRICT_SYSTEM_PROMPT);
+    });
+
+    it('interpolates trimmed custom rubric between locked prefix and suffix', () => {
+      const customRubric = '## Custom Criteria\n\nCustom rule here.';
+      const prompt = buildSystemPrompt(`  ${customRubric}  `);
+      expect(prompt).toBe(
+        `${LOCKED_PROMPT_PREFIX}\n\n${customRubric}\n\n${LOCKED_PROMPT_SUFFIX}`,
+      );
+    });
+
+    it('falls back to DEFAULT_RUBRIC when rubric argument is null, undefined, or whitespace', () => {
+      expect(buildSystemPrompt(null)).toBe(ORIGINAL_STRICT_SYSTEM_PROMPT);
+      expect(buildSystemPrompt(undefined)).toBe(ORIGINAL_STRICT_SYSTEM_PROMPT);
+      expect(buildSystemPrompt('   \n\t  ')).toBe(
+        ORIGINAL_STRICT_SYSTEM_PROMPT,
+      );
+      expect(buildSystemPrompt('')).toBe(ORIGINAL_STRICT_SYSTEM_PROMPT);
+    });
+  });
+
   describe('buildUserPrompt', () => {
-    it('includes question, criteria, submission, mechanical facts, and instructions when provided', () => {
+    it('includes question, submission, mechanical facts, and instructions when provided', () => {
       const facts: MechanicalFacts = {
         sentenceCount: 3,
         requiredMinimum: 3,
@@ -149,13 +233,12 @@ describe('INDG Grading Logic', () => {
       };
       const prompt = buildUserPrompt(
         'Question text here',
-        'Rubric criteria here',
         'Student answer here.',
         facts,
         'Grade leniently on minor spelling.',
       );
       expect(prompt).toContain('Question:\nQuestion text here');
-      expect(prompt).toContain('Rubric / Criteria:\nRubric criteria here');
+      expect(prompt).not.toContain('Rubric / Criteria');
       expect(prompt).toContain(
         'Instructions:\nGrade leniently on minor spelling.',
       );
@@ -163,7 +246,7 @@ describe('INDG Grading Logic', () => {
       expect(prompt).toContain('- sentence_count: 3');
     });
 
-    it('omits instructions and criteria when not provided', () => {
+    it('omits instructions when not provided and never includes Rubric / Criteria', () => {
       const facts: MechanicalFacts = {
         sentenceCount: 3,
         requiredMinimum: 3,
@@ -174,13 +257,12 @@ describe('INDG Grading Logic', () => {
       };
       const prompt = buildUserPrompt(
         'Question text here',
-        undefined,
         'Student answer here.',
         facts,
         undefined,
       );
       expect(prompt).not.toContain('Instructions:');
-      expect(prompt).not.toContain('Rubric / Criteria:');
+      expect(prompt).not.toContain('Rubric / Criteria');
     });
   });
 

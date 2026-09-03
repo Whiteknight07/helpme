@@ -15,9 +15,10 @@ import {
 } from '../../../chatbot/chatbot-api.service';
 import { computeMechanicalFacts } from './deterministic-checks';
 import {
+  buildSystemPrompt,
   buildUserPrompt,
+  DEFAULT_RUBRIC,
   postProcessFeedback,
-  STRICT_SYSTEM_PROMPT,
   validateGradePayload,
   ValidatedGradePayload,
 } from './indg-grading';
@@ -82,7 +83,6 @@ export class EmbeddableQuestionService {
 
     const userPrompt = buildUserPrompt(
       question.questionText,
-      question.criteriaText,
       trimmed,
       facts,
       question.instructions,
@@ -94,7 +94,7 @@ export class EmbeddableQuestionService {
         userPrompt,
         courseId,
         'feedback',
-        { systemPrompt: STRICT_SYSTEM_PROMPT },
+        { systemPrompt: buildSystemPrompt(question.criteriaText) },
       );
     } catch (err) {
       this.logger.error(`Chatbot service call failed: ${err}`);
@@ -168,15 +168,15 @@ export class EmbeddableQuestionService {
         ? params.name.trim()
         : null;
     const trimmedQuestionText = params.questionText?.trim();
-    const trimmedCriteriaText = params.criteriaText?.trim();
+    const finalCriteriaText = params.criteriaText?.trim() || DEFAULT_RUBRIC;
     const trimmedInstructions =
       typeof params.instructions === 'string' &&
       params.instructions.trim().length > 0
         ? params.instructions.trim()
         : null;
 
-    if (!trimmedQuestionText || !trimmedCriteriaText) {
-      throw new BadRequestException('Question and criteria text are required');
+    if (!trimmedQuestionText) {
+      throw new BadRequestException('Question text is required');
     }
 
     const availableFrom = params.availableFrom
@@ -209,7 +209,7 @@ export class EmbeddableQuestionService {
 
       existing.name = trimmedName;
       existing.questionText = trimmedQuestionText;
-      existing.criteriaText = trimmedCriteriaText;
+      existing.criteriaText = finalCriteriaText;
       existing.instructions = trimmedInstructions;
       existing.availableFrom = availableFrom;
       existing.availableUntil = availableUntil;
@@ -227,7 +227,7 @@ export class EmbeddableQuestionService {
       courseId,
       name: trimmedName || `Question ${count + 1}`,
       questionText: trimmedQuestionText,
-      criteriaText: trimmedCriteriaText,
+      criteriaText: finalCriteriaText,
       instructions: trimmedInstructions,
       availableFrom,
       availableUntil,

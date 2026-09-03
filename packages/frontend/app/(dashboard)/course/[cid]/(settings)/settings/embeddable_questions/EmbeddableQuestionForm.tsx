@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   Alert,
+  Collapse,
   DatePicker,
   Form,
   Input,
@@ -12,7 +13,13 @@ import {
   message,
 } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
-import { EmbeddableQuestion, UpsertEmbeddableQuestionParams } from '@koh/common'
+import {
+  DEFAULT_RUBRIC,
+  EmbeddableQuestion,
+  LOCKED_PROMPT_PREFIX,
+  LOCKED_PROMPT_SUFFIX,
+  UpsertEmbeddableQuestionParams,
+} from '@koh/common'
 import dayjs from 'dayjs'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
@@ -67,6 +74,7 @@ export default function EmbeddableQuestionForm({
       } else {
         form.resetFields()
         form.setFieldsValue({
+          criteriaText: DEFAULT_RUBRIC,
           minSentences: 3,
           maxSentences: 5,
         })
@@ -198,12 +206,30 @@ export default function EmbeddableQuestionForm({
           description="The AI model uses the Student Answer along with the Question Text, Criteria, and Instructions configured here to generate structured feedback."
         />
 
+        <Collapse
+          size="small"
+          className="mb-2"
+          items={[
+            {
+              key: 'locked-prefix',
+              label: 'System Prompt Prefix (Locked)',
+              children: (
+                <Input.TextArea
+                  readOnly
+                  rows={4}
+                  value={LOCKED_PROMPT_PREFIX}
+                />
+              ),
+            },
+          ]}
+        />
+
         <Form.Item
           name="criteriaText"
           label={
             <div className="flex items-center gap-1">
-              <span>Rubric / Criteria</span>
-              <Tooltip title="The marking criteria or rubric used by the AI model to evaluate the student draft.">
+              <span>Grading Rubric</span>
+              <Tooltip title="This is the rubric the AI grades against and it can be edited.">
                 <InfoCircleOutlined className="text-gray-400" />
               </Tooltip>
             </div>
@@ -217,11 +243,29 @@ export default function EmbeddableQuestionForm({
           ]}
         >
           <Input.TextArea
-            rows={3}
+            rows={6}
             maxLength={15000}
             placeholder="e.g. The response should identify at least two core principles and provide specific examples."
           />
         </Form.Item>
+
+        <Collapse
+          size="small"
+          className="mb-3"
+          items={[
+            {
+              key: 'locked-suffix',
+              label: 'System Prompt Suffix (Locked)',
+              children: (
+                <Input.TextArea
+                  readOnly
+                  rows={4}
+                  value={LOCKED_PROMPT_SUFFIX}
+                />
+              ),
+            },
+          ]}
+        />
 
         <Form.Item
           name="instructions"

@@ -10,8 +10,9 @@ import { Role } from '@koh/common';
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
 import {
+  buildSystemPrompt,
   buildUserPrompt,
-  STRICT_SYSTEM_PROMPT,
+  DEFAULT_RUBRIC,
 } from '../src/lti/embeddable/question/indg-grading';
 import { computeMechanicalFacts } from '../src/lti/embeddable/question/deterministic-checks';
 
@@ -55,6 +56,86 @@ describe('Embeddable Question Integration', () => {
       expect(res.body.name).toBe('INDG Reflection 1');
       expect(res.body.minSentences).toBe(3);
       expect(res.body.maxSentences).toBe(5);
+    });
+
+    it('creates a question with no criteriaText, storing DEFAULT_RUBRIC and grading successfully', async () => {
+      const professor = await UserFactory.create();
+      const course = await CourseFactory.create();
+      await UserCourseFactory.create({
+        user: professor,
+        course,
+        role: Role.PROFESSOR,
+      });
+
+      const body = {
+        name: 'INDG Reflection Default Rubric',
+        questionText: 'Reflect on the reading with default rubric.',
+        minSentences: 3,
+        maxSentences: 5,
+      };
+
+      const createRes = await supertest({ userId: professor.id })
+        .post(`/lti/embeddable-question/${course.id}`)
+        .send(body)
+        .expect(201);
+
+      expect(createRes.body).toHaveProperty('id');
+      expect(createRes.body.criteriaText).toBe(DEFAULT_RUBRIC);
+
+      const stored = await EmbeddableQuestionModel.findOne({
+        where: { id: createRes.body.id },
+      });
+      expect(stored).not.toBeNull();
+      expect(stored!.criteriaText).toBe(DEFAULT_RUBRIC);
+
+      const student = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: student,
+        course,
+        role: Role.STUDENT,
+      });
+
+      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
+        score: 2,
+        comment: 'Thoughtful reflection using default rubric.',
+        reasons: ['meets_requirements'],
+        needs_human_review: false,
+      });
+
+      const draft =
+        'First sentence on Indigenous perspectives. Second sentence analyzing history. Third sentence concluding thoughts.';
+      const facts = computeMechanicalFacts(
+        draft,
+        stored!.minSentences ?? 3,
+        stored!.maxSentences ?? 5,
+      );
+      const expectedUserPrompt = buildUserPrompt(
+        stored!.questionText,
+        draft,
+        facts,
+        stored!.instructions,
+      );
+
+      const feedbackRes = await supertest({ userId: student.id })
+        .post(`/lti/embeddable-question/${course.id}/${stored!.id}/feedback`)
+        .send({ responseText: draft })
+        .expect(201);
+
+      expect(feedbackRes.body.comment).toBe(
+        'Thoughtful reflection using default rubric.',
+      );
+      expect(feedbackRes.body.score).toBe(2);
+      expect(feedbackRes.body.reasons).toEqual(['meets_requirements']);
+
+      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
+        1,
+      );
+      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledWith(
+        expectedUserPrompt,
+        course.id,
+        'feedback',
+        { systemPrompt: buildSystemPrompt(DEFAULT_RUBRIC) },
+      );
     });
 
     it('rejects student from creating a question', async () => {
@@ -197,7 +278,6 @@ describe('Embeddable Question Integration', () => {
       );
       const expectedUserPrompt = buildUserPrompt(
         question.questionText,
-        question.criteriaText,
         draft,
         expectedFacts,
         question.instructions,
@@ -215,7 +295,7 @@ describe('Embeddable Question Integration', () => {
         expectedUserPrompt,
         course.id,
         'feedback',
-        { systemPrompt: STRICT_SYSTEM_PROMPT },
+        { systemPrompt: buildSystemPrompt(question.criteriaText) },
       );
 
       expect(res.body.comment).toBe(
