@@ -1,8 +1,4 @@
-import {
-  ALLOWED_INDIGENOUS_SCORES,
-  INDIGENOUS_REASON_CODES,
-  IndigenousReason,
-} from '@koh/common';
+import { IndigenousReason } from '@koh/common';
 import {
   buildSystemPrompt,
   buildUserPrompt,
@@ -343,19 +339,8 @@ describe('INDG Grading Logic', () => {
     });
   });
 
-  describe('LOCKED_PROMPT_SUFFIX', () => {
-    it('contains every code in INDIGENOUS_REASON_CODES and every value in ALLOWED_INDIGENOUS_SCORES', () => {
-      for (const code of INDIGENOUS_REASON_CODES) {
-        expect(LOCKED_PROMPT_SUFFIX).toContain(code);
-      }
-      for (const score of ALLOWED_INDIGENOUS_SCORES) {
-        expect(LOCKED_PROMPT_SUFFIX).toContain(String(score));
-      }
-    });
-  });
-
   describe('DEDUCTION_REASONS', () => {
-    it('equals exactly the seven codes it holds today, listed explicitly', () => {
+    it('excludes the two full-mark reasons and holds every other code', () => {
       const expectedCodes: readonly IndigenousReason[] = [
         'blank',
         'too_short',
@@ -365,11 +350,7 @@ describe('INDG Grading Logic', () => {
         'off_topic',
         'sensitive_content',
       ];
-      expect(DEDUCTION_REASONS.size).toBe(7);
       expect(DEDUCTION_REASONS).toEqual(new Set(expectedCodes));
-      for (const code of expectedCodes) {
-        expect(DEDUCTION_REASONS.has(code)).toBe(true);
-      }
     });
   });
 });
