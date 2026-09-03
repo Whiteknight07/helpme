@@ -59,4 +59,7 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
 
   @Column({ type: 'boolean', default: false })
   needsHumanReview: boolean;
+
+  @Column({ type: 'text', nullable: true })
+  aiModel: string | null;
 }

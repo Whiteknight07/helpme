@@ -21,9 +21,11 @@ const feedbackResponseSchema = z.object({
     reasons: z.array(z.string()),
     needs_human_review: z.boolean(),
   }),
+  model: z.string().optional(),
 });
 
 export type FeedbackAnswer = z.infer<typeof feedbackResponseSchema>['answer'];
+export type FeedbackQueryResult = z.infer<typeof feedbackResponseSchema>;
 
 @Injectable()
 /* This is a list of all endpoints from the chatbot repo.
@@ -185,13 +187,13 @@ export class ChatbotApiService {
     courseId: number,
     type: 'feedback',
     params: { systemPrompt: string },
-  ): Promise<FeedbackAnswer>;
+  ): Promise<FeedbackQueryResult>;
   async queryChatbotForCourse(
     query: string,
     courseId: number,
     type: 'default' | 'abstract' | 'feedback' = 'default',
     params?: { systemPrompt: string },
-  ): Promise<string | FeedbackAnswer> {
+  ): Promise<string | FeedbackQueryResult> {
     const data =
       type === 'feedback'
         ? { query, type, courseId, params }
@@ -200,7 +202,7 @@ export class ChatbotApiService {
     const resp: unknown = await this.request('POST', `chatbot/query`, '', data);
 
     if (type === 'feedback') {
-      return feedbackResponseSchema.parse(resp).answer;
+      return feedbackResponseSchema.parse(resp);
     }
 
     if (

@@ -11,7 +11,7 @@ import { ERROR_MESSAGES, UpsertEmbeddableQuestionParams } from '@koh/common';
 import { EmbeddableQuestionFeedbackModel } from './embeddable-question-feedback.entity';
 import {
   ChatbotApiService,
-  FeedbackAnswer,
+  FeedbackQueryResult,
 } from '../../../chatbot/chatbot-api.service';
 import { computeMechanicalFacts } from './deterministic-checks';
 import {
@@ -88,9 +88,9 @@ export class EmbeddableQuestionService {
       question.instructions,
     );
 
-    let chatbotAnswer: FeedbackAnswer;
+    let chatbotResult: FeedbackQueryResult;
     try {
-      chatbotAnswer = await this.chatbotApiService.queryChatbotForCourse(
+      chatbotResult = await this.chatbotApiService.queryChatbotForCourse(
         userPrompt,
         courseId,
         'feedback',
@@ -105,7 +105,7 @@ export class EmbeddableQuestionService {
 
     let validatedPayload: ValidatedGradePayload;
     try {
-      validatedPayload = validateGradePayload(chatbotAnswer);
+      validatedPayload = validateGradePayload(chatbotResult.answer);
     } catch {
       this.logger.error('INDG semantic validation failed');
       throw new InternalServerErrorException(
@@ -124,6 +124,7 @@ export class EmbeddableQuestionService {
       aiGrade: postProcessed.score,
       reasons: postProcessed.reasons,
       needsHumanReview: postProcessed.needsHumanReview,
+      aiModel: chatbotResult.model ?? null,
     });
 
     return feedback.save();

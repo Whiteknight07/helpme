@@ -96,10 +96,13 @@ describe('Embeddable Question Integration', () => {
       });
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
-        score: 2,
-        comment: 'Thoughtful reflection using default rubric.',
-        reasons: ['meets_requirements'],
-        needs_human_review: false,
+        answer: {
+          score: 2,
+          comment: 'Thoughtful reflection using default rubric.',
+          reasons: ['meets_requirements'],
+          needs_human_review: false,
+        },
+        model: 'test-model-rubric',
       });
 
       const draft =
@@ -262,10 +265,13 @@ describe('Embeddable Question Integration', () => {
       }).save();
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
-        score: 2,
-        comment: 'The reflection is thoughtful and meets requirements.',
-        reasons: ['meets_requirements'],
-        needs_human_review: false,
+        answer: {
+          score: 2,
+          comment: 'The reflection is thoughtful and meets requirements.',
+          reasons: ['meets_requirements'],
+          needs_human_review: false,
+        },
+        model: 'gemini-1.5-flash-grading',
       });
 
       const draft =
@@ -320,6 +326,54 @@ describe('Embeddable Question Integration', () => {
         'The reflection is thoughtful and meets requirements.',
       );
       expect(saved!.submission).toBe(draft);
+      expect(saved!.aiModel).toBe('gemini-1.5-flash-grading');
+    });
+
+    it('persists null aiModel without throwing when mocked chatbot omits model', async () => {
+      const student = await UserFactory.create();
+      const course = await CourseFactory.create();
+      await UserCourseFactory.create({
+        user: student,
+        course,
+        role: Role.STUDENT,
+      });
+
+      const question = await EmbeddableQuestionModel.create({
+        courseId: course.id,
+        name: 'INDG Reflection No Model',
+        questionText: 'Reflect on the reading without model reported.',
+        criteriaText: DEFAULT_RUBRIC,
+        minSentences: 3,
+        maxSentences: 5,
+      }).save();
+
+      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
+        answer: {
+          score: 2,
+          comment: 'Thoughtful reflection with no model metadata.',
+          reasons: ['meets_requirements'],
+          needs_human_review: false,
+        },
+      });
+
+      const draft =
+        'First sentence on local community engagement. Second sentence analyzing findings. Third sentence drawing balanced conclusions.';
+
+      const res = await supertest({ userId: student.id })
+        .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
+        .send({ responseText: draft })
+        .expect(201);
+
+      expect(res.body.comment).toBe(
+        'Thoughtful reflection with no model metadata.',
+      );
+      expect(res.body.score).toBe(2);
+
+      const saved = await EmbeddableQuestionFeedbackModel.findOne({
+        where: { questionId: question.id, userId: student.id },
+      });
+      expect(saved).not.toBeNull();
+      expect(saved!.aiModel).toBeNull();
     });
 
     it('caps score at 1 and prepends fixed sentence comment when draft is too short', async () => {
@@ -341,10 +395,12 @@ describe('Embeddable Question Integration', () => {
       }).save();
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
-        score: 2,
-        comment: 'Good points raised.',
-        reasons: ['meets_requirements'],
-        needs_human_review: false,
+        answer: {
+          score: 2,
+          comment: 'Good points raised.',
+          reasons: ['meets_requirements'],
+          needs_human_review: false,
+        },
       });
 
       const draft = 'Only one short sentence.';
@@ -387,10 +443,12 @@ describe('Embeddable Question Integration', () => {
       }).save();
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
-        score: 3,
-        comment: 'Unsupported score value.',
-        reasons: ['meets_requirements'],
-        needs_human_review: false,
+        answer: {
+          score: 3,
+          comment: 'Unsupported score value.',
+          reasons: ['meets_requirements'],
+          needs_human_review: false,
+        },
       });
 
       const draft = 'Sentence one. Sentence two. Sentence three.';
