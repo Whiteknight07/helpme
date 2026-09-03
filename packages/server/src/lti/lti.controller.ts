@@ -67,6 +67,25 @@ export class LtiController {
     course?: CourseModel,
     @Query('lti_storage_target') lti_storage_target?: string,
   ) {
+    if (LtiService.hasQuestionLaunch(token)) {
+      const { userId, courseId, questionId } =
+        await this.ltiService.resolveQuestionLaunch(token);
+      return this.loginService.enter(
+        req,
+        res,
+        userId,
+        undefined,
+        this.ltiService,
+        {
+          cookieName: 'lti_auth_token',
+          cookieOptions: LtiService.cookieOptions,
+          restrictPaths,
+          expiresIn: 60 * 10,
+          redirect: `/lti/embeddable/${courseId}/question/${questionId}`,
+        },
+      );
+    }
+
     const qry = new URLSearchParams();
 
     try {

@@ -267,6 +267,10 @@ export default class LtiMiddleware {
     next: NextFunction,
   ) {
     try {
+      if (LtiService.hasQuestionLaunch(token)) {
+        return next();
+      }
+
       const { userId, courseId } =
         await LtiService.findMatchingUserAndCourse(token);
       response.locals.userId = userId;

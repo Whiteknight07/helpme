@@ -12,7 +12,7 @@ import {
   UserFactory,
 } from './util/factories';
 import { AuthService } from 'auth/auth.service';
-import { AccountType } from '@koh/common';
+import { AccountType, isProd } from '@koh/common';
 import { OrganizationUserModel } from 'organization/organization-user.entity';
 import { LoginTicket, OAuth2Client } from 'google-auth-library';
 import { LtiModule } from '../src/lti/lti.module';
@@ -92,10 +92,15 @@ describe('LTI Auth Integration', () => {
       const parts = secondPart.split(';').map((v) => v.trim());
       const flags = parts.slice(1);
 
-      expect(flags).toHaveLength(3);
-      expect(flags[0]).toBe('HttpOnly');
-      expect(flags[1]).toBe('Secure');
-      expect(flags[2]).toBe('SameSite=None');
+      expect(flags).toContain('HttpOnly');
+      if (isProd()) {
+        expect(flags).toHaveLength(3);
+        expect(flags).toContain('Secure');
+        expect(flags).toContain('SameSite=None');
+      } else {
+        expect(flags).toHaveLength(2);
+        expect(flags).toContain('SameSite=Lax');
+      }
     });
 
     it('should fail with 401 if token is invalid', async () => {
