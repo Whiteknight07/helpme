@@ -179,6 +179,11 @@ export default class LtiMiddleware {
       },
     );
 
+    // @bhunt02/lti-typescript@0.1.7 saves resource=undefined for Canvas Deep Linking launches (no resource_link claim), violating NOT NULL.
+    await Database.dataSource.query(
+      'ALTER TABLE "context_token_model" ALTER COLUMN "resource" DROP NOT NULL',
+    );
+
     provider.onConnect(this.onConnectHandler);
 
     // Runs only after the provider verifies a Deep Linking launch. Instructors
