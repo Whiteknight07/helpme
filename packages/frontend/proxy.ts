@@ -302,19 +302,31 @@ export async function proxy(
 
   // Case: User has auth token and tries to access a public page that isn't /invite or /lti or /qi or /error_pages etc.
   if (
-    isPublicPageRequested &&
-    hasToken &&
-    !nextUrl.pathname.startsWith('/invite') &&
-    !nextUrl.pathname.startsWith('/qi/') &&
-    !nextUrl.pathname.startsWith('/error_pages') &&
-    !nextUrl.pathname.startsWith('/about') &&
-    nextUrl.pathname !== '/' // let logged-in users access landing page
+    shouldRedirectAuthenticatedPublicPage(
+      nextUrl.pathname,
+      isPublicPageRequested,
+      hasToken,
+    )
   ) {
     return NextResponse.redirect(new URL(defaultPage, url))
   }
 
   return NextResponse.next()
 }
+
+export const shouldRedirectAuthenticatedPublicPage = (
+  pathname: string,
+  isPublicPageRequested: boolean,
+  hasToken: boolean,
+): boolean =>
+  isPublicPageRequested &&
+  hasToken &&
+  !pathname.startsWith('/invite') &&
+  !pathname.startsWith('/lti') &&
+  !pathname.startsWith('/qi/') &&
+  !pathname.startsWith('/error_pages') &&
+  !pathname.startsWith('/about') &&
+  pathname !== '/' // let logged-in users access landing page
 
 const isPublicPage = (url: string) => {
   return publicPages.some((page) => {
