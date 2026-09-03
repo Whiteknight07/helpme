@@ -19,15 +19,13 @@ export {
 
 export const STRICT_SYSTEM_PROMPT = buildSystemPrompt();
 
-export const DEDUCTION_REASONS: ReadonlySet<IndigenousReason> = new Set([
-  'blank',
-  'too_short',
-  'indigenous_capitalization',
-  'terminology_review',
-  'unreadable',
-  'off_topic',
-  'sensitive_content',
-]);
+export const FULL_MARK_REASONS: ReadonlySet<IndigenousReason> =
+  new Set<IndigenousReason>(['meets_requirements', 'proofreading_note']);
+
+export const DEDUCTION_REASONS: ReadonlySet<IndigenousReason> =
+  new Set<IndigenousReason>(
+    INDIGENOUS_REASON_CODES.filter((code) => !FULL_MARK_REASONS.has(code)),
+  );
 
 export const TOO_SHORT_COMMENT =
   'This answer does not meet the sentence requirements noted in the question.';

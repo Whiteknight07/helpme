@@ -568,9 +568,9 @@ Return JSON only, no markdown:
 
 {"score": 0, "comment": "string", "reasons": ["meets_requirements"], "needs_human_review": false}
 
-- \`score\` is one of 0, 0.5, 1, 1.5, 2.
+- \`score\` is one of ${ALLOWED_INDIGENOUS_SCORES.join(', ')}.
 - \`comment\` is a non-empty student-facing string.
-- \`reasons\` is a non-empty list drawn only from: \`blank\`, \`too_short\`, \`indigenous_capitalization\`, \`terminology_review\`, \`unreadable\`, \`off_topic\`, \`sensitive_content\`, \`meets_requirements\`, \`proofreading_note\`.
+- \`reasons\` is a non-empty list drawn only from: ${INDIGENOUS_REASON_CODES.map((code) => `\`${code}\``).join(', ')}.
 - \`meets_requirements\` and \`proofreading_note\` are each used alone, never with another reason, and only at a score of 2.
 - Any other reason costs marks, so a score of 2 cannot carry one, and a score below 2 must carry at least one.
 - \`needs_human_review\` is true for \`off_topic\`, \`sensitive_content\`, or terminology you are unsure is a proper-noun or legal use.`

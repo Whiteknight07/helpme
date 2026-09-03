@@ -1,6 +1,12 @@
 import {
+  ALLOWED_INDIGENOUS_SCORES,
+  INDIGENOUS_REASON_CODES,
+  IndigenousReason,
+} from '@koh/common';
+import {
   buildSystemPrompt,
   buildUserPrompt,
+  DEDUCTION_REASONS,
   DEFAULT_RUBRIC,
   GradeParseError,
   LOCKED_PROMPT_PREFIX,
@@ -334,6 +340,36 @@ describe('INDG Grading Logic', () => {
       const result = postProcessFeedback(validated, facts);
       expect(result.comment.length).toBe(15000);
       expect(result.comment.startsWith(TOO_SHORT_COMMENT)).toBe(true);
+    });
+  });
+
+  describe('LOCKED_PROMPT_SUFFIX', () => {
+    it('contains every code in INDIGENOUS_REASON_CODES and every value in ALLOWED_INDIGENOUS_SCORES', () => {
+      for (const code of INDIGENOUS_REASON_CODES) {
+        expect(LOCKED_PROMPT_SUFFIX).toContain(code);
+      }
+      for (const score of ALLOWED_INDIGENOUS_SCORES) {
+        expect(LOCKED_PROMPT_SUFFIX).toContain(String(score));
+      }
+    });
+  });
+
+  describe('DEDUCTION_REASONS', () => {
+    it('equals exactly the seven codes it holds today, listed explicitly', () => {
+      const expectedCodes: readonly IndigenousReason[] = [
+        'blank',
+        'too_short',
+        'indigenous_capitalization',
+        'terminology_review',
+        'unreadable',
+        'off_topic',
+        'sensitive_content',
+      ];
+      expect(DEDUCTION_REASONS.size).toBe(7);
+      expect(DEDUCTION_REASONS).toEqual(new Set(expectedCodes));
+      for (const code of expectedCodes) {
+        expect(DEDUCTION_REASONS.has(code)).toBe(true);
+      }
     });
   });
 });
