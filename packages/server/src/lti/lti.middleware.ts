@@ -206,7 +206,11 @@ export default class LtiMiddleware {
         if (err instanceof HttpException) {
           return res.status(err.getStatus()).send(err.getResponse());
         }
-        return res.status(500).send(err);
+        return res.status(500).send({
+          status: 500,
+          error: 'Internal Server Error',
+          details: { message: 'Internal Server Error' },
+        });
       }
     });
 

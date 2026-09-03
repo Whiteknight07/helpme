@@ -42,7 +42,7 @@ export class LtiService {
   };
   constructor(
     private jwtService: JwtService,
-    private embeddableQuestionService?: EmbeddableQuestionService,
+    private embeddableQuestionService: EmbeddableQuestionService,
   ) {}
 
   private _provider: Provider | undefined;
@@ -376,6 +376,24 @@ export class LtiService {
     );
   }
 
+  static parseStrictQuestionId(value: unknown): number {
+    if (typeof value === 'number') {
+      if (Number.isSafeInteger(value) && value > 0) {
+        return value;
+      }
+    } else if (typeof value === 'string') {
+      if (/^[1-9]\d*$/.test(value)) {
+        const parsed = Number(value);
+        if (Number.isSafeInteger(parsed)) {
+          return parsed;
+        }
+      }
+    }
+    throw new BadRequestException(
+      'Question ID must be a positive base-10 integer',
+    );
+  }
+
   async resolveQuestionLaunch(
     token: IdToken,
   ): Promise<{ userId: number; courseId: number; questionId: number }> {
@@ -406,23 +424,9 @@ export class LtiService {
 
     const courseId = lmsIntegration.courseId;
 
-    const rawQuestionId: unknown =
-      token.platformContext.custom?.[HELPME_QUESTION_ID_PARAM];
-    if (
-      typeof rawQuestionId !== 'string' ||
-      !/^[1-9]\d*$/.test(rawQuestionId)
-    ) {
-      throw new BadRequestException(
-        'Question ID must be a positive base-10 integer',
-      );
-    }
-
-    const questionId = Number(rawQuestionId);
-    if (!Number.isSafeInteger(questionId)) {
-      throw new BadRequestException(
-        'Question ID must be a positive base-10 integer',
-      );
-    }
+    const questionId = LtiService.parseStrictQuestionId(
+      token.platformContext.custom?.[HELPME_QUESTION_ID_PARAM],
+    );
 
     const question = await EmbeddableQuestionModel.findOne({
       where: {
@@ -582,12 +586,18 @@ export class LtiService {
     }
     const courseId = lmsIntegration.courseId;
 
-    const { userId } = await LtiService.findMatchingUserAndCourse(token);
-    if (userId === undefined) {
+    const identity = await UserLtiIdentityModel.findOne({
+      where: {
+        issuer: token.iss,
+        ltiUserId: token.user,
+      },
+    });
+    if (!identity) {
       throw new ForbiddenException(
         'No HelpMe account is linked to this Canvas user',
       );
     }
+    const userId = identity.userId;
 
     const enrollment = await UserCourseModel.findOne({
       where: {
@@ -625,19 +635,23 @@ export class LtiService {
    */
   async createDeepLinkingResponse(
     token: IdToken,
-    questionId: number,
+    questionId: unknown,
   ): Promise<string> {
-    if (!Number.isSafeInteger(questionId) || questionId <= 0) {
-      throw new BadRequestException('A valid question selection is required');
-    }
+    const parsedQuestionId = LtiService.parseStrictQuestionId(questionId);
 
     const { courseId } = await this.authorizeDeepLinking(token);
+
+    const launchUrl = token.platformContext?.targetLinkUri;
+    if (typeof launchUrl !== 'string' || launchUrl.length === 0) {
+      throw new BadRequestException(
+        'Deep Linking launch is missing its target link URI',
+      );
+    }
+
     const question = await this.embeddableQuestionService.findOne(
       courseId,
-      questionId,
+      parsedQuestionId,
     );
-
-    const launchUrl = token.platformContext.targetLinkUri;
     const item: LtiResourceLinkContentItem = {
       type: 'ltiResourceLink',
       title: question.name ?? `HelpMe Question ${question.id}`,

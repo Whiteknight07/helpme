@@ -21,6 +21,7 @@ import {
   UserFactory,
 } from '../../test/util/factories';
 import { LoginService } from './login.service';
+import { EmbeddableQuestionService } from '../lti/embeddable/question/embeddable-question.service';
 import { ERROR_MESSAGES, QUERY_PARAMS } from '@koh/common';
 import { Request } from 'express';
 import { UserModel } from '../profile/user.entity';
@@ -36,6 +37,7 @@ describe('LoginService', () => {
   let service: LoginService;
   let dataSource: DataSource;
   let jwtService: JwtService;
+  let embeddableQuestionService: EmbeddableQuestionService;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -59,12 +61,22 @@ describe('LoginService', () => {
             acceptProfInviteFromCookie: jest.fn(),
           },
         },
+        {
+          provide: EmbeddableQuestionService,
+          useValue: {
+            findAllForCourse: jest.fn(),
+            findOne: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<LoginService>(LoginService);
     dataSource = module.get<DataSource>(DataSource);
     jwtService = module.get<JwtService>(JwtService);
+    embeddableQuestionService = module.get<EmbeddableQuestionService>(
+      EmbeddableQuestionService,
+    );
 
     // Grab FactoriesService from Nest
     const factories = module.get<FactoryService>(FactoryService);
@@ -343,7 +355,10 @@ describe('LoginService', () => {
           {} as any,
           dataSource,
         );
-        const ltiService = new LtiService(jwtService);
+        const ltiService = new LtiService(
+          jwtService,
+          embeddableQuestionService,
+        );
 
         const cookies: string[] = [];
         if (ltiInvite) {

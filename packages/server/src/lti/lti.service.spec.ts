@@ -19,7 +19,11 @@ import {
 import { HELPME_QUESTION_ID_PARAM, LtiService } from './lti.service';
 import { IdToken, Provider } from '@bhunt02/lti-typescript';
 import { JwtModule, JwtService } from '@nestjs/jwt';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ERROR_MESSAGES, Role } from '@koh/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModel } from '../profile/user.entity';
@@ -937,6 +941,25 @@ describe('LtiService', () => {
       expect(await UserModel.count()).toBe(0);
     });
 
+    it('rejects a matching email without a verified iss+sub identity and binds nothing', async () => {
+      const course = await seedMappedCourse();
+      const user = await UserFactory.create({ email: instructorEmail });
+      await UserCourseFactory.create({
+        user,
+        course,
+        role: Role.PROFESSOR,
+      });
+
+      await expect(service.authorizeDeepLinking(buildToken())).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(
+        await UserLtiIdentityModel.find({
+          where: { issuer: 'http://canvas.docker/', ltiUserId: instructorSub },
+        }),
+      ).toHaveLength(0);
+    });
+
     it('rejects a launch from an inactive Canvas platform', async () => {
       const course = await seedMappedCourse();
       await seedInstructor(course, Role.PROFESSOR);
@@ -1010,6 +1033,40 @@ describe('LtiService', () => {
         course.id,
         1234,
       );
+      expect(createDeepLinkingForm).not.toHaveBeenCalled();
+    });
+
+    it('rejects loosely-coerced question selections before signing', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.PROFESSOR);
+      const token = buildToken();
+
+      for (const coerced of [true, [42], 1.5, 0, ' 42', '1e3', '0x2A', '-3']) {
+        await expect(
+          service.createDeepLinkingResponse(token, coerced),
+        ).rejects.toThrow(BadRequestException);
+      }
+      expect(embeddableQuestionService.findOne).not.toHaveBeenCalled();
+      expect(createDeepLinkingForm).not.toHaveBeenCalled();
+    });
+
+    it('rejects a signed response when the verified target link URI is missing', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.PROFESSOR);
+      const question = EmbeddableQuestionModel.create({
+        id: 42,
+        courseId: course.id,
+        name: 'Week 3',
+      });
+      embeddableQuestionService.findOne.mockResolvedValue(question);
+
+      for (const targetLinkUri of [undefined, '']) {
+        const token = buildToken();
+        token.platformContext.targetLinkUri = targetLinkUri as string;
+        await expect(
+          service.createDeepLinkingResponse(token, 42),
+        ).rejects.toThrow(BadRequestException);
+      }
       expect(createDeepLinkingForm).not.toHaveBeenCalled();
     });
   });

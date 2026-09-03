@@ -198,12 +198,9 @@ export class LtiController {
   @IgnoreSerializer()
   async selectDeepLinkQuestion(
     @LtiToken() token: IdToken,
-    @Body() body: { questionId?: number | string },
+    @Body() body: { questionId?: unknown },
   ): Promise<string> {
-    return this.ltiService.createDeepLinkingResponse(
-      token,
-      Number(body?.questionId),
-    );
+    return this.ltiService.createDeepLinkingResponse(token, body?.questionId);
   }
 
   @Get('/platform')
