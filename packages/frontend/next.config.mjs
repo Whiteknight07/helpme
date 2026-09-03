@@ -5,6 +5,7 @@ import injectWhyDidYouRender from './scripts/why-did-you-render/index.mjs';
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false, // disabled since it messes with antd forms unfortunately
+  allowedDevOrigins: ['canvas.docker'],
   experimental: {
     webpackMemoryOptimizations: true,
     webpackBuildWorker: true,
