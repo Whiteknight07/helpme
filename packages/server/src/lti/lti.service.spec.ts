@@ -20,13 +20,15 @@ import { LtiService } from './lti.service';
 import { IdToken, Provider } from '@bhunt02/lti-typescript';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { NotFoundException } from '@nestjs/common';
-import { ERROR_MESSAGES } from '@koh/common';
+import { ERROR_MESSAGES, Role } from '@koh/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { UserModel } from '../profile/user.entity';
 import { CourseModel } from '../course/course.entity';
 import { LtiCourseInviteModel } from './lti-course-invite.entity';
 import { LtiIdentityTokenModel } from './lti_identity_token.entity';
 import { UserLtiIdentityModel } from './user_lti_identity.entity';
+import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
+import { UserCourseModel } from '../profile/user-course.entity';
 
 const idToken = {
   iss: 'http://canvas.docker/',
@@ -45,6 +47,14 @@ const idToken = {
   userInfo: {
     email: 'testuser@example.com',
   },
+};
+
+type LaunchTokenOverrides = Partial<
+  Omit<IdToken, 'platformContext' | 'platformInfo' | 'userInfo'>
+> & {
+  platformContext?: Partial<IdToken['platformContext']>;
+  platformInfo?: Partial<IdToken['platformInfo']>;
+  userInfo?: Partial<IdToken['userInfo']>;
 };
 
 describe('LtiService', () => {
@@ -488,6 +498,314 @@ describe('LtiService', () => {
         idToken as unknown as IdToken,
       );
       expect(userId).toEqual(user.id);
+    });
+  });
+
+  describe('resolveQuestionLaunch', () => {
+    let org: Awaited<ReturnType<typeof OrganizationFactory.create>>;
+    let course: CourseModel;
+    let question: EmbeddableQuestionModel;
+    const canvasCourseId = 'canvas-course-999';
+
+    const createLaunchToken = (overrides?: LaunchTokenOverrides): IdToken =>
+      ({
+        iss: 'http://canvas.docker/',
+        clientId: 'clientid',
+        deploymentId: 'deploymentid',
+        platformId: 'platformid',
+        platformContext: {
+          roles: ['http://purl.imsglobal.org/vocab/lis/v2/membership#Learner'],
+          custom: {
+            canvas_course_id: canvasCourseId,
+            helpme_question_id: String(question.id),
+          },
+          ...overrides?.platformContext,
+        },
+        platformInfo: {
+          product_family_code: 'canvas',
+          ...overrides?.platformInfo,
+        },
+        user: 'learner-lti-sub-1',
+        userInfo: {
+          email: 'learner@example.com',
+          given_name: 'Ada',
+          family_name: 'Lovelace',
+          ...overrides?.userInfo,
+        },
+        ...overrides,
+      }) as unknown as IdToken;
+
+    beforeEach(async () => {
+      org = await OrganizationFactory.create();
+      course = await CourseFactory.create();
+      await OrganizationCourseFactory.create({
+        course,
+        organization: org,
+      });
+      await lmsCourseIntFactory.create({
+        course,
+        apiCourseId: canvasCourseId,
+      });
+      question = await EmbeddableQuestionModel.create({
+        courseId: course.id,
+        name: 'Reflection 1',
+        questionText: 'Explain LTI 1.3 launch.',
+        criteriaText: 'Clear and thoughtful reflection.',
+        minSentences: 3,
+        maxSentences: 5,
+      }).save();
+    });
+
+    it('returns valid launch result for verified learner token', async () => {
+      const token = createLaunchToken();
+      const result = await service.resolveQuestionLaunch(token);
+
+      expect(result).toEqual({
+        userId: expect.any(Number),
+        courseId: course.id,
+        questionId: question.id,
+      });
+
+      const user = await UserModel.findOne({ where: { id: result.userId } });
+      expect(user).toBeDefined();
+    });
+
+    it('provisions unknown learner once and creates STUDENT enrollment', async () => {
+      const token = createLaunchToken({
+        user: 'unknown-learner-id-99',
+        userInfo: {
+          email: 'unknown-learner@example.com',
+          given_name: 'Grace',
+          family_name: 'Hopper',
+        },
+      });
+
+      const initialUserCount = await UserModel.count();
+      const initialEnrollmentCount = await UserCourseModel.count();
+
+      const result = await service.resolveQuestionLaunch(token);
+
+      expect(await UserModel.count()).toBe(initialUserCount + 1);
+      const user = await UserModel.findOne({
+        where: { id: result.userId },
+        relations: { organizationUser: true },
+      });
+      expect(user).toBeDefined();
+      expect(user.password).toBeNull();
+      expect(user.email).toBe('unknown-learner@example.com');
+      expect(user.firstName).toBe('Grace');
+      expect(user.lastName).toBe('Hopper');
+      expect(user.organizationUser).toBeDefined();
+      expect(user.organizationUser.organizationId).toBe(org.id);
+
+      const identity = await UserLtiIdentityModel.findOne({
+        where: {
+          userId: user.id,
+          issuer: token.iss,
+        },
+      });
+      expect(identity).toBeDefined();
+      expect(identity.ltiUserId).toBe('unknown-learner-id-99');
+      expect(identity.ltiEmail).toBe('unknown-learner@example.com');
+
+      expect(await UserCourseModel.count()).toBe(initialEnrollmentCount + 1);
+      const enrollment = await UserCourseModel.findOne({
+        where: {
+          userId: user.id,
+          courseId: course.id,
+        },
+      });
+      expect(enrollment).toBeDefined();
+      expect(enrollment.role).toBe(Role.STUDENT);
+    });
+
+    it('links to existing user when asserted email matches exactly one suitable user in mapped organization', async () => {
+      const existingUser = await UserFactory.create({
+        email: 'pre-existing@example.com',
+      });
+      await OrganizationUserFactory.create({
+        organizationUser: existingUser,
+        organization: org,
+      });
+
+      const token = createLaunchToken({
+        user: 'new-sub-for-existing-user',
+        userInfo: {
+          email: 'pre-existing@example.com',
+        },
+      });
+
+      const initialUserCount = await UserModel.count();
+      const result = await service.resolveQuestionLaunch(token);
+
+      expect(result.userId).toBe(existingUser.id);
+      expect(await UserModel.count()).toBe(initialUserCount);
+
+      const identity = await UserLtiIdentityModel.findOne({
+        where: {
+          userId: existingUser.id,
+          issuer: token.iss,
+        },
+      });
+      expect(identity).toBeDefined();
+      expect(identity.ltiUserId).toBe('new-sub-for-existing-user');
+
+      const enrollment = await UserCourseModel.findOne({
+        where: {
+          userId: existingUser.id,
+          courseId: course.id,
+        },
+      });
+      expect(enrollment).toBeDefined();
+      expect(enrollment.role).toBe(Role.STUDENT);
+    });
+
+    it('provisions new user if existing user with matching email belongs to a different organization', async () => {
+      const rivalOrg = await OrganizationFactory.create();
+      const rivalUser = await UserFactory.create({
+        email: 'shared@example.com',
+      });
+      await OrganizationUserFactory.create({
+        organizationUser: rivalUser,
+        organization: rivalOrg,
+      });
+
+      const token = createLaunchToken({
+        user: 'sub-new-for-org',
+        userInfo: {
+          email: 'shared@example.com',
+        },
+      });
+
+      const initialUserCount = await UserModel.count();
+      const result = await service.resolveQuestionLaunch(token);
+
+      expect(result.userId).not.toBe(rivalUser.id);
+      expect(await UserModel.count()).toBe(initialUserCount + 1);
+
+      const user = await UserModel.findOne({
+        where: { id: result.userId },
+        relations: { organizationUser: true },
+      });
+      expect(user.organizationUser.organizationId).toBe(org.id);
+    });
+
+    it('reuses both user and enrollment on repeated iss + sub launch', async () => {
+      const token = createLaunchToken({
+        user: 'repeat-learner-42',
+        userInfo: {
+          email: 'repeat-learner@example.com',
+        },
+      });
+
+      const firstResult = await service.resolveQuestionLaunch(token);
+      const userCountAfterFirst = await UserModel.count();
+      const enrollmentCountAfterFirst = await UserCourseModel.count();
+
+      const secondResult = await service.resolveQuestionLaunch(token);
+
+      expect(secondResult.userId).toBe(firstResult.userId);
+      expect(secondResult.courseId).toBe(course.id);
+      expect(secondResult.questionId).toBe(question.id);
+      expect(await UserModel.count()).toBe(userCountAfterFirst);
+      expect(await UserCourseModel.count()).toBe(enrollmentCountAfterFirst);
+    });
+
+    it('rejects unmapped course without provisioning', async () => {
+      const token = createLaunchToken({
+        platformContext: {
+          roles: ['http://purl.imsglobal.org/vocab/lis/v2/membership#Learner'],
+          custom: {
+            canvas_course_id: 'unmapped-canvas-course-xyz',
+            helpme_question_id: String(question.id),
+          },
+        },
+      });
+
+      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
+      expect(await UserModel.count()).toBe(0);
+      expect(await UserCourseModel.count()).toBe(0);
+      expect(await UserLtiIdentityModel.count()).toBe(0);
+    });
+
+    it.each([
+      ['missing question parameter', undefined],
+      ['empty question parameter', ''],
+      ['zero question id', '0'],
+      ['negative question id', '-5'],
+      ['alpha question id', 'abc'],
+      ['float question id', '1.5'],
+      ['octal/leading zero question id', '012'],
+    ])('rejects %s without provisioning', async (_, questionParam) => {
+      const token = createLaunchToken({
+        platformContext: {
+          roles: ['http://purl.imsglobal.org/vocab/lis/v2/membership#Learner'],
+          custom: {
+            canvas_course_id: canvasCourseId,
+            ...(questionParam !== undefined
+              ? { helpme_question_id: questionParam }
+              : {}),
+          },
+        },
+      });
+
+      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
+      expect(await UserModel.count()).toBe(0);
+      expect(await UserCourseModel.count()).toBe(0);
+      expect(await UserLtiIdentityModel.count()).toBe(0);
+    });
+
+    it('rejects cross-course question without provisioning', async () => {
+      const course2 = await CourseFactory.create();
+      const questionCourse2 = await EmbeddableQuestionModel.create({
+        courseId: course2.id,
+        name: 'Question Course 2',
+        questionText: 'Prompt 2',
+        criteriaText: 'Rubric 2',
+      }).save();
+
+      const token = createLaunchToken({
+        platformContext: {
+          roles: ['http://purl.imsglobal.org/vocab/lis/v2/membership#Learner'],
+          custom: {
+            canvas_course_id: canvasCourseId,
+            helpme_question_id: String(questionCourse2.id),
+          },
+        },
+      });
+
+      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
+      expect(await UserModel.count()).toBe(0);
+      expect(await UserCourseModel.count()).toBe(0);
+      expect(await UserLtiIdentityModel.count()).toBe(0);
+    });
+
+    it.each([
+      [
+        'instructor role',
+        ['http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor'],
+      ],
+      [
+        'ta role',
+        ['http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant'],
+      ],
+      ['empty roles array', []],
+      ['undefined roles', undefined],
+    ])('rejects non-learner with %s without provisioning', async (_, roles) => {
+      const token = createLaunchToken({
+        platformContext: {
+          roles,
+          custom: {
+            canvas_course_id: canvasCourseId,
+            helpme_question_id: String(question.id),
+          },
+        },
+      });
+
+      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
+      expect(await UserModel.count()).toBe(0);
+      expect(await UserCourseModel.count()).toBe(0);
+      expect(await UserLtiIdentityModel.count()).toBe(0);
     });
   });
 });

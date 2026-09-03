@@ -2,12 +2,13 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { UserCourseModel } from '../profile/user-course.entity';
 import { UserModel } from '../profile/user.entity';
 import { IdToken, Provider } from '@bhunt02/lti-typescript';
 import { LMSCourseIntegrationModel } from '../lmsIntegration/lmsCourseIntegration.entity';
-import { ERROR_MESSAGES, isProd, Role } from '@koh/common';
+import { ERROR_MESSAGES, isProd, OrganizationRole, Role } from '@koh/common';
 import { JwtService } from '@nestjs/jwt';
 import { CookieOptions } from 'express';
 import { LtiCourseInviteModel } from './lti-course-invite.entity';
@@ -18,6 +19,13 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { LMSAuthStateModel } from '../lmsIntegration/lms-auth-state.entity';
 import { pick } from 'lodash';
 import { Not } from 'typeorm';
+import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
+import { OrganizationUserModel } from '../organization/organization-user.entity';
+import { OrganizationCourseModel } from '../organization/organization-course.entity';
+
+export const HELPME_QUESTION_ID_PARAM = 'helpme_question_id';
+export const LTI_MEMBERSHIP_LEARNER_ROLE =
+  'http://purl.imsglobal.org/vocab/lis/v2/membership#Learner';
 
 @Injectable()
 export class LtiService {
@@ -351,5 +359,169 @@ export class LtiService {
       default:
         return undefined;
     }
+  }
+
+  static hasQuestionLaunch(token: IdToken): boolean {
+    return (
+      token?.platformContext?.custom?.[HELPME_QUESTION_ID_PARAM] !== undefined
+    );
+  }
+
+  async resolveQuestionLaunch(
+    token: IdToken,
+  ): Promise<{ userId: number; courseId: number; questionId: number }> {
+    if (!token.platformContext?.roles?.includes(LTI_MEMBERSHIP_LEARNER_ROLE)) {
+      throw new UnauthorizedException(
+        'LTI launch requires standard Learner role',
+      );
+    }
+
+    const platformCourseId = LtiService.extractCourseId(token);
+    if (typeof platformCourseId !== 'string' || !platformCourseId) {
+      throw new BadRequestException(
+        'Canvas course ID custom parameter is missing',
+      );
+    }
+
+    const lmsIntegration = await LMSCourseIntegrationModel.findOne({
+      where: {
+        apiCourseId: platformCourseId,
+      },
+    });
+
+    if (!lmsIntegration) {
+      throw new NotFoundException(
+        'Canvas course is not mapped to a HelpMe course',
+      );
+    }
+
+    const courseId = lmsIntegration.courseId;
+
+    const rawQuestionId: unknown =
+      token.platformContext.custom?.[HELPME_QUESTION_ID_PARAM];
+    if (
+      typeof rawQuestionId !== 'string' ||
+      !/^[1-9]\d*$/.test(rawQuestionId)
+    ) {
+      throw new BadRequestException(
+        'Question ID must be a positive base-10 integer',
+      );
+    }
+
+    const questionId = Number(rawQuestionId);
+    if (!Number.isSafeInteger(questionId)) {
+      throw new BadRequestException(
+        'Question ID must be a positive base-10 integer',
+      );
+    }
+
+    const question = await EmbeddableQuestionModel.findOne({
+      where: {
+        id: questionId,
+        courseId,
+      },
+    });
+
+    if (!question) {
+      throw new NotFoundException(
+        'Question not found in the mapped HelpMe course',
+      );
+    }
+
+    const orgCourse = await OrganizationCourseModel.findOne({
+      where: { courseId },
+    });
+    if (!orgCourse?.organizationId) {
+      throw new NotFoundException(
+        'Mapped HelpMe course does not belong to an organization',
+      );
+    }
+    const organizationId = orgCourse.organizationId;
+
+    const existingIdentity = await UserLtiIdentityModel.findOne({
+      where: {
+        issuer: token.iss,
+        ltiUserId: token.user,
+      },
+      relations: { user: { organizationUser: true } },
+    });
+    let user = existingIdentity?.user;
+    const assertedEmail = token.userInfo?.email?.trim();
+
+    if (!user && assertedEmail) {
+      const candidates = await UserModel.find({
+        where: { email: assertedEmail },
+        relations: { organizationUser: true },
+      });
+      if (
+        candidates.length === 1 &&
+        (!candidates[0].organizationUser ||
+          candidates[0].organizationUser.organizationId === organizationId)
+      ) {
+        user = candidates[0];
+      }
+    }
+
+    if (!user) {
+      user = await UserModel.create({
+        email:
+          assertedEmail ??
+          `lti-${crypto.createHash('sha256').update(`${token.iss}\0${token.user}`).digest('hex')}@invalid`,
+        firstName: token.userInfo?.given_name ?? token.userInfo?.name,
+        lastName: token.userInfo?.family_name,
+        password: null,
+        emailVerified: !!assertedEmail,
+      }).save();
+    }
+
+    if (
+      user.organizationUser &&
+      user.organizationUser.organizationId !== organizationId
+    ) {
+      throw new UnauthorizedException(
+        'LTI identity belongs to a different organization',
+      );
+    }
+    if (!user.organizationUser) {
+      await OrganizationUserModel.create({
+        userId: user.id,
+        organizationId,
+        role: OrganizationRole.MEMBER,
+      }).save();
+    }
+
+    await UserLtiIdentityModel.delete({
+      userId: Not(user.id),
+      issuer: token.iss,
+      ltiUserId: token.user,
+    });
+
+    await UserLtiIdentityModel.create({
+      userId: user.id,
+      issuer: token.iss,
+      ltiUserId: token.user,
+      ltiEmail: assertedEmail,
+    }).save();
+
+    const existingEnrollment = await UserCourseModel.findOne({
+      where: {
+        userId: user.id,
+        courseId,
+      },
+    });
+
+    if (!existingEnrollment) {
+      await UserCourseModel.create({
+        userId: user.id,
+        courseId,
+        role: Role.STUDENT,
+      }).save();
+    }
+
+    return {
+      userId: user.id,
+      courseId,
+      questionId,
+    };
   }
 }
