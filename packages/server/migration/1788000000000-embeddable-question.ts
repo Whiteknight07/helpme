@@ -31,7 +31,7 @@ export class EmbeddableQuestion1788000000000 implements MigrationInterface {
         "submission" text NOT NULL,
         "aiFeedback" text NOT NULL,
         "aiGrade" double precision NOT NULL,
-        "reasons" text NOT NULL,
+        "reasons" text array NOT NULL,
         "needsHumanReview" boolean NOT NULL DEFAULT false,
         "aiModel" text,
         CONSTRAINT "PK_embeddable_question_feedback_model" PRIMARY KEY ("id")
