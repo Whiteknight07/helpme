@@ -725,6 +725,9 @@ describe('LtiService', () => {
         platformId: 'platform-1',
         platformContext: {
           messageType: 'LtiDeepLinkingRequest',
+          roles: [
+            'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
+          ],
           deepLinkingSettings: {
             deep_link_return_url: 'https://canvas.docker/deep-link-return',
             accept_types: ['ltiResourceLink'],

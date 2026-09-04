@@ -544,6 +544,15 @@ export class LtiService {
   async authorizeDeepLinking(
     token: IdToken,
   ): Promise<{ userId: number; courseId: number }> {
+    const isStaff = token.platformContext?.roles?.some((role) =>
+      LTI_MEMBERSHIP_STAFF_ROLES.includes(role),
+    );
+    if (!isStaff) {
+      throw new ForbiddenException(
+        'LTI Deep Linking requires an Instructor or TeachingAssistant role',
+      );
+    }
+
     if (token.platformContext?.messageType !== 'LtiDeepLinkingRequest') {
       throw new BadRequestException('Expected an LTI Deep Linking request');
     }

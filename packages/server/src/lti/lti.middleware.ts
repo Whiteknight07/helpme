@@ -14,6 +14,7 @@ import {
   DynamicRegistrationSecondaryOptions,
   IdToken,
   LtiMessageRegistration,
+  LtiPlatformRegistration,
   PlatformModel,
   Provider,
   register,
@@ -25,6 +26,22 @@ const dynRegScopes = [
   'https://purl.imsglobal.org/spec/lti-reg/scope/registration',
   'https://purl.imsglobal.org/spec/lti-reg/scope/registration.readonly',
 ];
+
+type CanvasLtiMessageRegistration = LtiMessageRegistration & {
+  preferred_presentation?: string;
+  iframe?: { width: number; height: number };
+  'https://canvas.instructure.com/lti/launch_height'?: string;
+  'https://canvas.instructure.com/lti/launch_width'?: string;
+  'https://canvas.instructure.com/lti/display_type'?: string;
+  'https://canvas.instructure.com/lti/visibility'?: string;
+};
+
+type CanvasDynamicRegistrationSecondaryOptions =
+  DynamicRegistrationSecondaryOptions & {
+    scope: string;
+    'https://canvas.instructure.com/lti/privacy_level': string;
+    'https://purl.imsglobal.org/spec/lti-tool-configuration': Partial<LtiPlatformRegistration>;
+  };
 
 export default class LtiMiddleware {
   private prefix: string;
@@ -99,45 +116,47 @@ export default class LtiMiddleware {
       }
     });
 
-    const secondaryOptions: DynamicRegistrationSecondaryOptions = {
+    const messages = [
+      {
+        type: 'LtiResourceLinkRequest',
+        placements: [
+          'link_selection',
+          'course_home_sub_navigation',
+          'course_navigation',
+          'module_menu',
+        ],
+        'https://canvas.instructure.com/lti/launch_height': '100%',
+        'https://canvas.instructure.com/lti/launch_width': '100%',
+        'https://canvas.instructure.com/lti/display_type':
+          'full_width_in_context',
+      },
+      {
+        type: 'LtiDeepLinkingRequest',
+        target_link_uri: this.baseRoute(),
+        label: 'HelpMe',
+        placements: ['editor_button'],
+        roles: [
+          'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
+          'http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant',
+        ],
+        preferred_presentation: 'iframe',
+        iframe: { width: 800, height: 600 },
+        'https://canvas.instructure.com/lti/visibility': 'admins',
+      },
+    ] satisfies CanvasLtiMessageRegistration[];
+
+    const secondaryOptions: CanvasDynamicRegistrationSecondaryOptions = {
       scope: [
         'https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly',
         ...dynRegScopes,
       ].join(' '),
       client_name: 'HelpMe',
       'https://purl.imsglobal.org/spec/lti-tool-configuration': {
-        messages: [
-          {
-            type: 'LtiResourceLinkRequest',
-            placements: [
-              'link_selection',
-              'course_home_sub_navigation',
-              'course_navigation',
-              'module_menu',
-            ],
-            'https://canvas.instructure.com/lti/launch_height': '100%',
-            'https://canvas.instructure.com/lti/launch_width': '100%',
-            'https://canvas.instructure.com/lti/display_type':
-              'full_width_in_context',
-          },
-          {
-            type: 'LtiDeepLinkingRequest',
-            target_link_uri: this.baseRoute(),
-            label: 'HelpMe',
-            placements: ['editor_button'],
-            roles: [
-              'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
-              'http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant',
-            ],
-            preferred_presentation: 'iframe',
-            iframe: { width: 800, height: 600 },
-            'https://canvas.instructure.com/lti/visibility': 'admins',
-          },
-        ] as (LtiMessageRegistration & any)[],
+        messages,
       },
       // CANVAS PROPERTIES
       'https://canvas.instructure.com/lti/privacy_level': 'public',
-    } as DynamicRegistrationSecondaryOptions & any;
+    };
 
     // @bhunt02/lti-typescript@0.1.7 marks resource NOT NULL but saves undefined
     // for resourceless Deep Linking launches; mark nullable before register()

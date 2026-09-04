@@ -135,6 +135,22 @@ describe('Embeddable Question Integration', () => {
         .send(body)
         .expect(403);
     });
+
+    it('returns 404 when updating a missing question', async () => {
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
+      const before = await EmbeddableQuestionModel.count({
+        where: { courseId: course.id },
+      });
+
+      await supertest({ userId: professor.id })
+        .patch(`/lti/embeddable-question/${course.id}/0`)
+        .send({ questionText: 'Missing question' })
+        .expect(404);
+
+      expect(
+        await EmbeddableQuestionModel.count({ where: { courseId: course.id } }),
+      ).toBe(before);
+    });
   });
 
   describe('Outsider & Cross-Course Protection', () => {

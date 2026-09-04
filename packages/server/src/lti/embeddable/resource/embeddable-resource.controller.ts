@@ -54,7 +54,11 @@ export class EmbeddableResourceController {
             ltiSubject: auth.ltiSubject,
             userId: auth.userId,
           }
-        : { kind: 'lti', ltiIssuer: auth.ltiIssuer, ltiSubject: auth.ltiSubject },
+        : {
+            kind: 'lti',
+            ltiIssuer: auth.ltiIssuer,
+            ltiSubject: auth.ltiSubject,
+          },
     );
   }
 }
