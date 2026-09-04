@@ -101,9 +101,7 @@ export function validateGradePayload(
     reasons: rawReasons,
     needs_human_review,
   } = parsed.data;
-  const cleanedReasons = rawReasons.filter(
-    (reason, index) => rawReasons.indexOf(reason) === index,
-  );
+  const cleanedReasons = [...new Set(rawReasons)];
 
   if (profile.policyKind !== 'indg-reflection') {
     return {
@@ -114,28 +112,17 @@ export function validateGradePayload(
     };
   }
 
-  let needsReview = needs_human_review;
-  if (
+  const needsReview =
+    needs_human_review ||
     cleanedReasons.includes('off_topic') ||
     cleanedReasons.includes('sensitive_content') ||
-    cleanedReasons.includes('terminology_review')
-  ) {
-    needsReview = true;
-  }
+    cleanedReasons.includes('terminology_review');
 
-  if (
-    cleanedReasons.includes('meets_requirements') &&
-    cleanedReasons.length > 1
-  ) {
-    throw new Error(
-      'meets_requirements cannot be combined with another reason',
-    );
-  }
-  if (
-    cleanedReasons.includes('proofreading_note') &&
-    cleanedReasons.length > 1
-  ) {
-    throw new Error('proofreading_note cannot be combined with another reason');
+  const fullMarkReason = [...FULL_MARK_REASONS].find((reason) =>
+    cleanedReasons.includes(reason),
+  );
+  if (fullMarkReason && cleanedReasons.length > 1) {
+    throw new Error(`${fullMarkReason} cannot be combined with another reason`);
   }
 
   const hasDeductions = cleanedReasons.some((r) => DEDUCTION_REASONS.has(r));
@@ -203,16 +190,13 @@ export function postProcessFeedback(
     return validated;
   }
 
-  let finalScore = validated.score;
-  const reasons = [...validated.reasons];
-  if (finalScore > 1) finalScore = 1;
-  if (!reasons.includes('too_short')) {
-    const meetsIdx = reasons.indexOf('meets_requirements');
-    if (meetsIdx !== -1) reasons.splice(meetsIdx, 1);
-    const proofIdx = reasons.indexOf('proofreading_note');
-    if (proofIdx !== -1) reasons.splice(proofIdx, 1);
-    reasons.unshift('too_short');
-  }
+  const finalScore = Math.min(validated.score, 1);
+  const reasons = validated.reasons.includes('too_short')
+    ? [...validated.reasons]
+    : [
+        'too_short',
+        ...validated.reasons.filter((reason) => !FULL_MARK_REASONS.has(reason)),
+      ];
   const finalComment = `${TOO_SHORT_COMMENT}\n\n${validated.comment}`
     .trim()
     .slice(0, 15000);
