@@ -1,4 +1,8 @@
-import { INDIGENOUS_REASON_CODES, type GradingProfile } from '@koh/common';
+import {
+  INDIGENOUS_REASON_CODES,
+  type EmbeddableQuestionFeedback,
+  type GradingProfile,
+} from '@koh/common';
 import { z } from 'zod';
 import { MechanicalFacts } from './deterministic-checks';
 
@@ -79,12 +83,10 @@ const DEDUCTION_REASONS: ReadonlySet<string> = new Set<string>(
 const TOO_SHORT_COMMENT =
   'This answer does not meet the sentence requirements noted in the question.';
 
-export interface ValidatedGradePayload {
-  score: number;
-  comment: string;
-  reasons: string[];
-  needsHumanReview: boolean;
-}
+export type ValidatedGradePayload = Omit<
+  EmbeddableQuestionFeedback,
+  'maxScore'
+>;
 
 export function validateGradePayload(
   raw: unknown,

@@ -587,15 +587,6 @@ export interface EmbeddableQuestionFeedback {
   maxScore: number
 }
 
-export interface GradingProfile {
-  id: number
-  courseId: number
-  policyKind: GradingPolicyKind
-  systemPrompt: string
-  allowedScores: number[]
-  reasonCodes: string[]
-}
-
 export class UpsertGradingProfileParams {
   @IsIn([...GRADING_POLICY_KINDS])
   policyKind!: GradingPolicyKind
@@ -625,16 +616,21 @@ export class UpsertGradingProfileParams {
   reasonCodes!: string[]
 }
 
+export type GradingProfile = UpsertGradingProfileParams & {
+  id: number
+  courseId: number
+}
+
 export interface EmbeddableQuestion {
   id: number
-  name?: string | null
+  name: string | null
   createdAt: string
   courseId: number
   questionText: string
   criteriaText: string
-  instructions?: string | null
-  minSentences?: number
-  maxSentences?: number
+  instructions: string | null
+  minSentences: number
+  maxSentences: number
 }
 
 @ValidatorConstraint({ name: 'validSentenceBounds', async: false })
@@ -655,7 +651,7 @@ export class ValidSentenceBoundsConstraint implements ValidatorConstraintInterfa
     return true
   }
 
-  defaultMessage(_args: ValidationArguments) {
+  defaultMessage() {
     return 'minSentences cannot be greater than maxSentences.'
   }
 }
