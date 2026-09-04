@@ -32,6 +32,10 @@ import { OrganizationCourseModel } from '../organization/organization-course.ent
 export const HELPME_QUESTION_ID_PARAM = 'helpme_question_id';
 export const LTI_MEMBERSHIP_LEARNER_ROLE =
   'http://purl.imsglobal.org/vocab/lis/v2/membership#Learner';
+const LTI_MEMBERSHIP_STAFF_ROLES = [
+  'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
+  'http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant',
+];
 
 @Injectable()
 export class LtiService {
@@ -397,9 +401,14 @@ export class LtiService {
   async resolveQuestionLaunch(
     token: IdToken,
   ): Promise<{ userId: number; courseId: number; questionId: number }> {
-    if (!token.platformContext?.roles?.includes(LTI_MEMBERSHIP_LEARNER_ROLE)) {
+    const roles = token.platformContext?.roles;
+    const isLearner = roles?.includes(LTI_MEMBERSHIP_LEARNER_ROLE);
+    const isStaff = roles?.some((role) =>
+      LTI_MEMBERSHIP_STAFF_ROLES.includes(role),
+    );
+    if (!isLearner && !isStaff) {
       throw new UnauthorizedException(
-        'LTI launch requires standard Learner role',
+        'LTI launch requires a standard Learner, Instructor, or TeachingAssistant role',
       );
     }
 
@@ -439,6 +448,14 @@ export class LtiService {
       throw new NotFoundException(
         'Question not found in the mapped HelpMe course',
       );
+    }
+
+    if (!isLearner) {
+      return {
+        userId: await this.authorizeExistingStaff(token, courseId),
+        courseId,
+        questionId,
+      };
     }
 
     const orgCourse = await OrganizationCourseModel.findOne({
@@ -538,6 +555,40 @@ export class LtiService {
     };
   }
 
+  private async authorizeExistingStaff(
+    token: IdToken,
+    courseId: number,
+  ): Promise<number> {
+    const identity = await UserLtiIdentityModel.findOne({
+      where: {
+        issuer: token.iss,
+        ltiUserId: token.user,
+      },
+    });
+    if (!identity) {
+      throw new ForbiddenException(
+        'No HelpMe account is linked to this Canvas user',
+      );
+    }
+
+    const enrollment = await UserCourseModel.findOne({
+      where: {
+        userId: identity.userId,
+        courseId,
+      },
+    });
+    if (
+      !enrollment ||
+      (enrollment.role !== Role.PROFESSOR && enrollment.role !== Role.TA)
+    ) {
+      throw new ForbiddenException(
+        'LTI instructor launch requires a Professor or TA enrollment in the mapped course',
+      );
+    }
+
+    return identity.userId;
+  }
+
   /**
    * Authorizes a verified Deep Linking launch for the question picker.
    * Instructors are never provisioned or elevated: the HelpMe user and the
@@ -586,33 +637,7 @@ export class LtiService {
     }
     const courseId = lmsIntegration.courseId;
 
-    const identity = await UserLtiIdentityModel.findOne({
-      where: {
-        issuer: token.iss,
-        ltiUserId: token.user,
-      },
-    });
-    if (!identity) {
-      throw new ForbiddenException(
-        'No HelpMe account is linked to this Canvas user',
-      );
-    }
-    const userId = identity.userId;
-
-    const enrollment = await UserCourseModel.findOne({
-      where: {
-        userId,
-        courseId,
-      },
-    });
-    if (
-      !enrollment ||
-      (enrollment.role !== Role.PROFESSOR && enrollment.role !== Role.TA)
-    ) {
-      throw new ForbiddenException(
-        'Deep Linking requires a Professor or TA enrollment in the mapped course',
-      );
-    }
+    const userId = await this.authorizeExistingStaff(token, courseId);
 
     return { userId, courseId };
   }

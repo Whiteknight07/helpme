@@ -726,6 +726,53 @@ describe('LtiService', () => {
       expect(await UserCourseModel.count()).toBe(enrollmentCountAfterFirst);
     });
 
+    it.each([
+      [
+        'instructor',
+        'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
+        Role.PROFESSOR,
+      ],
+      [
+        'teaching assistant',
+        'http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant',
+        Role.TA,
+      ],
+    ])(
+      'allows an existing %s to preview a linked question without provisioning',
+      async (_, membershipRole, courseRole) => {
+        const user = await UserFactory.create({ email: 'staff@example.com' });
+        await UserLtiIdentityFactory.create({
+          user,
+          issuer: 'http://canvas.docker/',
+          ltiUserId: 'staff-lti-sub',
+        });
+        await UserCourseFactory.create({ user, course, role: courseRole });
+        const userCount = await UserModel.count();
+        const enrollmentCount = await UserCourseModel.count();
+
+        await expect(
+          service.resolveQuestionLaunch(
+            createLaunchToken({
+              user: 'staff-lti-sub',
+              platformContext: {
+                roles: [membershipRole],
+                custom: {
+                  canvas_course_id: canvasCourseId,
+                  helpme_question_id: String(question.id),
+                },
+              },
+            }),
+          ),
+        ).resolves.toEqual({
+          userId: user.id,
+          courseId: course.id,
+          questionId: question.id,
+        });
+        expect(await UserModel.count()).toBe(userCount);
+        expect(await UserCourseModel.count()).toBe(enrollmentCount);
+      },
+    );
+
     it('rejects unmapped course without provisioning', async () => {
       const token = createLaunchToken({
         platformContext: {
@@ -796,17 +843,9 @@ describe('LtiService', () => {
     });
 
     it.each([
-      [
-        'instructor role',
-        ['http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor'],
-      ],
-      [
-        'ta role',
-        ['http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant'],
-      ],
       ['empty roles array', []],
       ['undefined roles', undefined],
-    ])('rejects non-learner with %s without provisioning', async (_, roles) => {
+    ])('rejects unsupported %s without provisioning', async (_, roles) => {
       const token = createLaunchToken({
         platformContext: {
           roles,

@@ -14,7 +14,9 @@ import {
   lmsCourseIntFactory,
   OrganizationCourseFactory,
   OrganizationFactory,
+  UserCourseFactory,
   UserFactory,
+  UserLtiIdentityFactory,
 } from './util/factories';
 import express from 'express';
 import {
@@ -22,6 +24,7 @@ import {
   CreateLtiPlatform,
   ERROR_MESSAGES,
   LtiPlatform,
+  Role,
   UpdateLtiPlatform,
   UserRole,
 } from '@koh/common';
@@ -280,12 +283,39 @@ describe('LtiController', () => {
         expect(countAfter).toEqual(countBefore);
       });
 
-      it('should not provision an instructor question launch', async () => {
+      it('should launch an existing instructor preview without provisioning', async () => {
+        const { launchCourse, question } = await setupQuestionLaunch([
+          'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
+        ]);
+        const instructor = await UserFactory.create({
+          email: 'instructor@example.edu',
+        });
+        await UserLtiIdentityFactory.create({
+          user: instructor,
+          issuer: 'https://canvas.example.edu',
+          ltiUserId: 'canvas-learner-1',
+        });
+        await UserCourseFactory.create({
+          user: instructor,
+          course: launchCourse,
+          role: Role.PROFESSOR,
+        });
+        const countBefore = await UserModel.count();
+
+        const response = await supertest().get('/lti').expect(302);
+        expect(response.headers.location).toEqual(
+          `/lti/embeddable/${launchCourse.id}/question/${question.id}`,
+        );
+        expect(await UserModel.count()).toEqual(countBefore);
+      });
+
+      it('should not provision an unknown instructor question launch', async () => {
         await setupQuestionLaunch([
           'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
         ]);
         const countBefore = await UserModel.count();
-        await supertest().get('/lti').expect(401);
+
+        await supertest().get('/lti').expect(403);
         expect(await UserModel.count()).toEqual(countBefore);
       });
     });
