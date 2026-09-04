@@ -10,12 +10,18 @@ import { getErrorMessage } from '@/app/utils/generalUtils'
 
 const { Paragraph, Text } = Typography
 
+type QuestionsState =
+  | { status: 'loading' }
+  | { status: 'ready'; questions: EmbeddableQuestion[] }
+  | { status: 'error'; message: string }
+
 export default function DeepLinkPage(): ReactElement {
   const searchParams = useSearchParams()
   const ltik = searchParams.get('ltik') ?? ''
-  const [questions, setQuestions] = useState<EmbeddableQuestion[]>()
+  const [questionsState, setQuestionsState] = useState<QuestionsState>({
+    status: 'loading',
+  })
   const [selectedId, setSelectedId] = useState<number>()
-  const [error, setError] = useState<string>()
 
   useEffect(() => {
     if (!ltik) {
@@ -23,8 +29,13 @@ export default function DeepLinkPage(): ReactElement {
     }
     API.lti.deepLink
       .getQuestions(ltik)
-      .then(setQuestions)
-      .catch((err: unknown) => setError(String(getErrorMessage(err))))
+      .then((questions) => setQuestionsState({ status: 'ready', questions }))
+      .catch((err: unknown) =>
+        setQuestionsState({
+          status: 'error',
+          message: String(getErrorMessage(err)),
+        }),
+      )
   }, [ltik])
 
   if (!ltik) {
@@ -40,22 +51,24 @@ export default function DeepLinkPage(): ReactElement {
     )
   }
 
-  if (error) {
+  if (questionsState.status === 'error') {
     return (
       <div className="flex w-full justify-center px-2 py-6">
         <Alert
           type="error"
           message="Could not open the question picker"
-          description={error}
+          description={questionsState.message}
           showIcon
         />
       </div>
     )
   }
 
-  if (!questions) {
+  if (questionsState.status === 'loading') {
     return <CenteredSpinner tip="Loading questions..." />
   }
+
+  const { questions } = questionsState
 
   if (questions.length === 0) {
     return (
