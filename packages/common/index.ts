@@ -644,7 +644,9 @@ export class ValidAvailabilityDatesConstraint implements ValidatorConstraintInte
 }
 
 export class UpsertEmbeddableQuestionParams {
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() || null : value,
+  )
   @IsString()
   @IsOptional()
   @MaxLength(255)
@@ -656,7 +658,9 @@ export class UpsertEmbeddableQuestionParams {
   @MaxLength(15000)
   questionText!: string
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() || null : value,
+  )
   @IsString()
   @IsOptional()
   @MaxLength(15000)
@@ -674,7 +678,9 @@ export class UpsertEmbeddableQuestionParams {
   @Validate(ValidAvailabilityDatesConstraint)
   availableUntil?: Date | null
 
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() || null : value,
+  )
   @IsString()
   @IsOptional()
   @MaxLength(15000)

@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -43,11 +42,6 @@ export class EmbeddableQuestionService {
     courseId: number,
     userId: number,
   ): Promise<EmbeddableQuestionFeedbackModel> {
-    const trimmed = submission?.trim();
-    if (!trimmed) {
-      throw new BadRequestException('Input is required');
-    }
-
     const question = await EmbeddableQuestionModel.findOne({
       where: {
         id: questionId,
@@ -76,14 +70,14 @@ export class EmbeddableQuestionService {
     }
 
     const facts = computeMechanicalFacts(
-      trimmed,
+      submission,
       question.minSentences ?? 3,
       question.maxSentences ?? 5,
     );
 
     const userPrompt = buildUserPrompt(
       question.questionText,
-      trimmed,
+      submission,
       facts,
       question.instructions,
     );
@@ -119,7 +113,7 @@ export class EmbeddableQuestionService {
       courseId,
       questionId,
       userId,
-      submission: trimmed,
+      submission,
       aiFeedback: postProcessed.comment,
       aiGrade: postProcessed.score,
       reasons: postProcessed.reasons,
@@ -164,54 +158,22 @@ export class EmbeddableQuestionService {
     params: UpsertEmbeddableQuestionParams,
     questionId?: number,
   ): Promise<EmbeddableQuestionModel> {
-    const trimmedName =
-      typeof params.name === 'string' && params.name.trim().length > 0
-        ? params.name.trim()
-        : null;
-    const trimmedQuestionText = params.questionText?.trim();
-    const finalCriteriaText = params.criteriaText?.trim() || DEFAULT_RUBRIC;
-    const trimmedInstructions =
-      typeof params.instructions === 'string' &&
-      params.instructions.trim().length > 0
-        ? params.instructions.trim()
-        : null;
-
-    if (!trimmedQuestionText) {
-      throw new BadRequestException('Question text is required');
-    }
-
-    const availableFrom = params.availableFrom
-      ? new Date(params.availableFrom)
-      : null;
-    const availableUntil = params.availableUntil
-      ? new Date(params.availableUntil)
-      : null;
-
-    if (
-      availableFrom &&
-      availableUntil &&
-      availableUntil.getTime() < availableFrom.getTime()
-    ) {
-      throw new BadRequestException(
-        'availableUntil cannot be before availableFrom',
-      );
-    }
-
+    const name = params.name ?? null;
+    const questionText = params.questionText;
+    const criteriaText = params.criteriaText ?? DEFAULT_RUBRIC;
+    const instructions = params.instructions ?? null;
+    const availableFrom = params.availableFrom ?? null;
+    const availableUntil = params.availableUntil ?? null;
     const minSentences = params.minSentences ?? 3;
     const maxSentences = params.maxSentences ?? 5;
-    if (minSentences > maxSentences) {
-      throw new BadRequestException(
-        'minSentences cannot be greater than maxSentences',
-      );
-    }
 
     if (questionId) {
       const existing = await this.findOne(courseId, questionId);
 
-      existing.name = trimmedName;
-      existing.questionText = trimmedQuestionText;
-      existing.criteriaText = finalCriteriaText;
-      existing.instructions = trimmedInstructions;
+      existing.name = name;
+      existing.questionText = questionText;
+      existing.criteriaText = criteriaText;
+      existing.instructions = instructions;
       existing.availableFrom = availableFrom;
       existing.availableUntil = availableUntil;
       existing.minSentences = minSentences;
@@ -226,10 +188,10 @@ export class EmbeddableQuestionService {
 
     const question = EmbeddableQuestionModel.create({
       courseId,
-      name: trimmedName || `Question ${count + 1}`,
-      questionText: trimmedQuestionText,
-      criteriaText: finalCriteriaText,
-      instructions: trimmedInstructions,
+      name: name || `Question ${count + 1}`,
+      questionText,
+      criteriaText,
+      instructions,
       availableFrom,
       availableUntil,
       minSentences,
