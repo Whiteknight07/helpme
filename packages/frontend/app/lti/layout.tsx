@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState, type ReactNode } from 'react'
 import type { LayoutProps } from 'antd'
-import { usePathname } from 'next/navigation'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
 import ThirdPartyCookiesWarning from '@/app/lti/components/ThirdPartyCookiesWarning'
 
@@ -32,12 +31,9 @@ export function CookieWrapper({ children }: { children: ReactNode }) {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const pathname = usePathname()
-  const isDeepLinkRoute = pathname.startsWith('/lti/deep-link')
-
   return (
     <Suspense fallback={<CenteredSpinner tip={'Loading...'} />}>
-      {isDeepLinkRoute ? children : <CookieWrapper>{children}</CookieWrapper>}
+      <CookieWrapper>{children}</CookieWrapper>
     </Suspense>
   )
 }

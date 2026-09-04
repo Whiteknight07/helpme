@@ -200,7 +200,7 @@ export default class LtiMiddleware {
         cookies: LtiService.cookieOptions,
         tokenMaxAge: 30,
         debug: !isProd(),
-        cors: true,
+        cors: false,
         prefix: this.prefix,
       },
     );
