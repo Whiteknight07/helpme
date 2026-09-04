@@ -234,10 +234,6 @@ export class EmbeddableQuestionService {
     params: UpsertEmbeddableQuestionParams,
     questionId?: number,
   ): Promise<EmbeddableQuestionModel> {
-    const name = params.name ?? null;
-    const questionText = params.questionText;
-    const criteriaText = params.criteriaText ?? '';
-    const instructions = params.instructions ?? null;
     const minSentences = params.minSentences ?? 3;
     const maxSentences = params.maxSentences ?? 5;
 
@@ -247,25 +243,16 @@ export class EmbeddableQuestionService {
       );
     }
 
-    if (questionId !== undefined) {
-      const existing = await this.findOne(courseId, questionId);
+    const question =
+      questionId === undefined
+        ? EmbeddableQuestionModel.create({ courseId })
+        : await this.findOne(courseId, questionId);
 
-      existing.name = name;
-      existing.questionText = questionText;
-      existing.criteriaText = criteriaText;
-      existing.instructions = instructions;
-      existing.minSentences = minSentences;
-      existing.maxSentences = maxSentences;
-
-      return existing.save();
-    }
-
-    const question = EmbeddableQuestionModel.create({
-      courseId,
-      name,
-      questionText,
-      criteriaText,
-      instructions,
+    EmbeddableQuestionModel.merge(question, {
+      name: params.name ?? null,
+      questionText: params.questionText,
+      criteriaText: params.criteriaText ?? '',
+      instructions: params.instructions ?? null,
       minSentences,
       maxSentences,
     });
