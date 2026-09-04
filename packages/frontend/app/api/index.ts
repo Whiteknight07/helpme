@@ -39,8 +39,10 @@ import {
   DesktopNotifPartial,
   EditCourseInfoParams,
   EmbeddableQuestion,
-  IndigenousFeedback,
+  EmbeddableQuestionFeedback,
+  GradingProfile,
   UpsertEmbeddableQuestionParams,
+  UpsertGradingProfileParams,
   AssignmentFeedbackExtractTextResponse,
   AssignmentFeedbackRequest,
   AssignmentFeedbackResponse,
@@ -1871,7 +1873,7 @@ export class APIClient {
         courseId: number,
         questionId: number,
         responseText: string,
-      ): Promise<IndigenousFeedback> =>
+      ): Promise<EmbeddableQuestionFeedback> =>
         this.req(
           'POST',
           `/api/v1/lti/embeddable-question/${courseId}/${questionId}/feedback`,
@@ -1893,6 +1895,21 @@ export class APIClient {
         this.req(
           'DELETE',
           `/api/v1/lti/embeddable-question/${courseId}/${questionId}`,
+        ),
+      getProfile: async (courseId: number): Promise<GradingProfile> =>
+        this.req(
+          'GET',
+          `/api/v1/lti/embeddable-question/${courseId}/grading-profile`,
+        ),
+      updateProfile: async (
+        courseId: number,
+        body: UpsertGradingProfileParams,
+      ): Promise<GradingProfile> =>
+        this.req(
+          'PATCH',
+          `/api/v1/lti/embeddable-question/${courseId}/grading-profile`,
+          undefined,
+          body,
         ),
     },
   }

@@ -1,5 +1,8 @@
 import { Exclude, plainToInstance, Transform, Type } from 'class-transformer'
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDate,
@@ -513,11 +516,91 @@ export type IndigenousReason = (typeof INDIGENOUS_REASON_CODES)[number]
 export const ALLOWED_INDIGENOUS_SCORES = [0, 0.5, 1, 1.5, 2] as const
 export type IndigenousScore = (typeof ALLOWED_INDIGENOUS_SCORES)[number]
 
-export interface IndigenousFeedback {
-  score: IndigenousScore
+export const GRADING_POLICY_KINDS = ['generic', 'indg-reflection'] as const
+
+export type GradingPolicyKind = (typeof GRADING_POLICY_KINDS)[number]
+
+export const INDG_DEFAULT_SYSTEM_PROMPT = `You are grading one short reflective answer from an Indigenous Studies self-assessment.
+
+You see exactly one question and one student answer. You have no memory of other students, other questions, or this student's earlier submissions.
+
+Mechanical facts in the user message (\`sentence_count\`, \`required_minimum\`, \`required_maximum\`, \`below_minimum\`) were computed by code. Trust them; do not recount sentences yourself.`
+
+export const GENERIC_DEFAULT_SYSTEM_PROMPT = `You are grading one short student answer.
+
+You see exactly one question and one student answer. Grade only against the rubric, instructions, and mechanical facts provided.
+
+Mechanical facts in the user message (\`sentence_count\`, \`required_minimum\`, \`required_maximum\`, \`below_minimum\`) were computed by code. Trust them; do not recount sentences yourself.`
+
+export const INDG_DEFAULT_ALLOWED_SCORES: number[] = [
+  ...ALLOWED_INDIGENOUS_SCORES,
+]
+export const INDG_DEFAULT_REASON_CODES: string[] = [...INDIGENOUS_REASON_CODES]
+
+export const GENERIC_DEFAULT_ALLOWED_SCORES: number[] = [0, 1, 2]
+export const GENERIC_DEFAULT_REASON_CODES: string[] = [
+  'meets_requirements',
+  'too_short',
+  'off_topic',
+  'unreadable',
+  'sensitive_content',
+]
+
+export interface EmbeddableQuestionFeedback {
+  score: number
   comment: string
-  reasons: IndigenousReason[]
+  reasons: string[]
   needsHumanReview: boolean
+  maxScore: number
+}
+
+export class GradingProfile {
+  @IsInt()
+  id!: number
+
+  @IsInt()
+  courseId!: number
+
+  @IsIn([...GRADING_POLICY_KINDS])
+  policyKind!: GradingPolicyKind
+
+  @IsString()
+  systemPrompt!: string
+
+  @IsNumber({}, { each: true })
+  allowedScores!: number[]
+
+  @IsString({ each: true })
+  reasonCodes!: string[]
+}
+
+export class UpsertGradingProfileParams {
+  @IsIn([...GRADING_POLICY_KINDS])
+  policyKind!: GradingPolicyKind
+
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(15000)
+  systemPrompt!: string
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  @IsNumber({}, { each: true })
+  @Min(0, { each: true })
+  @Max(100, { each: true })
+  @ArrayUnique()
+  allowedScores!: number[]
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  @MaxLength(64, { each: true })
+  @ArrayUnique()
+  reasonCodes!: string[]
 }
 
 export const DEFAULT_RUBRIC = `## How to decide

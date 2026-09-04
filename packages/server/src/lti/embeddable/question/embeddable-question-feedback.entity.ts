@@ -10,7 +10,6 @@ import {
 import { CourseModel } from '../../../course/course.entity';
 import { UserModel } from '../../../profile/user.entity';
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
-import { IndigenousReason, IndigenousScore } from '@koh/common';
 
 @Entity('embeddable_question_feedback_model')
 export class EmbeddableQuestionFeedbackModel extends BaseEntity {
@@ -48,10 +47,10 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
   aiFeedback: string;
 
   @Column({ type: 'double precision', nullable: false })
-  aiGrade: IndigenousScore;
+  aiGrade: number;
 
   @Column({ type: 'simple-array', nullable: false })
-  reasons: IndigenousReason[];
+  reasons: string[];
 
   @Column({ type: 'boolean', default: false })
   needsHumanReview: boolean;

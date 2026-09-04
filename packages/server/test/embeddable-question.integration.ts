@@ -6,10 +6,15 @@ import {
   UserCourseFactory,
   UserFactory,
 } from './util/factories';
-import { Role } from '@koh/common';
+import { DEFAULT_RUBRIC, Role } from '@koh/common';
+import {
+  INDG_DEFAULT_ALLOWED_SCORES,
+  INDG_DEFAULT_REASON_CODES,
+  INDG_DEFAULT_SYSTEM_PROMPT,
+} from '@koh/common';
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
-import { DEFAULT_RUBRIC } from '../src/lti/embeddable/question/indg-grading';
+import { EmbeddableGradingProfileModel } from '../src/lti/embeddable/question/grading-profile.entity';
 
 type QuestionOverrides = Partial<
   Pick<
@@ -38,8 +43,18 @@ describe('Embeddable Question Integration', () => {
     return { user, course };
   };
 
+  const ensureIndgProfile = async (courseId: number) =>
+    EmbeddableGradingProfileModel.create({
+      courseId,
+      policyKind: 'indg-reflection',
+      systemPrompt: INDG_DEFAULT_SYSTEM_PROMPT,
+      allowedScores: [...INDG_DEFAULT_ALLOWED_SCORES],
+      reasonCodes: [...INDG_DEFAULT_REASON_CODES],
+    }).save();
+
   const setupStudentQuestion = async (overrides: QuestionOverrides = {}) => {
     const { user: student, course } = await setupUserCourse(Role.STUDENT);
+    await ensureIndgProfile(course.id);
     const question = await EmbeddableQuestionModel.create({
       courseId: course.id,
       name: 'Q1',
@@ -212,6 +227,7 @@ describe('Embeddable Question Integration', () => {
       expect(res.body.score).toBe(2);
       expect(res.body.reasons).toEqual(['meets_requirements']);
       expect(res.body.needsHumanReview).toBe(false);
+      expect(res.body.maxScore).toBe(2);
 
       const savedCount = await EmbeddableQuestionFeedbackModel.count();
       expect(savedCount).toBe(1);
@@ -235,7 +251,7 @@ describe('Embeddable Question Integration', () => {
       const { student, course, question } = await setupStudentQuestion({
         name: 'INDG Reflection No Model',
         questionText: 'Reflect on the reading without model reported.',
-        criteriaText: DEFAULT_RUBRIC,
+        criteriaText: 'Clear and thoughtful reflection.',
       });
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
@@ -349,6 +365,120 @@ describe('Embeddable Question Integration', () => {
 
       const savedCount = await EmbeddableQuestionFeedbackModel.count();
       expect(savedCount).toBe(0);
+    });
+  });
+
+  describe('Grading Profile', () => {
+    it('leaves one profile row after concurrent first access', async () => {
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
+      const agent = supertest({ userId: professor.id });
+
+      const reads = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          agent
+            .get(`/lti/embeddable-question/${course.id}/grading-profile`)
+            .expect(200),
+        ),
+      );
+
+      expect(new Set(reads.map((res) => res.body.id)).size).toBe(1);
+      expect(
+        await EmbeddableGradingProfileModel.count({
+          where: { courseId: course.id },
+        }),
+      ).toBe(1);
+    });
+
+    it('rejects students from reading or updating the profile', async () => {
+      const { user: student, course } = await setupUserCourse(Role.STUDENT);
+
+      await supertest({ userId: student.id })
+        .get(`/lti/embeddable-question/${course.id}/grading-profile`)
+        .expect(403);
+      await supertest({ userId: student.id })
+        .patch(`/lti/embeddable-question/${course.id}/grading-profile`)
+        .send({
+          policyKind: 'generic',
+          systemPrompt: 'Student override attempt.',
+          allowedScores: [0, 1],
+          reasonCodes: ['meets_requirements'],
+        })
+        .expect(403);
+    });
+
+    it('rejects indg-reflection updates without the INDG scores and reasons', async () => {
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
+
+      await supertest({ userId: professor.id })
+        .patch(`/lti/embeddable-question/${course.id}/grading-profile`)
+        .send({
+          policyKind: 'indg-reflection',
+          systemPrompt: 'Custom INDG prompt.',
+          allowedScores: [0, 1, 2],
+          reasonCodes: [...INDG_DEFAULT_REASON_CODES],
+        })
+        .expect(400);
+
+      await supertest({ userId: professor.id })
+        .patch(`/lti/embeddable-question/${course.id}/grading-profile`)
+        .send({
+          policyKind: 'indg-reflection',
+          systemPrompt: 'Custom INDG prompt.',
+          allowedScores: [...INDG_DEFAULT_ALLOWED_SCORES],
+          reasonCodes: ['meets_requirements'],
+        })
+        .expect(400);
+    });
+
+    it('grades a generic-contract score once the profile allows it', async () => {
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
+      const student = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: student,
+        course,
+        role: Role.STUDENT,
+      });
+      const question = await EmbeddableQuestionModel.create({
+        courseId: course.id,
+        name: 'Q1',
+        questionText: 'Question text',
+        criteriaText: 'Criteria',
+        minSentences: 1,
+        maxSentences: 5,
+      }).save();
+
+      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
+        answer: {
+          score: 3,
+          comment: 'Excellent work.',
+          reasons: ['needs_review'],
+          needs_human_review: false,
+        },
+      });
+      const draft = 'A complete answer meeting every criterion.';
+
+      await supertest({ userId: student.id })
+        .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
+        .send({ responseText: draft })
+        .expect(500);
+
+      await supertest({ userId: professor.id })
+        .patch(`/lti/embeddable-question/${course.id}/grading-profile`)
+        .send({
+          policyKind: 'generic',
+          systemPrompt: 'Grade against the criteria only.',
+          allowedScores: [0, 1, 2, 3],
+          reasonCodes: ['meets_requirements', 'needs_review'],
+        })
+        .expect(200);
+
+      const res = await supertest({ userId: student.id })
+        .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
+        .send({ responseText: draft })
+        .expect(201);
+
+      expect(res.body.score).toBe(3);
+      expect(res.body.maxScore).toBe(3);
     });
   });
 });

@@ -23,6 +23,7 @@ import { EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 import EmbeddableQuestionForm from './EmbeddableQuestionForm'
+import GradingProfileForm from './GradingProfileForm'
 
 interface EmbeddableQuestionsPageProps {
   params: Promise<{ cid: string }>
@@ -221,6 +222,7 @@ export default function EmbeddableQuestionsPage(
         </Button>
       }
     >
+      <GradingProfileForm courseId={courseId} />
       <p className="mb-4 text-gray-600">
         Configure questions that can be embedded into Canvas quizzes or pages as
         an iframe (`/lti/embeddable/:courseId/question/:questionId`).

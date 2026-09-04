@@ -16,12 +16,15 @@ import { CourseRolesGuard } from '../../../guards/course-roles.guard';
 import { Roles } from '../../../decorators/roles.decorator';
 import {
   EmbeddableQuestionFeedbackParams,
-  IndigenousFeedback,
+  EmbeddableQuestionFeedback,
+  GradingProfile,
   Role,
   UpsertEmbeddableQuestionParams,
+  UpsertGradingProfileParams,
 } from '@koh/common';
 import { EmbeddableQuestionService } from './embeddable-question.service';
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
+import { EmbeddableGradingProfileModel } from './grading-profile.entity';
 import { UserId } from '../../../decorators/user.decorator';
 
 @Controller('lti/embeddable-question')
@@ -31,6 +34,31 @@ export class EmbeddableQuestionController {
   constructor(
     private readonly embeddableQuestionService: EmbeddableQuestionService,
   ) {}
+
+  /**
+   * Returns the course's single grading profile. TA and Professor only.
+   * Declared before the `:questionId` routes so `grading-profile` is never
+   * parsed as a question ID.
+   */
+  @Get(':courseId/grading-profile')
+  @Roles(Role.TA, Role.PROFESSOR)
+  async getProfile(
+    @Param('courseId', ParseIntPipe) courseId: number,
+  ): Promise<EmbeddableGradingProfileModel> {
+    return this.embeddableQuestionService.getProfile(courseId);
+  }
+
+  /**
+   * Updates the course's single grading profile. TA and Professor only.
+   */
+  @Patch(':courseId/grading-profile')
+  @Roles(Role.TA, Role.PROFESSOR)
+  async updateProfile(
+    @Param('courseId', ParseIntPipe) courseId: number,
+    @Body() body: UpsertGradingProfileParams,
+  ): Promise<GradingProfile> {
+    return this.embeddableQuestionService.updateProfile(courseId, body);
+  }
 
   /**
    * Lists all embeddable questions for a course. TA and Professor only.
@@ -65,19 +93,21 @@ export class EmbeddableQuestionController {
     @Param('questionId', ParseIntPipe) questionId: number,
     @Body() body: EmbeddableQuestionFeedbackParams,
     @UserId() userId: number,
-  ): Promise<IndigenousFeedback> {
+  ): Promise<EmbeddableQuestionFeedback> {
     const feedback = await this.embeddableQuestionService.getFeedback(
       body.responseText,
       questionId,
       courseId,
       userId,
     );
+    const profile = await this.embeddableQuestionService.getProfile(courseId);
 
     return {
       score: feedback.aiGrade,
       comment: feedback.aiFeedback,
       reasons: feedback.reasons,
       needsHumanReview: feedback.needsHumanReview,
+      maxScore: Math.max(...profile.allowedScores),
     };
   }
 

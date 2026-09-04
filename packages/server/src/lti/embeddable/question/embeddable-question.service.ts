@@ -1,11 +1,23 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
-import { ERROR_MESSAGES, UpsertEmbeddableQuestionParams } from '@koh/common';
+import { EmbeddableGradingProfileModel } from './grading-profile.entity';
+import {
+  DEFAULT_RUBRIC,
+  ERROR_MESSAGES,
+  GENERIC_DEFAULT_ALLOWED_SCORES,
+  GENERIC_DEFAULT_REASON_CODES,
+  GENERIC_DEFAULT_SYSTEM_PROMPT,
+  INDG_DEFAULT_ALLOWED_SCORES,
+  INDG_DEFAULT_REASON_CODES,
+  UpsertEmbeddableQuestionParams,
+  UpsertGradingProfileParams,
+} from '@koh/common';
 import { EmbeddableQuestionFeedbackModel } from './embeddable-question-feedback.entity';
 import {
   ChatbotApiService,
@@ -15,11 +27,19 @@ import { computeMechanicalFacts } from './deterministic-checks';
 import {
   buildSystemPrompt,
   buildUserPrompt,
-  DEFAULT_RUBRIC,
   postProcessFeedback,
   validateGradePayload,
   ValidatedGradePayload,
-} from './indg-grading';
+} from './grading';
+
+function matchesIndgContract(scores: number[], reasons: string[]): boolean {
+  return (
+    scores.length === INDG_DEFAULT_ALLOWED_SCORES.length &&
+    reasons.length === INDG_DEFAULT_REASON_CODES.length &&
+    scores.every((score) => INDG_DEFAULT_ALLOWED_SCORES.includes(score)) &&
+    reasons.every((reason) => INDG_DEFAULT_REASON_CODES.includes(reason))
+  );
+}
 
 @Injectable()
 export class EmbeddableQuestionService {
@@ -28,7 +48,8 @@ export class EmbeddableQuestionService {
   constructor(private readonly chatbotApiService: ChatbotApiService) {}
 
   /**
-   * Evaluates student draft against INDG criteria and returns/saves validated feedback.
+   * Evaluates student draft against the course grading profile and
+   * returns/saves validated feedback.
    *
    * @param submission The student's draft response
    * @param questionId The question ID
@@ -42,6 +63,7 @@ export class EmbeddableQuestionService {
     userId: number,
   ): Promise<EmbeddableQuestionFeedbackModel> {
     const question = await this.findOne(courseId, questionId);
+    const profile = await this.getProfile(courseId);
 
     const facts = computeMechanicalFacts(
       submission,
@@ -54,6 +76,7 @@ export class EmbeddableQuestionService {
       submission,
       facts,
       question.instructions,
+      profile,
     );
 
     let chatbotResult: FeedbackQueryResult;
@@ -62,7 +85,7 @@ export class EmbeddableQuestionService {
         userPrompt,
         courseId,
         'feedback',
-        { systemPrompt: buildSystemPrompt(question.criteriaText) },
+        { systemPrompt: buildSystemPrompt(profile, question.criteriaText) },
       );
     } catch (err) {
       this.logger.error(`Chatbot service call failed: ${err}`);
@@ -73,15 +96,15 @@ export class EmbeddableQuestionService {
 
     let validatedPayload: ValidatedGradePayload;
     try {
-      validatedPayload = validateGradePayload(chatbotResult.answer);
+      validatedPayload = validateGradePayload(chatbotResult.answer, profile);
     } catch {
-      this.logger.error('INDG semantic validation failed');
+      this.logger.error('Grading profile validation failed');
       throw new InternalServerErrorException(
         'Model output was not valid feedback JSON.',
       );
     }
 
-    const postProcessed = postProcessFeedback(validatedPayload, facts);
+    const postProcessed = postProcessFeedback(validatedPayload, facts, profile);
 
     const feedback = EmbeddableQuestionFeedbackModel.create({
       courseId,
@@ -96,6 +119,58 @@ export class EmbeddableQuestionService {
     });
 
     return feedback.save();
+  }
+
+  /**
+   * Returns the course's grading profile, creating the generic default on
+   * first use. The insert ignores conflicts so concurrent first calls still
+   * leave exactly one row per course.
+   */
+  async getProfile(courseId: number): Promise<EmbeddableGradingProfileModel> {
+    await EmbeddableGradingProfileModel.createQueryBuilder()
+      .insert()
+      .into(EmbeddableGradingProfileModel)
+      .values({
+        courseId,
+        policyKind: 'generic',
+        systemPrompt: GENERIC_DEFAULT_SYSTEM_PROMPT,
+        allowedScores: [...GENERIC_DEFAULT_ALLOWED_SCORES],
+        reasonCodes: [...GENERIC_DEFAULT_REASON_CODES],
+      })
+      .orIgnore()
+      .execute();
+    const profile = await EmbeddableGradingProfileModel.findOne({
+      where: { courseId },
+    });
+    if (!profile) {
+      throw new InternalServerErrorException('Failed to load grading profile');
+    }
+    return profile;
+  }
+
+  /**
+   * Updates the course's single grading profile. The INDG policy is only
+   * valid with the INDG scores and reason codes; its system prompt stays
+   * editable.
+   */
+  async updateProfile(
+    courseId: number,
+    params: UpsertGradingProfileParams,
+  ): Promise<EmbeddableGradingProfileModel> {
+    if (
+      params.policyKind === 'indg-reflection' &&
+      !matchesIndgContract(params.allowedScores, params.reasonCodes)
+    ) {
+      throw new BadRequestException(
+        'indg-reflection profiles must use the INDG scores and reason codes',
+      );
+    }
+    const profile = await this.getProfile(courseId);
+    profile.policyKind = params.policyKind;
+    profile.systemPrompt = params.systemPrompt;
+    profile.allowedScores = [...params.allowedScores];
+    profile.reasonCodes = [...params.reasonCodes];
+    return profile.save();
   }
 
   /**

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Alert, Button, Input, message } from 'antd'
 import axios from 'axios'
-import { type IndigenousFeedback } from '@koh/common'
+import { type EmbeddableQuestionFeedback } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -21,7 +21,9 @@ export default function EmbeddableQuestionFeedback({
   questionText,
 }: EmbeddableQuestionFeedbackProps) {
   const [inputText, setInputText] = useState('')
-  const [feedback, setFeedback] = useState<IndigenousFeedback | null>(null)
+  const [feedback, setFeedback] = useState<EmbeddableQuestionFeedback | null>(
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -108,7 +110,7 @@ export default function EmbeddableQuestionFeedback({
             {feedback.comment}
           </div>
           <p className="text-sm font-medium text-zinc-700">
-            {`Provisional score: ${feedback.score}/2`}
+            {`Provisional score: ${feedback.score}/${feedback.maxScore}`}
           </p>
           <p className="text-xs text-zinc-500">
             This is feedback only, not your final grade. Submit the full quiz to
