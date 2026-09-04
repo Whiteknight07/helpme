@@ -1,4 +1,4 @@
-import { GradingProfile, INDIGENOUS_REASON_CODES } from '@koh/common';
+import { INDIGENOUS_REASON_CODES, type GradingProfile } from '@koh/common';
 import { z } from 'zod';
 import { MechanicalFacts } from './deterministic-checks';
 
@@ -67,16 +67,16 @@ export function buildSystemPrompt(
     .join('\n\n');
 }
 
-export const FULL_MARK_REASONS: ReadonlySet<string> = new Set<string>([
+const FULL_MARK_REASONS: ReadonlySet<string> = new Set<string>([
   'meets_requirements',
   'proofreading_note',
 ]);
 
-export const DEDUCTION_REASONS: ReadonlySet<string> = new Set<string>(
+const DEDUCTION_REASONS: ReadonlySet<string> = new Set<string>(
   INDIGENOUS_REASON_CODES.filter((code) => !FULL_MARK_REASONS.has(code)),
 );
 
-export const TOO_SHORT_COMMENT =
+const TOO_SHORT_COMMENT =
   'This answer does not meet the sentence requirements noted in the question.';
 
 export interface ValidatedGradePayload {
@@ -190,27 +190,17 @@ export function buildUserPrompt(
   return lines.filter((line) => line.length > 0).join('\n\n');
 }
 
-export type PostProcessedFeedback = ValidatedGradePayload;
-
 export function postProcessFeedback(
   validated: ValidatedGradePayload,
   facts: MechanicalFacts,
   profile: GradingContract,
-): PostProcessedFeedback {
+): ValidatedGradePayload {
   if (profile.policyKind !== 'indg-reflection') {
     return validated;
   }
 
   if (!facts.belowMinimum || !profile.reasonCodes.includes('too_short')) {
-    return {
-      ...validated,
-      reasons: [...validated.reasons],
-      needsHumanReview:
-        validated.needsHumanReview ||
-        validated.reasons.includes('off_topic') ||
-        validated.reasons.includes('sensitive_content') ||
-        validated.reasons.includes('terminology_review'),
-    };
+    return validated;
   }
 
   let finalScore = validated.score;
@@ -231,10 +221,6 @@ export function postProcessFeedback(
     score: finalScore,
     comment: finalComment,
     reasons,
-    needsHumanReview:
-      validated.needsHumanReview ||
-      reasons.includes('off_topic') ||
-      reasons.includes('sensitive_content') ||
-      reasons.includes('terminology_review'),
+    needsHumanReview: validated.needsHumanReview,
   };
 }

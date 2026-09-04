@@ -3,7 +3,7 @@ import {
   GENERIC_DEFAULT_ALLOWED_SCORES,
   GENERIC_DEFAULT_REASON_CODES,
   GENERIC_DEFAULT_SYSTEM_PROMPT,
-  GradingProfile,
+  type GradingProfile,
   INDG_DEFAULT_ALLOWED_SCORES,
   INDG_DEFAULT_REASON_CODES,
   INDG_DEFAULT_SYSTEM_PROMPT,
@@ -12,7 +12,6 @@ import {
 import {
   buildSystemPrompt,
   postProcessFeedback,
-  TOO_SHORT_COMMENT,
   validateGradePayload,
   ValidatedGradePayload,
 } from './grading';
@@ -183,7 +182,9 @@ describe('Grading Profiles', () => {
       const result = postProcessFeedback(validated, shortFacts, indgProfile);
       expect(result.score).toBe(1);
       expect(result.reasons).toContain('too_short');
-      expect(result.comment).toContain(TOO_SHORT_COMMENT);
+      expect(result.comment).toContain(
+        'This answer does not meet the sentence requirements noted in the question.',
+      );
     });
 
     it('leaves a full-length INDG answer untouched', () => {

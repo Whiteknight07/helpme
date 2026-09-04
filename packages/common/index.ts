@@ -590,24 +590,13 @@ export interface EmbeddableQuestionFeedback {
   maxScore: number
 }
 
-export class GradingProfile {
-  @IsInt()
-  id!: number
-
-  @IsInt()
-  courseId!: number
-
-  @IsIn([...GRADING_POLICY_KINDS])
-  policyKind!: GradingPolicyKind
-
-  @IsString()
-  systemPrompt!: string
-
-  @IsNumber({}, { each: true })
-  allowedScores!: number[]
-
-  @IsString({ each: true })
-  reasonCodes!: string[]
+export interface GradingProfile {
+  id: number
+  courseId: number
+  policyKind: GradingPolicyKind
+  systemPrompt: string
+  allowedScores: number[]
+  reasonCodes: string[]
 }
 
 export class UpsertGradingProfileParams {
@@ -639,37 +628,15 @@ export class UpsertGradingProfileParams {
   reasonCodes!: string[]
 }
 
-export class EmbeddableQuestion {
-  @IsInt()
-  id!: number
-
-  @IsString()
-  @IsOptional()
+export interface EmbeddableQuestion {
+  id: number
   name?: string | null
-
-  @IsDate()
-  @Type(() => Date)
-  createdAt!: Date
-
-  @IsInt()
-  courseId!: number
-
-  @IsString()
-  questionText!: string
-
-  @IsString()
-  criteriaText!: string
-
-  @IsString()
-  @IsOptional()
+  createdAt: string
+  courseId: number
+  questionText: string
+  criteriaText: string
   instructions?: string | null
-
-  @IsInt()
-  @IsOptional()
   minSentences?: number
-
-  @IsInt()
-  @IsOptional()
   maxSentences?: number
 }
 
