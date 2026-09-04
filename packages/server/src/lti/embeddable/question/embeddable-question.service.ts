@@ -42,16 +42,7 @@ export class EmbeddableQuestionService {
     courseId: number,
     userId: number,
   ): Promise<EmbeddableQuestionFeedbackModel> {
-    const question = await EmbeddableQuestionModel.findOne({
-      where: {
-        id: questionId,
-        courseId,
-      },
-    });
-
-    if (!question) {
-      throw new NotFoundException(ERROR_MESSAGES.embeddableModule.notFound);
-    }
+    const question = await this.findOne(courseId, questionId);
 
     if (
       question.availableFrom &&
@@ -60,7 +51,9 @@ export class EmbeddableQuestionService {
       throw new UnauthorizedException(
         ERROR_MESSAGES.embeddableModule.notAvailableYet,
       );
-    } else if (
+    }
+
+    if (
       question.availableUntil &&
       question.availableUntil.getTime() < Date.now()
     ) {
@@ -205,9 +198,9 @@ export class EmbeddableQuestionService {
    * Deletes an embeddable question.
    */
   async delete(courseId: number, questionId: number): Promise<void> {
-    const question = await this.findOne(courseId, questionId);
+    await this.findOne(courseId, questionId);
     await EmbeddableQuestionModel.delete({
-      id: question.id,
+      id: questionId,
       courseId,
     });
   }

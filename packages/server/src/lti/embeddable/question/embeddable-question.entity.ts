@@ -5,12 +5,10 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
-  OneToMany,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 import { CourseModel } from '../../../course/course.entity';
 import { Exclude } from 'class-transformer';
-import { EmbeddableQuestionFeedbackModel } from './embeddable-question-feedback.entity';
 
 @Entity('embeddable_question_model')
 export class EmbeddableQuestionModel extends BaseEntity {
@@ -51,11 +49,4 @@ export class EmbeddableQuestionModel extends BaseEntity {
 
   @Column({ type: 'integer', nullable: false, default: 5 })
   maxSentences: number;
-
-  @OneToMany(
-    () => EmbeddableQuestionFeedbackModel,
-    (feedback) => feedback.embeddableQuestion,
-  )
-  @Exclude()
-  submissions: EmbeddableQuestionFeedbackModel[];
 }

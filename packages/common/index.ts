@@ -669,7 +669,6 @@ export class UpsertEmbeddableQuestionParams {
   @IsDate()
   @IsOptional()
   @Type(() => Date)
-  @Validate(ValidAvailabilityDatesConstraint)
   availableFrom?: Date | null
 
   @IsDate()
@@ -690,7 +689,6 @@ export class UpsertEmbeddableQuestionParams {
   @IsOptional()
   @Min(1)
   @Max(100)
-  @Validate(ValidSentenceBoundsConstraint)
   minSentences?: number
 
   @IsInt()
@@ -5332,7 +5330,6 @@ export const ERROR_MESSAGES = {
   },
   embeddableModule: {
     notFound: 'Question not found.',
-    feedbackNotFound: 'Feedback not found.',
     notAvailableYet:
       'This assessment/question is not available to receive feedback for yet.',
     noLongerAvailable:

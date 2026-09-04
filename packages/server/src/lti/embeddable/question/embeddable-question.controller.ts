@@ -25,6 +25,7 @@ import { EmbeddableQuestionModel } from './embeddable-question.entity';
 import { UserId } from '../../../decorators/user.decorator';
 
 @Controller('lti/embeddable-question')
+@UseGuards(JwtAuthGuard, CourseRolesGuard)
 @UseInterceptors(ClassSerializerInterceptor)
 export class EmbeddableQuestionController {
   constructor(
@@ -35,7 +36,6 @@ export class EmbeddableQuestionController {
    * Lists all embeddable questions for a course. TA and Professor only.
    */
   @Get(':courseId')
-  @UseGuards(JwtAuthGuard, CourseRolesGuard)
   @Roles(Role.TA, Role.PROFESSOR)
   async findAll(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -47,7 +47,6 @@ export class EmbeddableQuestionController {
    * Retrieves a single question. Accessible to all enrolled course members.
    */
   @Get(':courseId/:questionId')
-  @UseGuards(JwtAuthGuard, CourseRolesGuard)
   @Roles(Role.STUDENT, Role.TA, Role.PROFESSOR)
   async findOne(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -60,7 +59,6 @@ export class EmbeddableQuestionController {
    * Submits a draft answer for feedback. Accessible to all enrolled course members.
    */
   @Post(':courseId/:questionId/feedback')
-  @UseGuards(JwtAuthGuard, CourseRolesGuard)
   @Roles(Role.STUDENT, Role.TA, Role.PROFESSOR)
   async getFeedback(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -87,7 +85,6 @@ export class EmbeddableQuestionController {
    * Creates a new embeddable question. TA and Professor only.
    */
   @Post(':courseId')
-  @UseGuards(JwtAuthGuard, CourseRolesGuard)
   @Roles(Role.TA, Role.PROFESSOR)
   async create(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -100,7 +97,6 @@ export class EmbeddableQuestionController {
    * Updates an embeddable question. TA and Professor only.
    */
   @Patch(':courseId/:questionId')
-  @UseGuards(JwtAuthGuard, CourseRolesGuard)
   @Roles(Role.TA, Role.PROFESSOR)
   async update(
     @Param('courseId', ParseIntPipe) courseId: number,
@@ -114,7 +110,6 @@ export class EmbeddableQuestionController {
    * Deletes an embeddable question. TA and Professor only.
    */
   @Delete(':courseId/:questionId')
-  @UseGuards(JwtAuthGuard, CourseRolesGuard)
   @Roles(Role.TA, Role.PROFESSOR)
   async delete(
     @Param('courseId', ParseIntPipe) courseId: number,
