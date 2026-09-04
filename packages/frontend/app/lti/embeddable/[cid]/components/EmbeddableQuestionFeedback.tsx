@@ -93,7 +93,7 @@ export default function EmbeddableQuestionFeedback({
         />
       )}
 
-      {feedback && (
+      {feedback && !isLoading && (
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-zinc-700">Feedback</p>
           <div className="w-full whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
