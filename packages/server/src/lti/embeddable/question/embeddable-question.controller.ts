@@ -94,21 +94,12 @@ export class EmbeddableQuestionController {
     @Body() body: EmbeddableQuestionFeedbackParams,
     @UserId() userId: number,
   ): Promise<EmbeddableQuestionFeedback> {
-    const feedback = await this.embeddableQuestionService.getFeedback(
+    return this.embeddableQuestionService.getFeedback(
       body.responseText,
       questionId,
       courseId,
       { kind: 'user', userId },
     );
-    const profile = await this.embeddableQuestionService.getProfile(courseId);
-
-    return {
-      score: feedback.aiGrade,
-      comment: feedback.aiFeedback,
-      reasons: feedback.reasons,
-      needsHumanReview: feedback.needsHumanReview,
-      maxScore: Math.max(...profile.allowedScores),
-    };
   }
 
   /**

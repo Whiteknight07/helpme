@@ -43,7 +43,7 @@ export class EmbeddableResourceController {
     @Req() req: EmbeddableResourceRequest,
   ): Promise<EmbeddableQuestionFeedback> {
     const auth = req.resourceAuth;
-    const feedback = await this.embeddableQuestionService.getFeedback(
+    return this.embeddableQuestionService.getFeedback(
       body.responseText,
       questionId,
       courseId,
@@ -56,14 +56,5 @@ export class EmbeddableResourceController {
           }
         : { kind: 'lti', ltiIssuer: auth.iss, ltiSubject: auth.sub },
     );
-    const profile = await this.embeddableQuestionService.getProfile(courseId);
-
-    return {
-      score: feedback.aiGrade,
-      comment: feedback.aiFeedback,
-      reasons: feedback.reasons,
-      needsHumanReview: feedback.needsHumanReview,
-      maxScore: Math.max(...profile.allowedScores),
-    };
   }
 }

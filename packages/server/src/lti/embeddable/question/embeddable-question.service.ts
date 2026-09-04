@@ -8,6 +8,7 @@ import {
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
 import { EmbeddableGradingProfileModel } from './grading-profile.entity';
 import {
+  EmbeddableQuestionFeedback,
   ERROR_MESSAGES,
   GENERIC_DEFAULT_ALLOWED_SCORES,
   GENERIC_DEFAULT_REASON_CODES,
@@ -74,7 +75,7 @@ export class EmbeddableQuestionService {
     questionId: number,
     courseId: number,
     attribution: EmbeddableFeedbackAttribution,
-  ): Promise<EmbeddableQuestionFeedbackModel> {
+  ): Promise<EmbeddableQuestionFeedback> {
     const question = await this.findOne(courseId, questionId);
     const profile = await this.getProfile(courseId);
 
@@ -136,7 +137,15 @@ export class EmbeddableQuestionService {
       aiModel: chatbotResult.model ?? null,
     });
 
-    return feedback.save();
+    const saved = await feedback.save();
+
+    return {
+      score: saved.aiGrade,
+      comment: saved.aiFeedback,
+      reasons: saved.reasons,
+      needsHumanReview: saved.needsHumanReview,
+      maxScore: Math.max(...profile.allowedScores),
+    };
   }
 
   /**
