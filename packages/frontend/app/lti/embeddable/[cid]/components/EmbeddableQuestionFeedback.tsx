@@ -1,15 +1,15 @@
 'use client'
 
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Alert, Button, Input, message } from 'antd'
 import axios from 'axios'
-import { IndigenousFeedback } from '@koh/common'
+import { type IndigenousFeedback } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
 const { TextArea } = Input
 
-export interface EmbeddableQuestionFeedbackProps {
+interface EmbeddableQuestionFeedbackProps {
   courseId: number
   questionId: number
   questionText: string
@@ -19,7 +19,7 @@ export default function EmbeddableQuestionFeedback({
   courseId,
   questionId,
   questionText,
-}: EmbeddableQuestionFeedbackProps): React.ReactElement {
+}: EmbeddableQuestionFeedbackProps) {
   const [inputText, setInputText] = useState('')
   const [feedback, setFeedback] = useState<IndigenousFeedback | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -93,7 +93,7 @@ export default function EmbeddableQuestionFeedback({
         />
       )}
 
-      {feedback && !isLoading && (
+      {feedback && (
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-zinc-700">Feedback</p>
           <div className="w-full whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">

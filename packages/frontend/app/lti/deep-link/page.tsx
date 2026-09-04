@@ -1,9 +1,9 @@
 'use client'
 
-import { ReactElement, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Alert, Button, Card, Radio, Typography } from 'antd'
-import { EmbeddableQuestion } from '@koh/common'
+import { type EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
 import { getErrorMessage } from '@/app/utils/generalUtils'
@@ -15,7 +15,7 @@ type QuestionsState =
   | { status: 'ready'; questions: EmbeddableQuestion[] }
   | { status: 'error'; message: string }
 
-export default function DeepLinkPage(): ReactElement {
+export default function DeepLinkPage() {
   const searchParams = useSearchParams()
   const ltik = searchParams.get('ltik') ?? ''
   const [questionsState, setQuestionsState] = useState<QuestionsState>({

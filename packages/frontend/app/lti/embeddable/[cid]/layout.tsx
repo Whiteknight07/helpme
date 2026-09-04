@@ -1,6 +1,6 @@
 'use client'
 
-import React, { ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { API } from '@/app/api'
 import { Button, Card, Image } from 'antd'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
@@ -14,26 +14,10 @@ export default function EmbeddableQuestionLayout({
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
 
   useEffect(() => {
-    let isMounted = true
-
-    const checkAuth = async () => {
-      try {
-        await API.profile.getUser()
-        if (isMounted) {
-          setIsAuthorized(true)
-        }
-      } catch {
-        if (isMounted) {
-          setIsAuthorized(false)
-        }
-      }
-    }
-
-    checkAuth()
-
-    return () => {
-      isMounted = false
-    }
+    API.profile.getUser().then(
+      () => setIsAuthorized(true),
+      () => setIsAuthorized(false),
+    )
   }, [])
 
   if (isAuthorized === null) {

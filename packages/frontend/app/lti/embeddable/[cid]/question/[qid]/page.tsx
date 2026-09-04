@@ -1,10 +1,10 @@
 'use client'
 
-import React, { ReactElement, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { Card } from 'antd'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
-import { EmbeddableQuestion } from '@koh/common'
+import { type EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import EmbeddableQuestionFeedback from '@/app/lti/embeddable/[cid]/components/EmbeddableQuestionFeedback'
 
@@ -23,22 +23,17 @@ type QuestionState =
   | { status: 'error'; error: string }
   | { status: 'ready'; question: EmbeddableQuestion }
 
-export default function EmbeddableQuestionPage(): ReactElement {
+export default function EmbeddableQuestionPage() {
   const routeParams = useParams<{ cid: string; qid: string }>()
   const [questionState, setQuestionState] = useState<QuestionState>({
     status: 'loading',
   })
 
-  const courseId = Number(routeParams?.cid)
-  const questionId = Number(routeParams?.qid)
+  const courseId = Number(routeParams.cid)
+  const questionId = Number(routeParams.qid)
 
   useEffect(() => {
-    if (
-      !questionId ||
-      !courseId ||
-      Number.isNaN(questionId) ||
-      Number.isNaN(courseId)
-    ) {
+    if (!questionId || !courseId) {
       setQuestionState({
         status: 'error',
         error: 'Invalid course or question ID',
@@ -67,8 +62,7 @@ export default function EmbeddableQuestionPage(): ReactElement {
       <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">
         <Card title="Error loading Question">
           <p className="text-zinc-600">
-            {questionState.error || 'Question not found.'} Please let your
-            professor know.
+            {questionState.error} Please let your professor know.
           </p>
         </Card>
       </div>
