@@ -205,13 +205,28 @@ export default class LtiMiddleware {
       },
     );
 
-    provider.onConnect(this.onConnectHandler);
+    provider.onConnect(this.onConnectHandler.bind(this));
 
     // Runs only after the provider verifies a Deep Linking launch. Redirect
     // the verified launch to the picker; the picker's GET and selection POST
     // authorize via authorizeDeepLinking.
-    provider.onDeepLinking(async (_, __, res) => {
-      return provider.redirect(res, '/lti/deep-link');
+    provider.onDeepLinking(async (token, _, res, next) => {
+      try {
+        this.ltiService.assertTrustedCanvasPlatform(token);
+        return await provider.redirect(res, '/lti/deep-link');
+      } catch (err) {
+        if (err instanceof HttpException) {
+          return res.status(err.getStatus()).send(err.getResponse());
+        }
+        if (next) {
+          return next(err);
+        }
+        return res.status(500).send({
+          status: 500,
+          error: 'Internal Server Error',
+          details: { message: 'Internal Server Error' },
+        });
+      }
     });
 
     provider.onDynamicRegistration(
@@ -323,6 +338,8 @@ export default class LtiMiddleware {
     next: NextFunction,
   ) {
     try {
+      this.ltiService.assertTrustedCanvasPlatform(token);
+
       if (LtiService.hasQuestionLaunch(token)) {
         return next();
       }
