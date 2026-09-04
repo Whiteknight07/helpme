@@ -38,6 +38,7 @@ describe('LoginService', () => {
   let dataSource: DataSource;
   let jwtService: JwtService;
   let embeddableQuestionService: EmbeddableQuestionService;
+  let configService: ConfigService;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -77,6 +78,7 @@ describe('LoginService', () => {
     embeddableQuestionService = module.get<EmbeddableQuestionService>(
       EmbeddableQuestionService,
     );
+    configService = module.get<ConfigService>(ConfigService);
 
     // Grab FactoriesService from Nest
     const factories = module.get<FactoryService>(FactoryService);
@@ -358,6 +360,7 @@ describe('LoginService', () => {
         const ltiService = new LtiService(
           jwtService,
           embeddableQuestionService,
+          configService,
         );
 
         const cookies: string[] = [];

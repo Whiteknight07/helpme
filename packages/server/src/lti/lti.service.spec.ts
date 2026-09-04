@@ -23,6 +23,7 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import {
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { ERROR_MESSAGES, Role } from '@koh/common';
@@ -48,6 +49,7 @@ const idToken = {
   },
   platformInfo: {
     product_family_code: 'canvas',
+    guid: 'ubc-platform-guid',
   },
   user: '1',
   userInfo: {
@@ -67,6 +69,17 @@ describe('LtiService', () => {
   let service: LtiService;
   let dataSource: DataSource;
   let jwtService: JwtService;
+  let configService: ConfigService;
+  let initialLtiCanvasConfig: {
+    issuer: string;
+    clientId: string;
+    platformGuid: string;
+  };
+  const initialLtiCanvasEnv = {
+    issuer: process.env.LTI_CANVAS_ISSUER,
+    clientId: process.env.LTI_CANVAS_CLIENT_ID,
+    platformGuid: process.env.LTI_CANVAS_PLATFORM_GUID,
+  };
   const embeddableQuestionService = {
     findAllForCourse: jest.fn(),
     findOne: jest.fn(),
@@ -98,6 +111,12 @@ describe('LtiService', () => {
     service = module.get<LtiService>(LtiService);
     dataSource = module.get<DataSource>(DataSource);
     jwtService = module.get<JwtService>(JwtService);
+    configService = module.get<ConfigService>(ConfigService);
+    initialLtiCanvasConfig = {
+      issuer: configService.get<string>('LTI_CANVAS_ISSUER'),
+      clientId: configService.get<string>('LTI_CANVAS_CLIENT_ID'),
+      platformGuid: configService.get<string>('LTI_CANVAS_PLATFORM_GUID'),
+    };
 
     // Grab FactoriesService from Nest
     const factories = module.get<FactoryService>(FactoryService);
@@ -111,6 +130,30 @@ describe('LtiService', () => {
 
   beforeEach(async () => {
     await dataSource.synchronize(true);
+  });
+
+  afterEach(() => {
+    configService.set('LTI_CANVAS_ISSUER', initialLtiCanvasConfig.issuer);
+    configService.set('LTI_CANVAS_CLIENT_ID', initialLtiCanvasConfig.clientId);
+    configService.set(
+      'LTI_CANVAS_PLATFORM_GUID',
+      initialLtiCanvasConfig.platformGuid,
+    );
+    if (initialLtiCanvasEnv.issuer === undefined) {
+      delete process.env.LTI_CANVAS_ISSUER;
+    } else {
+      process.env.LTI_CANVAS_ISSUER = initialLtiCanvasEnv.issuer;
+    }
+    if (initialLtiCanvasEnv.clientId === undefined) {
+      delete process.env.LTI_CANVAS_CLIENT_ID;
+    } else {
+      process.env.LTI_CANVAS_CLIENT_ID = initialLtiCanvasEnv.clientId;
+    }
+    if (initialLtiCanvasEnv.platformGuid === undefined) {
+      delete process.env.LTI_CANVAS_PLATFORM_GUID;
+    } else {
+      process.env.LTI_CANVAS_PLATFORM_GUID = initialLtiCanvasEnv.platformGuid;
+    }
   });
 
   describe('get provider()', () => {
@@ -530,6 +573,7 @@ describe('LtiService', () => {
         },
         platformInfo: {
           product_family_code: 'canvas',
+          guid: 'ubc-platform-guid',
           ...overrides?.platformInfo,
         },
         user: 'learner-lti-sub-1',
@@ -555,6 +599,9 @@ describe('LtiService', () => {
     };
 
     beforeEach(async () => {
+      configService.set('LTI_CANVAS_ISSUER', 'http://canvas.docker/');
+      configService.set('LTI_CANVAS_CLIENT_ID', 'clientid');
+      configService.set('LTI_CANVAS_PLATFORM_GUID', 'ubc-platform-guid');
       course = await CourseFactory.create();
       await lmsCourseIntFactory.create({
         course,
@@ -634,6 +681,35 @@ describe('LtiService', () => {
           courseId: course.id,
         }),
       ).toBeNull();
+    });
+
+    it.each([
+      ['issuer', { iss: 'https://other.canvas.example/' }],
+      ['client ID', { clientId: 'other-client' }],
+      [
+        'platform GUID',
+        {
+          platformInfo: {
+            product_family_code: 'canvas',
+            guid: 'other-platform-guid',
+          },
+        },
+      ],
+    ])('rejects mismatched %s without writes', async (_field, override) => {
+      await expectRejectedWithoutWrites(createLaunchToken(override));
+    });
+
+    it.each([
+      'LTI_CANVAS_ISSUER',
+      'LTI_CANVAS_CLIENT_ID',
+      'LTI_CANVAS_PLATFORM_GUID',
+    ])('fails closed when %s is missing', async (key) => {
+      configService.set(key, '');
+
+      await expect(
+        service.resolveQuestionLaunch(createLaunchToken()),
+      ).rejects.toThrow(InternalServerErrorException);
+      await expectZeroWrites();
     });
 
     it('rejects unmapped course without writing', async () => {
@@ -736,7 +812,10 @@ describe('LtiService', () => {
           custom: { canvas_course_id: canvasCourseId },
           targetLinkUri: launchUrl,
         },
-        platformInfo: { product_family_code: 'canvas' },
+        platformInfo: {
+          product_family_code: 'canvas',
+          guid: 'ubc-platform-guid',
+        },
         user: overrides.user ?? instructorSub,
         userInfo: { email: overrides.email ?? instructorEmail },
       }) as unknown as IdToken;
@@ -762,6 +841,9 @@ describe('LtiService', () => {
     };
 
     beforeEach(() => {
+      configService.set('LTI_CANVAS_ISSUER', 'http://canvas.docker/');
+      configService.set('LTI_CANVAS_CLIENT_ID', 'helpme-client-id');
+      configService.set('LTI_CANVAS_PLATFORM_GUID', 'ubc-platform-guid');
       getPlatform.mockReset().mockResolvedValue({ active: true });
       createDeepLinkingForm.mockReset();
       embeddableQuestionService.findAllForCourse.mockReset();
@@ -852,6 +934,17 @@ describe('LtiService', () => {
       getPlatform.mockResolvedValue({ active: false });
 
       await expect(service.authorizeDeepLinking(buildToken())).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('rejects a launch from another Canvas root platform', async () => {
+      const course = await seedMappedCourse();
+      await seedInstructor(course, Role.PROFESSOR);
+      const token = buildToken();
+      token.platformInfo.guid = 'other-platform-guid';
+
+      await expect(service.authorizeDeepLinking(token)).rejects.toThrow(
         ForbiddenException,
       );
     });

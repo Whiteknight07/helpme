@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { UserCourseModel } from '../profile/user-course.entity';
 import { UserModel } from '../profile/user.entity';
 import {
@@ -51,6 +53,7 @@ export class LtiService {
   constructor(
     private jwtService: JwtService,
     private embeddableQuestionService: EmbeddableQuestionService,
+    private readonly configService: ConfigService,
   ) {}
 
   private _provider: Provider | undefined;
@@ -399,7 +402,39 @@ export class LtiService {
     );
   }
 
-  private static async findMappedCourseId(token: IdToken): Promise<number> {
+  assertTrustedCanvasPlatform(token: IdToken): void {
+    const issuer = this.configService.get<string>('LTI_CANVAS_ISSUER');
+    const clientId = this.configService.get<string>('LTI_CANVAS_CLIENT_ID');
+    const platformGuid = this.configService.get<string>(
+      'LTI_CANVAS_PLATFORM_GUID',
+    );
+
+    if (
+      typeof issuer !== 'string' ||
+      issuer.length === 0 ||
+      typeof clientId !== 'string' ||
+      clientId.length === 0 ||
+      typeof platformGuid !== 'string' ||
+      platformGuid.length === 0
+    ) {
+      throw new InternalServerErrorException(
+        'LTI Canvas trust configuration is incomplete; set LTI_CANVAS_ISSUER, LTI_CANVAS_CLIENT_ID, and LTI_CANVAS_PLATFORM_GUID.',
+      );
+    }
+
+    if (
+      token.iss !== issuer ||
+      token.clientId !== clientId ||
+      token.platformInfo?.guid !== platformGuid
+    ) {
+      throw new ForbiddenException(
+        'LTI launch is not from the trusted Canvas platform',
+      );
+    }
+  }
+
+  private async findMappedCourseId(token: IdToken): Promise<number> {
+    this.assertTrustedCanvasPlatform(token);
     const platformCourseId = LtiService.extractCourseId(token);
     if (typeof platformCourseId !== 'string' || platformCourseId.length === 0) {
       throw new BadRequestException(
@@ -434,7 +469,7 @@ export class LtiService {
       );
     }
 
-    const courseId = await LtiService.findMappedCourseId(token);
+    const courseId = await this.findMappedCourseId(token);
 
     const questionId = LtiService.parseStrictQuestionId(
       token.platformContext.custom?.[HELPME_QUESTION_ID_PARAM],
@@ -574,7 +609,7 @@ export class LtiService {
       throw new ForbiddenException('Canvas platform is not active');
     }
 
-    const courseId = await LtiService.findMappedCourseId(token);
+    const courseId = await this.findMappedCourseId(token);
 
     const userId = await this.authorizeExistingStaff(token, courseId);
 
