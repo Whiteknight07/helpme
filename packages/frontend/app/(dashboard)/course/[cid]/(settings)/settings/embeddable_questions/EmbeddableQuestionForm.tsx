@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import { ReactElement, useEffect, useState } from 'react'
 import {
   Alert,
   DatePicker,
@@ -12,11 +12,7 @@ import {
   message,
 } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
-import {
-  DEFAULT_RUBRIC,
-  EmbeddableQuestion,
-  UpsertEmbeddableQuestionParams,
-} from '@koh/common'
+import { DEFAULT_RUBRIC, EmbeddableQuestion } from '@koh/common'
 import dayjs from 'dayjs'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
@@ -45,38 +41,34 @@ export default function EmbeddableQuestionForm({
   setOpen,
   editingQuestion,
   onSaveCallback,
-}: EmbeddableQuestionFormProps): React.ReactElement {
+}: EmbeddableQuestionFormProps): ReactElement {
   const [form] = Form.useForm<FormValues>()
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    if (open) {
-      if (editingQuestion) {
-        form.setFieldsValue({
-          name: editingQuestion.name ?? undefined,
-          questionText: editingQuestion.questionText,
-          criteriaText: editingQuestion.criteriaText,
-          instructions: editingQuestion.instructions ?? undefined,
-          minSentences: editingQuestion.minSentences ?? 3,
-          maxSentences: editingQuestion.maxSentences ?? 5,
-          availabilityDates: [
-            editingQuestion.availableFrom
-              ? dayjs(editingQuestion.availableFrom)
-              : null,
-            editingQuestion.availableUntil
-              ? dayjs(editingQuestion.availableUntil)
-              : null,
-          ],
-        })
-      } else {
-        form.resetFields()
-        form.setFieldsValue({
-          criteriaText: DEFAULT_RUBRIC,
-          minSentences: 3,
-          maxSentences: 5,
-        })
-      }
-    }
+    if (!open) return
+    if (!editingQuestion) form.resetFields()
+
+    form.setFieldsValue(
+      editingQuestion
+        ? {
+            name: editingQuestion.name ?? undefined,
+            questionText: editingQuestion.questionText,
+            criteriaText: editingQuestion.criteriaText,
+            instructions: editingQuestion.instructions ?? undefined,
+            minSentences: editingQuestion.minSentences ?? 3,
+            maxSentences: editingQuestion.maxSentences ?? 5,
+            availabilityDates: [
+              editingQuestion.availableFrom
+                ? dayjs(editingQuestion.availableFrom)
+                : null,
+              editingQuestion.availableUntil
+                ? dayjs(editingQuestion.availableUntil)
+                : null,
+            ],
+          }
+        : { criteriaText: DEFAULT_RUBRIC, minSentences: 3, maxSentences: 5 },
+    )
   }, [open, editingQuestion, form])
 
   const handleSave = async (values: FormValues) => {
@@ -84,32 +76,28 @@ export default function EmbeddableQuestionForm({
     setIsLoading(true)
 
     try {
-      const payload: UpsertEmbeddableQuestionParams = {
+      const [availableFrom, availableUntil] = values.availabilityDates ?? []
+      const payload = {
         name: values.name?.trim() || null,
         questionText: values.questionText.trim(),
         criteriaText: values.criteriaText.trim(),
         instructions: values.instructions?.trim() || null,
         minSentences: values.minSentences ?? 3,
         maxSentences: values.maxSentences ?? 5,
-        availableFrom: values.availabilityDates?.[0]
-          ? values.availabilityDates[0].toDate()
-          : null,
-        availableUntil: values.availabilityDates?.[1]
-          ? values.availabilityDates[1].toDate()
-          : null,
+        availableFrom: availableFrom?.toDate() ?? null,
+        availableUntil: availableUntil?.toDate() ?? null,
       }
 
-      if (editingQuestion) {
-        await API.lti.embeddableQuestion.update(
-          courseId,
-          editingQuestion.id,
-          payload,
-        )
-        message.success('Successfully updated embeddable question!')
-      } else {
-        await API.lti.embeddableQuestion.create(courseId, payload)
-        message.success('Successfully created embeddable question!')
-      }
+      await (editingQuestion
+        ? API.lti.embeddableQuestion.update(
+            courseId,
+            editingQuestion.id,
+            payload,
+          )
+        : API.lti.embeddableQuestion.create(courseId, payload))
+      message.success(
+        `Successfully ${editingQuestion ? 'updated' : 'created'} embeddable question!`,
+      )
 
       setOpen(false)
       onSaveCallback()

@@ -44,17 +44,14 @@ export default function EmbeddableQuestionsPage(
     EmbeddableQuestion | undefined
   >(undefined)
 
-  const fetchQuestions = useCallback(() => {
-    API.lti.embeddableQuestion
-      .getAll(courseId)
-      .then((data) => {
-        setQuestions(data)
-        setLoading(false)
-      })
-      .catch((err: unknown) => {
-        message.error(`Failed to load questions: ${getErrorMessage(err)}`)
-        setLoading(false)
-      })
+  const fetchQuestions = useCallback(async () => {
+    try {
+      setQuestions(await API.lti.embeddableQuestion.getAll(courseId))
+    } catch (err: unknown) {
+      message.error(`Failed to load questions: ${getErrorMessage(err)}`)
+    } finally {
+      setLoading(false)
+    }
   }, [courseId])
 
   useEffect(() => {
@@ -87,8 +84,7 @@ export default function EmbeddableQuestionsPage(
   }
 
   const getIFrameHtml = (q: EmbeddableQuestion) => {
-    const url = getIFrameUrl(q)
-    return `<iframe src="${url}" width="100%" height="280" style="border:0;display:block;" allow="clipboard-write"></iframe>`
+    return `<iframe src="${getIFrameUrl(q)}" width="100%" height="280" style="border:0;display:block;" allow="clipboard-write"></iframe>`
   }
 
   const copyEmbedHtml = async (q: EmbeddableQuestion) => {
