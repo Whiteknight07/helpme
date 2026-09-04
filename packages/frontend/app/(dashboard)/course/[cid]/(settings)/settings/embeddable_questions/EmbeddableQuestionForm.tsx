@@ -99,15 +99,6 @@ export default function EmbeddableQuestionForm({
           : null,
       }
 
-      if (
-        payload.minSentences !== undefined &&
-        payload.maxSentences !== undefined &&
-        payload.minSentences > payload.maxSentences
-      ) {
-        message.error('Minimum sentences cannot be greater than maximum.')
-        return
-      }
-
       if (editingQuestion) {
         await API.lti.embeddableQuestion.update(
           courseId,
@@ -250,20 +241,7 @@ export default function EmbeddableQuestionForm({
           <Form.Item
             name="minSentences"
             label="Min Sentences"
-            rules={[
-              { required: true, message: 'Min sentences is required.' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  const max = getFieldValue('maxSentences')
-                  if (value && max && value > max) {
-                    return Promise.reject(
-                      new Error('Min sentences cannot exceed max sentences.'),
-                    )
-                  }
-                  return Promise.resolve()
-                },
-              }),
-            ]}
+            rules={[{ required: true, message: 'Min sentences is required.' }]}
           >
             <InputNumber min={1} max={100} className="w-full" />
           </Form.Item>
@@ -271,12 +249,13 @@ export default function EmbeddableQuestionForm({
           <Form.Item
             name="maxSentences"
             label="Max Sentences"
+            dependencies={['minSentences']}
             rules={[
               { required: true, message: 'Max sentences is required.' },
               ({ getFieldValue }) => ({
                 validator(_, value) {
                   const min = getFieldValue('minSentences')
-                  if (value && min && value < min) {
+                  if (value != null && min != null && value < min) {
                     return Promise.reject(
                       new Error(
                         'Max sentences cannot be less than min sentences.',
