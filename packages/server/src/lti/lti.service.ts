@@ -28,6 +28,7 @@ import { EmbeddableQuestionModel } from './embeddable/question/embeddable-questi
 import { EmbeddableQuestionService } from './embeddable/question/embeddable-question.service';
 import {
   EMBEDDABLE_RESOURCE_KIND,
+  EMBEDDABLE_RESOURCE_TTL_SECONDS,
   EmbeddableResourcePayload,
 } from './embeddable/resource/embeddable-resource-auth';
 
@@ -490,7 +491,10 @@ export class LtiService {
   }
 
   signResourceToken(payload: EmbeddableResourcePayload): string {
-    const token = this.jwtService.sign({ ...payload }, { expiresIn: '24h' });
+    const token = this.jwtService.sign(
+      { ...payload },
+      { expiresIn: EMBEDDABLE_RESOURCE_TTL_SECONDS },
+    );
     if (!token) {
       throw new BadRequestException(ERROR_MESSAGES.ltiService.errorSigningJwt);
     }

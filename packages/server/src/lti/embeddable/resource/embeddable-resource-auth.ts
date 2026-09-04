@@ -2,6 +2,7 @@ import { Request } from 'express';
 import { z } from 'zod';
 
 export const EMBEDDABLE_RESOURCE_KIND = 'embeddable-resource' as const;
+export const EMBEDDABLE_RESOURCE_TTL_SECONDS = 24 * 60 * 60;
 
 const embeddableResourcePayload = z.discriminatedUnion('role', [
   z.object({
@@ -27,6 +28,15 @@ export type EmbeddableResourcePayload = z.infer<
   typeof embeddableResourcePayload
 >;
 
+const verifiedResourcePayload = embeddableResourcePayload.and(
+  z
+    .object({ iat: z.number().int(), exp: z.number().int() })
+    .refine(
+      ({ iat, exp }) =>
+        exp > iat && exp - iat <= EMBEDDABLE_RESOURCE_TTL_SECONDS,
+    ),
+);
+
 export interface EmbeddableResourceRequest extends Request {
   resourceAuth: EmbeddableResourcePayload;
 }
@@ -34,7 +44,7 @@ export interface EmbeddableResourceRequest extends Request {
 export function parseResourcePayload(
   value: unknown,
 ): EmbeddableResourcePayload | undefined {
-  const parsed = embeddableResourcePayload.safeParse(value);
+  const parsed = verifiedResourcePayload.safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 

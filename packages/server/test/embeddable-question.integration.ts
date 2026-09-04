@@ -16,7 +16,10 @@ import {
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
 import { EmbeddableGradingProfileModel } from '../src/lti/embeddable/question/grading-profile.entity';
-import { resourceCookieName } from '../src/lti/embeddable/resource/embeddable-resource-auth';
+import {
+  EMBEDDABLE_RESOURCE_TTL_SECONDS,
+  resourceCookieName,
+} from '../src/lti/embeddable/resource/embeddable-resource-auth';
 
 type QuestionOverrides = Partial<
   Pick<
@@ -116,7 +119,6 @@ describe('Embeddable Question Integration', () => {
       });
       expect(stored).not.toBeNull();
       expect(stored!.criteriaText).toBe('');
-      expect(stored!.criteriaText.toLowerCase()).not.toContain('indigenous');
     });
 
     it('rejects student from creating a question', async () => {
@@ -518,14 +520,17 @@ describe('Embeddable Question Integration', () => {
       sub = SUB,
     ): string => {
       const jwtService = getTestModule().get<JwtService>(JwtService);
-      return jwtService.sign({
-        kind: 'embeddable-resource',
-        role: 'learner',
-        iss: ISS,
-        sub,
-        courseId,
-        questionId,
-      });
+      return jwtService.sign(
+        {
+          kind: 'embeddable-resource',
+          role: 'learner',
+          iss: ISS,
+          sub,
+          courseId,
+          questionId,
+        },
+        { expiresIn: EMBEDDABLE_RESOURCE_TTL_SECONDS },
+      );
     };
 
     const mockValidFeedback = () => {
@@ -634,6 +639,28 @@ describe('Embeddable Question Integration', () => {
       },
     );
 
+    it.each([
+      ['missing', undefined],
+      ['foreign', 'https://evil.example'],
+    ])(
+      'rejects valid-token feedback POST with %s Origin without model call or row',
+      async (_, origin) => {
+        const { course, q1 } = await setupResourceQuiz();
+        mockValidFeedback();
+        const name = resourceCookieName(course.id, q1.id);
+        const req = supertest()
+          .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
+          .set('Cookie', [`${name}=${signLearner(course.id, q1.id)}`])
+          .set('Host', 'example.com');
+        if (origin) req.set('Origin', origin);
+        await req.send({ responseText: draft }).expect(403);
+        expect(
+          mockChatbotApiService.queryChatbotForCourse,
+        ).not.toHaveBeenCalled();
+        expect(await EmbeddableQuestionFeedbackModel.count()).toBe(0);
+      },
+    );
+
     it('persists LTI issuer and subject with a null userId', async () => {
       const { course, q1 } = await setupResourceQuiz();
       mockValidFeedback();
@@ -642,6 +669,8 @@ describe('Embeddable Question Integration', () => {
       await supertest()
         .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
         .set('Cookie', [`${name}=${signLearner(course.id, q1.id)}`])
+        .set('Host', 'example.com')
+        .set('Origin', 'https://example.com')
         .send({ responseText: draft })
         .expect(201);
 
@@ -664,11 +693,15 @@ describe('Embeddable Question Integration', () => {
       await supertest()
         .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
         .set('Cookie', [cookie])
+        .set('Host', 'example.com')
+        .set('Origin', 'https://example.com')
         .send({ responseText: draft })
         .expect(201);
       await supertest()
         .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
         .set('Cookie', [cookie])
+        .set('Host', 'example.com')
+        .set('Origin', 'https://example.com')
         .send({ responseText: draft })
         .expect(201);
 
@@ -689,20 +722,25 @@ describe('Embeddable Question Integration', () => {
       });
       mockValidFeedback();
       const jwtService = getTestModule().get<JwtService>(JwtService);
-      const token = jwtService.sign({
-        kind: 'embeddable-resource',
-        role: 'staff',
-        iss: ISS,
-        sub: 'staff-sub-1',
-        courseId: course.id,
-        questionId: q1.id,
-        userId: staff.id,
-      });
+      const token = jwtService.sign(
+        {
+          kind: 'embeddable-resource',
+          role: 'staff',
+          iss: ISS,
+          sub: 'staff-sub-1',
+          courseId: course.id,
+          questionId: q1.id,
+          userId: staff.id,
+        },
+        { expiresIn: EMBEDDABLE_RESOURCE_TTL_SECONDS },
+      );
       const name = resourceCookieName(course.id, q1.id);
 
       await supertest()
         .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
         .set('Cookie', [`${name}=${token}`])
+        .set('Host', 'example.com')
+        .set('Origin', 'https://example.com')
         .send({ responseText: draft })
         .expect(201);
 

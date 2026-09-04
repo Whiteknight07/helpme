@@ -51,6 +51,27 @@ export class EmbeddableResourceGuard implements CanActivate {
       throw new ForbiddenException();
     }
 
+    if (req.method === 'POST') {
+      const origin = req.headers.origin;
+      const host = req.headers.host;
+      if (
+        typeof origin !== 'string' ||
+        origin === 'null' ||
+        typeof host !== 'string'
+      ) {
+        throw new ForbiddenException();
+      }
+      let originHost: string;
+      try {
+        originHost = new URL(origin).host;
+      } catch {
+        throw new ForbiddenException();
+      }
+      if (originHost !== host) {
+        throw new ForbiddenException();
+      }
+    }
+
     req.resourceAuth = payload;
     return true;
   }

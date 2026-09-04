@@ -36,6 +36,7 @@ import {
 } from '../src/lti/lti.service';
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
 import {
+  EMBEDDABLE_RESOURCE_TTL_SECONDS,
   resourceCookieName,
   resourceCookiePath,
 } from '../src/lti/embeddable/resource/embeddable-resource-auth';
@@ -280,9 +281,13 @@ describe('LtiController', () => {
         });
         expect(decoded).not.toHaveProperty('email');
         expect(decoded).not.toHaveProperty('userId');
-        expect((decoded['exp'] as number) - (decoded['iat'] as number)).toBe(
-          24 * 60 * 60,
-        );
+        const exp = decoded['exp'];
+        const iat = decoded['iat'];
+        expect(typeof exp).toBe('number');
+        expect(typeof iat).toBe('number');
+        if (typeof exp === 'number' && typeof iat === 'number') {
+          expect(exp - iat).toBe(EMBEDDABLE_RESOURCE_TTL_SECONDS);
+        }
 
         await supertest()
           .get(`/lti/embeddable-resource/${launchCourse.id}/${question.id}`)

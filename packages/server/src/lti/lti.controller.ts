@@ -49,6 +49,7 @@ import { restrictPaths } from './lti-auth.controller';
 import { LoginService } from '../login/login.service';
 import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
 import {
+  EMBEDDABLE_RESOURCE_TTL_SECONDS,
   resourceCookieName,
   resourceCookiePath,
 } from './embeddable/resource/embeddable-resource-auth';
@@ -89,7 +90,7 @@ export class LtiController {
         .cookie(resourceCookieName(courseId, questionId), scopedToken, {
           ...LtiService.cookieOptions,
           path: resourceCookiePath(courseId, questionId),
-          maxAge: 24 * 60 * 60 * 1000,
+          maxAge: EMBEDDABLE_RESOURCE_TTL_SECONDS * 1000,
         })
         .redirect(
           `/lti/embeddable/${courseId}/question/${questionId}?resource=1`,
