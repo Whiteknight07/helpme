@@ -550,6 +550,12 @@ describe('LtiService', () => {
         ...overrides,
       }) as unknown as IdToken;
 
+    const expectNoProvisioning = async () => {
+      expect(await UserModel.count()).toBe(0);
+      expect(await UserCourseModel.count()).toBe(0);
+      expect(await UserLtiIdentityModel.count()).toBe(0);
+    };
+
     beforeEach(async () => {
       org = await OrganizationFactory.create();
       course = await CourseFactory.create();
@@ -771,9 +777,7 @@ describe('LtiService', () => {
       });
 
       await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      expect(await UserModel.count()).toBe(0);
-      expect(await UserCourseModel.count()).toBe(0);
-      expect(await UserLtiIdentityModel.count()).toBe(0);
+      await expectNoProvisioning();
     });
 
     it.each([
@@ -798,9 +802,7 @@ describe('LtiService', () => {
       });
 
       await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      expect(await UserModel.count()).toBe(0);
-      expect(await UserCourseModel.count()).toBe(0);
-      expect(await UserLtiIdentityModel.count()).toBe(0);
+      await expectNoProvisioning();
     });
 
     it('rejects cross-course question without provisioning', async () => {
@@ -823,9 +825,7 @@ describe('LtiService', () => {
       });
 
       await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      expect(await UserModel.count()).toBe(0);
-      expect(await UserCourseModel.count()).toBe(0);
-      expect(await UserLtiIdentityModel.count()).toBe(0);
+      await expectNoProvisioning();
     });
 
     it.each([
@@ -843,9 +843,7 @@ describe('LtiService', () => {
       });
 
       await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      expect(await UserModel.count()).toBe(0);
-      expect(await UserCourseModel.count()).toBe(0);
-      expect(await UserLtiIdentityModel.count()).toBe(0);
+      await expectNoProvisioning();
     });
   });
 

@@ -381,21 +381,41 @@ export class LtiService {
   }
 
   static parseStrictQuestionId(value: unknown): number {
-    if (typeof value === 'number') {
-      if (Number.isSafeInteger(value) && value > 0) {
-        return value;
-      }
-    } else if (typeof value === 'string') {
-      if (/^[1-9]\d*$/.test(value)) {
-        const parsed = Number(value);
-        if (Number.isSafeInteger(parsed)) {
-          return parsed;
-        }
+    if (
+      typeof value === 'number' &&
+      Number.isSafeInteger(value) &&
+      value > 0
+    ) {
+      return value;
+    }
+    if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) {
+      const parsed = Number(value);
+      if (Number.isSafeInteger(parsed)) {
+        return parsed;
       }
     }
     throw new BadRequestException(
       'Question ID must be a positive base-10 integer',
     );
+  }
+
+  private static async findMappedCourseId(token: IdToken): Promise<number> {
+    const platformCourseId = LtiService.extractCourseId(token);
+    if (typeof platformCourseId !== 'string' || platformCourseId.length === 0) {
+      throw new BadRequestException(
+        'Canvas course ID custom parameter is missing',
+      );
+    }
+
+    const lmsIntegration = await LMSCourseIntegrationModel.findOne({
+      where: { apiCourseId: platformCourseId },
+    });
+    if (!lmsIntegration) {
+      throw new NotFoundException(
+        'Canvas course is not mapped to a HelpMe course',
+      );
+    }
+    return lmsIntegration.courseId;
   }
 
   async resolveQuestionLaunch(
@@ -412,26 +432,7 @@ export class LtiService {
       );
     }
 
-    const platformCourseId = LtiService.extractCourseId(token);
-    if (typeof platformCourseId !== 'string' || !platformCourseId) {
-      throw new BadRequestException(
-        'Canvas course ID custom parameter is missing',
-      );
-    }
-
-    const lmsIntegration = await LMSCourseIntegrationModel.findOne({
-      where: {
-        apiCourseId: platformCourseId,
-      },
-    });
-
-    if (!lmsIntegration) {
-      throw new NotFoundException(
-        'Canvas course is not mapped to a HelpMe course',
-      );
-    }
-
-    const courseId = lmsIntegration.courseId;
+    const courseId = await LtiService.findMappedCourseId(token);
 
     const questionId = LtiService.parseStrictQuestionId(
       token.platformContext.custom?.[HELPME_QUESTION_ID_PARAM],
@@ -618,24 +619,7 @@ export class LtiService {
       throw new ForbiddenException('Canvas platform is not active');
     }
 
-    const platformCourseId = LtiService.extractCourseId(token);
-    if (typeof platformCourseId !== 'string' || platformCourseId.length === 0) {
-      throw new BadRequestException(
-        'Canvas course ID custom parameter is missing',
-      );
-    }
-
-    const lmsIntegration = await LMSCourseIntegrationModel.findOne({
-      where: {
-        apiCourseId: platformCourseId,
-      },
-    });
-    if (!lmsIntegration) {
-      throw new NotFoundException(
-        'Canvas course is not mapped to a HelpMe course',
-      );
-    }
-    const courseId = lmsIntegration.courseId;
+    const courseId = await LtiService.findMappedCourseId(token);
 
     const userId = await this.authorizeExistingStaff(token, courseId);
 

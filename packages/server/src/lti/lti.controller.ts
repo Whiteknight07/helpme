@@ -69,6 +69,13 @@ export class LtiController {
     course?: CourseModel,
     @Query('lti_storage_target') lti_storage_target?: string,
   ) {
+    const ltiLoginOptions = {
+      cookieName: 'lti_auth_token',
+      cookieOptions: LtiService.cookieOptions,
+      restrictPaths,
+      expiresIn: 60 * 10,
+    };
+
     if (LtiService.hasQuestionLaunch(token)) {
       const { userId, courseId, questionId } =
         await this.ltiService.resolveQuestionLaunch(token);
@@ -79,10 +86,7 @@ export class LtiController {
         undefined,
         this.ltiService,
         {
-          cookieName: 'lti_auth_token',
-          cookieOptions: LtiService.cookieOptions,
-          restrictPaths,
-          expiresIn: 60 * 10,
+          ...ltiLoginOptions,
           redirect: `/lti/embeddable/${courseId}/question/${questionId}`,
         },
       );
@@ -103,8 +107,7 @@ export class LtiController {
         token.userInfo.email,
       );
       res.cookie('__LTI_IDENTITY', identity, LtiService.cookieOptions);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_ignored) {}
+    } catch {}
 
     // If the user does not exist, but the course was found, create an invite and set it as a cookie
     if (!user && course && token.userInfo.email != undefined) {
@@ -116,8 +119,7 @@ export class LtiController {
           token.userInfo.email,
         );
         res.cookie('__COURSE_INVITE', invite, LtiService.cookieOptions);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (_ignored) {}
+      } catch {}
     }
 
     // If the user does not exist, redirect to login.
@@ -164,10 +166,7 @@ export class LtiController {
       undefined,
       this.ltiService,
       {
-        cookieName: 'lti_auth_token',
-        cookieOptions: LtiService.cookieOptions,
-        restrictPaths,
-        expiresIn: 60 * 10,
+        ...ltiLoginOptions,
         redirect: `/lti${course ? `/${course.id}` : ''}${qry.size > 0 ? '?' + qry.toString() : ''}`,
       },
     );
