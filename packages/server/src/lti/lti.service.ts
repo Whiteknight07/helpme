@@ -13,7 +13,7 @@ import {
   Provider,
 } from '@bhunt02/lti-typescript';
 import { LMSCourseIntegrationModel } from '../lmsIntegration/lmsCourseIntegration.entity';
-import { ERROR_MESSAGES, Role } from '@koh/common';
+import { ERROR_MESSAGES, isProd, Role } from '@koh/common';
 import { JwtService } from '@nestjs/jwt';
 import { CookieOptions } from 'express';
 import { LtiCourseInviteModel } from './lti-course-invite.entity';
@@ -44,8 +44,8 @@ const LTI_MEMBERSHIP_STAFF_ROLES = [
 export class LtiService {
   static readonly cookieOptions: CookieOptions = {
     httpOnly: true,
-    secure: true,
-    sameSite: 'none',
+    secure: isProd(),
+    sameSite: isProd() ? 'none' : 'lax',
   };
   constructor(
     private jwtService: JwtService,
