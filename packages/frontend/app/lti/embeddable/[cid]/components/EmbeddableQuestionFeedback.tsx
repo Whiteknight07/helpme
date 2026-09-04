@@ -13,14 +13,12 @@ export interface EmbeddableQuestionFeedbackProps {
   courseId: number
   questionId: number
   questionText: string
-  placeholder?: string
 }
 
 export default function EmbeddableQuestionFeedback({
   courseId,
   questionId,
   questionText,
-  placeholder = 'Type your response here...',
 }: EmbeddableQuestionFeedbackProps): React.ReactElement {
   const [inputText, setInputText] = useState('')
   const [feedback, setFeedback] = useState<IndigenousFeedback | null>(null)
@@ -69,7 +67,7 @@ export default function EmbeddableQuestionFeedback({
       <TextArea
         value={inputText}
         onChange={(e) => setInputText(e.target.value)}
-        placeholder={placeholder}
+        placeholder="Type your response here..."
         rows={4}
         disabled={isLoading}
         className="resize-none"
