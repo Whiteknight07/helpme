@@ -403,30 +403,15 @@ export class LtiService {
   }
 
   assertTrustedCanvasPlatform(token: IdToken): void {
-    const issuer = this.configService.get<string>('LTI_CANVAS_ISSUER');
     const clientId = this.configService.get<string>('LTI_CANVAS_CLIENT_ID');
-    const platformGuid = this.configService.get<string>(
-      'LTI_CANVAS_PLATFORM_GUID',
-    );
 
-    if (
-      typeof issuer !== 'string' ||
-      issuer.length === 0 ||
-      typeof clientId !== 'string' ||
-      clientId.length === 0 ||
-      typeof platformGuid !== 'string' ||
-      platformGuid.length === 0
-    ) {
+    if (typeof clientId !== 'string' || clientId.length === 0) {
       throw new InternalServerErrorException(
-        'LTI Canvas trust configuration is incomplete; set LTI_CANVAS_ISSUER, LTI_CANVAS_CLIENT_ID, and LTI_CANVAS_PLATFORM_GUID.',
+        'LTI Canvas trust configuration is incomplete; set LTI_CANVAS_CLIENT_ID.',
       );
     }
 
-    if (
-      token.iss !== issuer ||
-      token.clientId !== clientId ||
-      token.platformInfo?.guid !== platformGuid
-    ) {
+    if (token.clientId !== clientId) {
       throw new ForbiddenException(
         'LTI launch is not from the trusted Canvas platform',
       );

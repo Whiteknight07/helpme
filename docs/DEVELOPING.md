@@ -47,6 +47,8 @@
 
 If you have any questions, feel free to reach out to a member of the team. If you think this document can be improved, make a PR!
 
+For Canvas integration work, follow [Test HelpMe questions in local Canvas](LOCAL_CANVAS_SETUP.md).
+
 ## Technologies
 
 -   [Next.js](https://nextjs.org/docs/getting-started) lets us do server-side and client-side React rendering, as well as write backend API endpoints (though instead we opted for writing our own backend endpoints). So, we mostly only use it for the **frontend**.

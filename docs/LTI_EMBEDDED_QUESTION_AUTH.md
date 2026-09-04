@@ -6,31 +6,26 @@ implemented; deadline availability remains unresolved.
 
 ## Canvas platform configuration
 
-Each HelpMe environment is pinned to one Canvas platform: production uses UBC
-Canvas only; local uses local Canvas only. The launch guard requires these exact
-`ConfigService` values:
+Each HelpMe environment is pinned to one Canvas registration: production uses UBC
+Canvas only; local uses local Canvas only. The launch guard requires this exact
+`ConfigService` value:
 
 ```text
-LTI_CANVAS_ISSUER
 LTI_CANVAS_CLIENT_ID
-LTI_CANVAS_PLATFORM_GUID
 ```
 
-These are verified LTI registration identifiers plus the signed UBC root-account
-`platformInfo.guid`, not values inferred from the browser hostname or the first
-launch. `assertTrustedCanvasPlatform` enforces the check. Canvas cloud's issuer
-can differ from the institution URL. Deployment IDs may differ across UBC
-course installations; the root-account platform GUID preserves that support.
-Missing configuration denies launches; an issuer, client, or platform-GUID
-mismatch returns `403`. Do not guess production IDs.
+This is the verified LTI client ID from the Canvas registration screen, not a value
+inferred from the browser hostname or the first launch. `assertTrustedCanvasPlatform`
+enforces the check. The LTI library verifies the token signature before this check.
+Missing configuration denies launches; a client mismatch returns `403`. Do not guess
+production IDs.
 
-For local parity, use separate origins `https://canvas.ubc.test` and
-`https://coursehelp.ubc.test`. They are same-site like
-`canvas.ubc.ca`/`coursehelp.ubc.ca` while avoiding same-host cookies shared
-across ports. Docker DNS and CA trust must cover the new names, and the LTI
-registration callbacks must use matching URLs before switching.
+For local development, follow [Test HelpMe questions in local Canvas](LOCAL_CANVAS_SETUP.md).
+That guide uses HTTP and a shared hostname on different ports. Separate HTTPS
+hostnames are an additional production-parity check, not a prerequisite for
+that local workflow.
 
-Production rollout must set all three values before enabling launches. The
+Production rollout must set the client ID before enabling launches. The
 existing 24-hour resource credential expiry remains in effect.
 
 ## Launches and later requests are different
