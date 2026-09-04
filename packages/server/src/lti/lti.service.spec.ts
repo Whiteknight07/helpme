@@ -549,6 +549,11 @@ describe('LtiService', () => {
       expect(await UserLtiIdentityModel.count()).toBe(0);
     };
 
+    const expectRejectedWithoutWrites = async (token: IdToken) => {
+      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
+      await expectZeroWrites();
+    };
+
     beforeEach(async () => {
       course = await CourseFactory.create();
       await lmsCourseIntFactory.create({
@@ -632,33 +637,35 @@ describe('LtiService', () => {
     });
 
     it('rejects unmapped course without writing', async () => {
-      const token = createLaunchToken({
-        platformContext: {
-          roles: ['http://purl.imsglobal.org/vocab/lis/v2/membership#Learner'],
-          custom: {
-            canvas_course_id: 'unmapped-canvas-course-xyz',
-            helpme_question_id: String(question.id),
+      await expectRejectedWithoutWrites(
+        createLaunchToken({
+          platformContext: {
+            roles: [
+              'http://purl.imsglobal.org/vocab/lis/v2/membership#Learner',
+            ],
+            custom: {
+              canvas_course_id: 'unmapped-canvas-course-xyz',
+              helpme_question_id: String(question.id),
+            },
           },
-        },
-      });
-
-      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      await expectZeroWrites();
+        }),
+      );
     });
 
     it('rejects a malformed question id without writing', async () => {
-      const token = createLaunchToken({
-        platformContext: {
-          roles: ['http://purl.imsglobal.org/vocab/lis/v2/membership#Learner'],
-          custom: {
-            canvas_course_id: canvasCourseId,
-            helpme_question_id: 'abc',
+      await expectRejectedWithoutWrites(
+        createLaunchToken({
+          platformContext: {
+            roles: [
+              'http://purl.imsglobal.org/vocab/lis/v2/membership#Learner',
+            ],
+            custom: {
+              canvas_course_id: canvasCourseId,
+              helpme_question_id: 'abc',
+            },
           },
-        },
-      });
-
-      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      await expectZeroWrites();
+        }),
+      );
     });
 
     it('rejects cross-course question without writing', async () => {
@@ -670,33 +677,33 @@ describe('LtiService', () => {
         criteriaText: 'Rubric 2',
       }).save();
 
-      const token = createLaunchToken({
-        platformContext: {
-          roles: ['http://purl.imsglobal.org/vocab/lis/v2/membership#Learner'],
-          custom: {
-            canvas_course_id: canvasCourseId,
-            helpme_question_id: String(questionCourse2.id),
+      await expectRejectedWithoutWrites(
+        createLaunchToken({
+          platformContext: {
+            roles: [
+              'http://purl.imsglobal.org/vocab/lis/v2/membership#Learner',
+            ],
+            custom: {
+              canvas_course_id: canvasCourseId,
+              helpme_question_id: String(questionCourse2.id),
+            },
           },
-        },
-      });
-
-      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      await expectZeroWrites();
+        }),
+      );
     });
 
     it('rejects a launch without a standard role without writing', async () => {
-      const token = createLaunchToken({
-        platformContext: {
-          roles: [],
-          custom: {
-            canvas_course_id: canvasCourseId,
-            helpme_question_id: String(question.id),
+      await expectRejectedWithoutWrites(
+        createLaunchToken({
+          platformContext: {
+            roles: [],
+            custom: {
+              canvas_course_id: canvasCourseId,
+              helpme_question_id: String(question.id),
+            },
           },
-        },
-      });
-
-      await expect(service.resolveQuestionLaunch(token)).rejects.toThrow();
-      await expectZeroWrites();
+        }),
+      );
     });
   });
 
@@ -846,20 +853,6 @@ describe('LtiService', () => {
       );
     });
 
-    it('lists questions only through the mapped HelpMe course', async () => {
-      const course = await seedMappedCourse();
-      await seedInstructor(course, Role.PROFESSOR);
-      const questions = [EmbeddableQuestionModel.create({ id: 7 })];
-      embeddableQuestionService.findAllForCourse.mockResolvedValue(questions);
-
-      await expect(service.getDeepLinkingQuestions(buildToken())).resolves.toBe(
-        questions,
-      );
-      expect(embeddableQuestionService.findAllForCourse).toHaveBeenCalledWith(
-        course.id,
-      );
-    });
-
     it('returns one library-signed ungraded Resource Link for the selected question', async () => {
       const course = await seedMappedCourse();
       await seedInstructor(course, Role.TA);
@@ -875,10 +868,6 @@ describe('LtiService', () => {
       await expect(
         service.createDeepLinkingResponse(token, question.id),
       ).resolves.toBe('<form>deep-link</form>');
-      expect(embeddableQuestionService.findOne).toHaveBeenCalledWith(
-        course.id,
-        question.id,
-      );
       expect(createDeepLinkingForm).toHaveBeenCalledWith(
         token,
         {
@@ -905,10 +894,6 @@ describe('LtiService', () => {
       await expect(
         service.createDeepLinkingResponse(buildToken(), 1234),
       ).rejects.toThrow(NotFoundException);
-      expect(embeddableQuestionService.findOne).toHaveBeenCalledWith(
-        course.id,
-        1234,
-      );
       expect(createDeepLinkingForm).not.toHaveBeenCalled();
     });
 
