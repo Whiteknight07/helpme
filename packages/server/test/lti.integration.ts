@@ -34,7 +34,6 @@ import {
   LtiService,
 } from '../src/lti/lti.service';
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
-import { restrictPaths } from '../src/lti/lti-auth.controller';
 import { JwtService } from '@nestjs/jwt';
 
 const testEncryptionKey = 'abcdefg';
@@ -253,12 +252,10 @@ describe('LtiController', () => {
         const jwtService = getTestModule().get<JwtService>(JwtService);
         const decoded = jwtService.verify<{
           userId: number;
-          restrictPaths: string[];
           expiresIn: number;
         }>(cookieValue);
 
         expect(decoded).toMatchObject({
-          restrictPaths,
           expiresIn: 600,
         });
 

@@ -11,6 +11,13 @@ import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddab
 import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
 import { DEFAULT_RUBRIC } from '../src/lti/embeddable/question/indg-grading';
 
+type QuestionOverrides = Partial<
+  Pick<
+    EmbeddableQuestionModel,
+    'name' | 'questionText' | 'criteriaText' | 'minSentences' | 'maxSentences'
+  >
+>;
+
 describe('Embeddable Question Integration', () => {
   const mockChatbotApiService = {
     queryChatbotForCourse: jest.fn(),
@@ -24,15 +31,30 @@ describe('Embeddable Question Integration', () => {
     mockChatbotApiService.queryChatbotForCourse.mockReset();
   });
 
+  const setupUserCourse = async (role: Role) => {
+    const user = await UserFactory.create();
+    const course = await CourseFactory.create();
+    await UserCourseFactory.create({ user, course, role });
+    return { user, course };
+  };
+
+  const setupStudentQuestion = async (overrides: QuestionOverrides = {}) => {
+    const { user: student, course } = await setupUserCourse(Role.STUDENT);
+    const question = await EmbeddableQuestionModel.create({
+      courseId: course.id,
+      name: 'Q1',
+      questionText: 'Question text',
+      criteriaText: 'Criteria',
+      minSentences: 3,
+      maxSentences: 5,
+      ...overrides,
+    }).save();
+    return { student, course, question };
+  };
+
   describe('Question Configuration & Permissions', () => {
     it('allows professor to create a question', async () => {
-      const professor = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: professor,
-        course,
-        role: Role.PROFESSOR,
-      });
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
 
       const body = {
         name: 'INDG Reflection 1',
@@ -54,13 +76,7 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('creates a question with no criteriaText and stores DEFAULT_RUBRIC', async () => {
-      const professor = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: professor,
-        course,
-        role: Role.PROFESSOR,
-      });
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
 
       const body = {
         name: 'INDG Reflection Default Rubric',
@@ -85,13 +101,7 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('rejects student from creating a question', async () => {
-      const student = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
+      const { user: student, course } = await setupUserCourse(Role.STUDENT);
 
       const body = {
         name: 'Student Question',
@@ -125,15 +135,10 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('returns 404 when question ID belongs to a different course before calling model', async () => {
-      const student = await UserFactory.create();
-      const course1 = await CourseFactory.create();
+      const { user: student, course: course1 } = await setupUserCourse(
+        Role.STUDENT,
+      );
       const course2 = await CourseFactory.create();
-
-      await UserCourseFactory.create({
-        user: student,
-        course: course1,
-        role: Role.STUDENT,
-      });
 
       const questionInCourse2 = await EmbeddableQuestionModel.create({
         courseId: course2.id,
@@ -159,22 +164,7 @@ describe('Embeddable Question Integration', () => {
 
   describe('Deterministic Checks & Feedback Submission', () => {
     it('rejects blank or whitespace input without calling model or saving', async () => {
-      const student = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
-
-      const question = await EmbeddableQuestionModel.create({
-        courseId: course.id,
-        name: 'Q1',
-        questionText: 'Question text',
-        criteriaText: 'Criteria',
-        minSentences: 3,
-        maxSentences: 5,
-      }).save();
+      const { student, course, question } = await setupStudentQuestion();
 
       await supertest({ userId: student.id })
         .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
@@ -190,22 +180,9 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('parses valid model response, saves attempt in DB, and returns comment', async () => {
-      const student = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
-
-      const question = await EmbeddableQuestionModel.create({
-        courseId: course.id,
-        name: 'Q1',
+      const { student, course, question } = await setupStudentQuestion({
         questionText: 'Reflect on Indigenous culture.',
-        criteriaText: 'Criteria',
-        minSentences: 3,
-        maxSentences: 5,
-      }).save();
+      });
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
         answer: {
@@ -255,22 +232,11 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('persists null aiModel without throwing when mocked chatbot omits model', async () => {
-      const student = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
-
-      const question = await EmbeddableQuestionModel.create({
-        courseId: course.id,
+      const { student, course, question } = await setupStudentQuestion({
         name: 'INDG Reflection No Model',
         questionText: 'Reflect on the reading without model reported.',
         criteriaText: DEFAULT_RUBRIC,
-        minSentences: 3,
-        maxSentences: 5,
-      }).save();
+      });
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
         answer: {
@@ -302,22 +268,9 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('caps score at 1 and prepends fixed sentence comment when draft is too short', async () => {
-      const student = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
-
-      const question = await EmbeddableQuestionModel.create({
-        courseId: course.id,
-        name: 'Q1',
+      const { student, course, question } = await setupStudentQuestion({
         questionText: 'Reflect on Indigenous culture.',
-        criteriaText: 'Criteria',
-        minSentences: 3,
-        maxSentences: 5,
-      }).save();
+      });
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
         answer: {
@@ -350,22 +303,7 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('returns 500, calls adapter once, and saves zero rows on invalid INDG payload', async () => {
-      const student = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
-
-      const question = await EmbeddableQuestionModel.create({
-        courseId: course.id,
-        name: 'Q1',
-        questionText: 'Question text',
-        criteriaText: 'Criteria',
-        minSentences: 3,
-        maxSentences: 5,
-      }).save();
+      const { student, course, question } = await setupStudentQuestion();
 
       mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
         answer: {
@@ -392,22 +330,7 @@ describe('Embeddable Question Integration', () => {
     });
 
     it('maps rejected chatbot call to 500, calls once, and saves zero rows', async () => {
-      const student = await UserFactory.create();
-      const course = await CourseFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
-
-      const question = await EmbeddableQuestionModel.create({
-        courseId: course.id,
-        name: 'Q1',
-        questionText: 'Question text',
-        criteriaText: 'Criteria',
-        minSentences: 3,
-        maxSentences: 5,
-      }).save();
+      const { student, course, question } = await setupStudentQuestion();
 
       mockChatbotApiService.queryChatbotForCourse.mockRejectedValue(
         new Error('Chatbot service failure'),
