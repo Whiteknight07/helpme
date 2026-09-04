@@ -16,7 +16,7 @@ import { z } from 'zod';
 
 // Structural outer shape only. The course grading profile in
 // `lti/embeddable/question/grading.ts` enforces the strict score/reason contract.
-export const feedbackAnswerSchema = z.object({
+const feedbackAnswerSchema = z.object({
   score: z.number(),
   comment: z.string(),
   reasons: z.array(z.string()),
@@ -28,7 +28,6 @@ const feedbackResponseSchema = z.object({
   model: z.string().optional(),
 });
 
-export type FeedbackAnswer = z.infer<typeof feedbackAnswerSchema>;
 export type FeedbackQueryResult = z.infer<typeof feedbackResponseSchema>;
 
 @Injectable()

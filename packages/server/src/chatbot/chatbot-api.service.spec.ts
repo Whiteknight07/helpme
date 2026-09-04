@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { ChatbotApiService, type FeedbackAnswer } from './chatbot-api.service';
+import { ChatbotApiService } from './chatbot-api.service';
 
 describe('ChatbotApiService', () => {
   const originalFetch = global.fetch;
@@ -18,7 +18,7 @@ describe('ChatbotApiService', () => {
     });
     const service = new ChatbotApiService(configService);
 
-    const expectedAnswer: FeedbackAnswer = {
+    const expectedAnswer = {
       score: 2,
       comment: 'Thoughtful reflection meeting the criteria.',
       reasons: ['meets_requirements'],
