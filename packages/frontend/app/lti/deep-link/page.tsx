@@ -22,7 +22,7 @@ function getDeepLinkErrorMessage(err: unknown): string {
       return 'This Canvas course is not connected to HelpMe. Ask your HelpMe admin to connect it, then reopen the tool.'
     }
     if (err.response?.status === 403) {
-      return 'The Canvas connection or your instructor access is not ready. Ask your HelpMe admin to link your account, check your Professor or TA access, or reactivate the connection, then reopen the tool.'
+      return 'Open HelpMe from the Canvas course navigation and sign in once to link your Canvas identity, then reopen the editor button. If already linked, ask your HelpMe admin to verify your Professor or TA enrollment and the Canvas connection.'
     }
     if (err.response?.status === 400) {
       return 'This tool was opened incorrectly. Reopen it from the Canvas editor HelpMe button. If it keeps happening, ask your HelpMe admin to check the placement.'
