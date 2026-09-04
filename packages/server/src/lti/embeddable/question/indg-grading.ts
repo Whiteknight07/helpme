@@ -1,7 +1,6 @@
 import {
   INDIGENOUS_REASON_CODES,
   IndigenousReason,
-  IndigenousScore,
   ALLOWED_INDIGENOUS_SCORES,
   DEFAULT_RUBRIC,
 } from '@koh/common';
@@ -144,12 +143,7 @@ export function buildUserPrompt(
   return lines.join('\n\n');
 }
 
-export interface PostProcessedFeedback {
-  score: IndigenousScore;
-  comment: string;
-  reasons: IndigenousReason[];
-  needsHumanReview: boolean;
-}
+export type PostProcessedFeedback = ValidatedGradePayload;
 
 export function postProcessFeedback(
   validated: ValidatedGradePayload,
@@ -160,7 +154,7 @@ export function postProcessFeedback(
   let finalComment = validated.comment;
 
   if (facts.belowMinimum) {
-    finalScore = Math.min(1, finalScore) as IndigenousScore;
+    if (finalScore > 1) finalScore = 1;
     if (!reasons.includes('too_short')) {
       const meetsIdx = reasons.indexOf('meets_requirements');
       if (meetsIdx !== -1) reasons.splice(meetsIdx, 1);

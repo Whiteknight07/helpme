@@ -21,7 +21,7 @@ const indigenousScoreSchema = z.custom<IndigenousScore>(
   (score) =>
     typeof score === 'number' &&
     Number.isFinite(score) &&
-    ALLOWED_INDIGENOUS_SCORES.includes(score as IndigenousScore),
+    ALLOWED_INDIGENOUS_SCORES.some((allowed) => allowed === score),
 );
 
 export const feedbackAnswerSchema = z.object({

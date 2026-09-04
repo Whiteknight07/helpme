@@ -124,14 +124,13 @@ export function countSentences(text: string): number {
 }
 
 export function findIndigenousCapitalizationVariants(text: string): string[] {
-  const matches = text.match(/\bIndigenous\b/gi) || [];
-  const variants: string[] = [];
-  for (const match of matches) {
-    if (match !== 'Indigenous' && !variants.includes(match)) {
-      variants.push(match);
-    }
-  }
-  return variants;
+  return [
+    ...new Set(
+      (text.match(/\bIndigenous\b/gi) ?? []).filter(
+        (match) => match !== 'Indigenous',
+      ),
+    ),
+  ];
 }
 
 export interface MechanicalFacts {
