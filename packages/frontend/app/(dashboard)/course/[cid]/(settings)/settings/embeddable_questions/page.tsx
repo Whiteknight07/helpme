@@ -55,6 +55,8 @@ export default function EmbeddableQuestionsPage(
   }, [courseId])
 
   useEffect(() => {
+    // Initial data loading is the external synchronization this effect owns.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchQuestions()
   }, [fetchQuestions])
 

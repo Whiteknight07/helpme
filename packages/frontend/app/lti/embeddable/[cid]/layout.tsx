@@ -43,7 +43,7 @@ export default function EmbeddableQuestionLayout({
             <p className="text-zinc-600">
               You cannot access this resource at this time. Try launching the
               HelpMe LTI tool - a link to launch the tool should be visible in
-              your Canvas course's navigation bar.
+              your Canvas course’s navigation bar.
             </p>
             <p className="mt-2 text-zinc-600">
               Alternatively, launch HelpMe in a new tab via the button below and

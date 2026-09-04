@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class IndgEmbeddableQuestionAiModel1788000001000
-  implements MigrationInterface
-{
+export class IndgEmbeddableQuestionAiModel1788000001000 implements MigrationInterface {
   name = 'IndgEmbeddableQuestionAiModel1788000001000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -30,10 +30,7 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
   @Column({ type: 'integer', nullable: false })
   questionId: number;
 
-  @ManyToOne(
-    () => EmbeddableQuestionModel,
-    { onDelete: 'CASCADE' },
-  )
+  @ManyToOne(() => EmbeddableQuestionModel, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'questionId' })
   embeddableQuestion: EmbeddableQuestionModel;
 

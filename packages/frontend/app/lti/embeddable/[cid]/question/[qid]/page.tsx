@@ -31,16 +31,14 @@ export default function EmbeddableQuestionPage() {
 
   const courseId = Number(routeParams.cid)
   const questionId = Number(routeParams.qid)
+  const hasInvalidRoute = !questionId || !courseId
+  const [now] = useState(() => Date.now())
 
   useEffect(() => {
-    if (!questionId || !courseId) {
-      setQuestionState({
-        status: 'error',
-        error: 'Invalid course or question ID',
-      })
-      return
-    }
+    if (hasInvalidRoute) return
 
+    // Reset stale data when navigating between questions without a remount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuestionState({ status: 'loading' })
     API.lti.embeddableQuestion
       .getOne(courseId, questionId)
@@ -51,7 +49,19 @@ export default function EmbeddableQuestionPage() {
           error: 'Could not load question. It may have been deleted.',
         }),
       )
-  }, [courseId, questionId])
+  }, [courseId, hasInvalidRoute, questionId])
+
+  if (hasInvalidRoute) {
+    return (
+      <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">
+        <Card title="Error loading Question">
+          <p className="text-zinc-600">
+            Invalid course or question ID. Please let your professor know.
+          </p>
+        </Card>
+      </div>
+    )
+  }
 
   if (questionState.status === 'loading') {
     return <CenteredSpinner tip="Loading..." />
@@ -71,11 +81,10 @@ export default function EmbeddableQuestionPage() {
 
   const { question } = questionState
   const isOpen =
-    !question.availableFrom ||
-    new Date(question.availableFrom).getTime() <= Date.now()
+    !question.availableFrom || new Date(question.availableFrom).getTime() <= now
   const isClosed =
     !!question.availableUntil &&
-    new Date(question.availableUntil).getTime() < Date.now()
+    new Date(question.availableUntil).getTime() < now
 
   if (!isOpen || isClosed) {
     const isEarly = !isOpen
@@ -84,10 +93,10 @@ export default function EmbeddableQuestionPage() {
       : 'This Question has closed.'
     const text = isEarly
       ? `This question is not available yet. It will become available after ${new Date(
-          question.availableFrom ?? Date.now(),
+          question.availableFrom ?? now,
         ).toLocaleDateString('en-US', dateFormat)}.`
       : `This question is no longer available. It closed after ${new Date(
-          question.availableUntil ?? Date.now(),
+          question.availableUntil ?? now,
         ).toLocaleDateString('en-US', dateFormat)}.`
 
     return (

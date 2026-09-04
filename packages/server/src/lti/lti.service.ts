@@ -381,11 +381,7 @@ export class LtiService {
   }
 
   static parseStrictQuestionId(value: unknown): number {
-    if (
-      typeof value === 'number' &&
-      Number.isSafeInteger(value) &&
-      value > 0
-    ) {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) {
       return value;
     }
     if (typeof value === 'string' && /^[1-9]\d*$/.test(value)) {

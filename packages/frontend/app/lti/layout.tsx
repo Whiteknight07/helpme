@@ -12,6 +12,8 @@ export function CookieWrapper({ children }: { children: React.ReactNode }) {
     try {
       const testCookie = '__helpme_cookie_test=1'
       document.cookie = `${testCookie}; path=/`
+      // Cookie access is only observable after the client mounts.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHasCookieAccess(document.cookie.split('; ').includes(testCookie))
       document.cookie = '__helpme_cookie_test=; Max-Age=0; path=/'
     } catch (err: unknown) {
