@@ -1,9 +1,10 @@
 'use client'
 
-import { ReactElement, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { ReactElement } from 'react'
 import { Alert, Form, Input, InputNumber, Modal, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
-import { EmbeddableQuestion } from '@koh/common'
+import type { EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -79,7 +80,7 @@ export default function EmbeddableQuestionForm({
 
       setOpen(false)
       onSaveCallback()
-    } catch (err: unknown) {
+    } catch (err) {
       message.error(`Could not save question: ${getErrorMessage(err)}`)
     } finally {
       setIsLoading(false)

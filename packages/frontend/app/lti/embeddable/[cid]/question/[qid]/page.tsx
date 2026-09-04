@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation'
 import { Card } from 'antd'
 import axios from 'axios'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
-import { type EmbeddableQuestion } from '@koh/common'
+import type { EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import EmbeddableQuestionFeedback from '@/app/lti/embeddable/[cid]/components/EmbeddableQuestionFeedback'
 

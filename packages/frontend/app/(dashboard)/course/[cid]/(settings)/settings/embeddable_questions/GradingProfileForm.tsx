@@ -1,14 +1,15 @@
 'use client'
 
-import { ReactElement, useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import type { ReactElement } from 'react'
 import { Button, Card, Form, Input, Select, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import {
-  GradingPolicyKind,
   INDG_DEFAULT_ALLOWED_SCORES,
   INDG_DEFAULT_REASON_CODES,
   INDG_DEFAULT_SYSTEM_PROMPT,
 } from '@koh/common'
+import type { GradingPolicyKind } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -39,7 +40,7 @@ export default function GradingProfileForm({
         allowedScores: profile.allowedScores.join(', '),
         reasonCodes: profile.reasonCodes.join(', '),
       })
-    } catch (err: unknown) {
+    } catch (err) {
       message.error(`Failed to load grading profile: ${getErrorMessage(err)}`)
     } finally {
       setLoading(false)
@@ -90,7 +91,7 @@ export default function GradingProfileForm({
         reasonCodes: updated.reasonCodes.join(', '),
       })
       message.success('Grading profile updated!')
-    } catch (err: unknown) {
+    } catch (err) {
       message.error(`Could not save grading profile: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)

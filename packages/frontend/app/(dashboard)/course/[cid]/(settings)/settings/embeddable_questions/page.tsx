@@ -1,6 +1,7 @@
 'use client'
 
-import { ReactElement, use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useState } from 'react'
+import type { ReactElement } from 'react'
 import {
   Button,
   Card,
@@ -17,7 +18,7 @@ import {
   EyeOutlined,
   PlusOutlined,
 } from '@ant-design/icons'
-import { EmbeddableQuestion } from '@koh/common'
+import type { EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 import EmbeddableQuestionForm from './EmbeddableQuestionForm'
@@ -46,7 +47,7 @@ export default function EmbeddableQuestionsPage(
   const fetchQuestions = useCallback(async () => {
     try {
       setQuestions(await API.lti.embeddableQuestion.getAll(courseId))
-    } catch (err: unknown) {
+    } catch (err) {
       message.error(`Failed to load questions: ${getErrorMessage(err)}`)
     } finally {
       setLoading(false)
@@ -74,7 +75,7 @@ export default function EmbeddableQuestionsPage(
       await API.lti.embeddableQuestion.delete(courseId, q.id)
       message.success('Successfully deleted question!')
       fetchQuestions()
-    } catch (err: unknown) {
+    } catch (err) {
       message.error(`Failed to delete question: ${getErrorMessage(err)}`)
     }
   }

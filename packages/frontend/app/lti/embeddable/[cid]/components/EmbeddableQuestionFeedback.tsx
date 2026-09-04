@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Alert, Button, Input, message } from 'antd'
 import axios from 'axios'
-import { type EmbeddableQuestionFeedback } from '@koh/common'
+import type { EmbeddableQuestionFeedback } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -53,7 +53,7 @@ export default function EmbeddableQuestionFeedback({
             trimmed,
           )
       setFeedback(response)
-    } catch (err: unknown) {
+    } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {
         const authMessage =
           'Your Canvas session has expired. Reopen this quiz in Canvas to continue.'
