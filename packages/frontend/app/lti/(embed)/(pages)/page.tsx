@@ -7,12 +7,11 @@ import CoursesSection from '@/app/(dashboard)/components/coursesSection'
 import Image from 'next/image'
 import { API } from '@/app/api'
 import { LMSIntegrationPlatform, SemesterPartial } from '@koh/common'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useSessionStorage } from '@/app/hooks/useSessionStorage'
 
 export default function LtiLandingPage(): ReactElement {
   const router = useRouter()
-  const pathname = usePathname()
   const searchParams = useSearchParams()
   const [shouldClose, setShouldClose] = useState(false)
   const [lmsInfo, setLmsInfo] = useSessionStorage<{
@@ -55,8 +54,6 @@ export default function LtiLandingPage(): ReactElement {
       router.push(
         `/lti/${cid}${newSearchParams.size > 0 ? '?' + newSearchParams.toString() : ''}`,
       )
-    } else {
-      router.push(pathname)
     }
   }, [router, searchParams])
 
