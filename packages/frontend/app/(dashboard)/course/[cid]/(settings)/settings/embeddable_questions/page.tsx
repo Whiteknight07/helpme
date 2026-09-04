@@ -79,11 +79,6 @@ export default function EmbeddableQuestionsPage(
     }
   }
 
-  const getIFrameUrl = (q: EmbeddableQuestion) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : ''
-    return `${origin}/lti/embeddable/${courseId}/question/${q.id}`
-  }
-
   const columns = [
     {
       title: 'Name',
@@ -247,7 +242,7 @@ export default function EmbeddableQuestionsPage(
               </p>
               <div className="overflow-hidden rounded border border-gray-200">
                 <iframe
-                  src={getIFrameUrl(previewQuestion)}
+                  src={`/lti/embeddable/${courseId}/question/${previewQuestion.id}`}
                   title={previewQuestion.name || 'Question Preview'}
                   width="100%"
                   height="280"

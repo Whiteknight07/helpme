@@ -3,7 +3,10 @@
 import { useEffect, useState, type ReactElement } from 'react'
 import { Alert, Form, Input, InputNumber, Modal, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
-import type { EmbeddableQuestion } from '@koh/common'
+import type {
+  EmbeddableQuestion,
+  UpsertEmbeddableQuestionParams,
+} from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -15,15 +18,6 @@ interface EmbeddableQuestionFormProps {
   onSaveCallback: () => void
 }
 
-interface FormValues {
-  name?: string | null
-  questionText: string
-  criteriaText?: string | null
-  instructions?: string | null
-  minSentences?: number
-  maxSentences?: number
-}
-
 export default function EmbeddableQuestionForm({
   courseId,
   open,
@@ -31,7 +25,7 @@ export default function EmbeddableQuestionForm({
   editingQuestion,
   onSaveCallback,
 }: EmbeddableQuestionFormProps): ReactElement {
-  const [form] = Form.useForm<FormValues>()
+  const [form] = Form.useForm<UpsertEmbeddableQuestionParams>()
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -52,7 +46,7 @@ export default function EmbeddableQuestionForm({
     )
   }, [open, editingQuestion, form])
 
-  const handleSave = async (values: FormValues) => {
+  const handleSave = async (values: UpsertEmbeddableQuestionParams) => {
     if (isLoading) return
     setIsLoading(true)
 

@@ -511,10 +511,7 @@ export const INDIGENOUS_REASON_CODES = [
   'proofreading_note',
 ] as const
 
-export type IndigenousReason = (typeof INDIGENOUS_REASON_CODES)[number]
-
 export const ALLOWED_INDIGENOUS_SCORES = [0, 0.5, 1, 1.5, 2] as const
-export type IndigenousScore = (typeof ALLOWED_INDIGENOUS_SCORES)[number]
 
 export const GRADING_POLICY_KINDS = ['generic', 'indg-reflection'] as const
 
