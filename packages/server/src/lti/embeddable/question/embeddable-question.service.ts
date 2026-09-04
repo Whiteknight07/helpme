@@ -8,7 +8,6 @@ import {
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
 import { EmbeddableGradingProfileModel } from './grading-profile.entity';
 import {
-  DEFAULT_RUBRIC,
   ERROR_MESSAGES,
   GENERIC_DEFAULT_ALLOWED_SCORES,
   GENERIC_DEFAULT_REASON_CODES,
@@ -228,7 +227,7 @@ export class EmbeddableQuestionService {
   ): Promise<EmbeddableQuestionModel> {
     const name = params.name ?? null;
     const questionText = params.questionText;
-    const criteriaText = params.criteriaText ?? DEFAULT_RUBRIC;
+    const criteriaText = params.criteriaText ?? '';
     const instructions = params.instructions ?? null;
     const minSentences = params.minSentences ?? 3;
     const maxSentences = params.maxSentences ?? 5;

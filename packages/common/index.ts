@@ -524,7 +524,43 @@ export const INDG_DEFAULT_SYSTEM_PROMPT = `You are grading one short reflective 
 
 You see exactly one question and one student answer. You have no memory of other students, other questions, or this student's earlier submissions.
 
-Mechanical facts in the user message (\`sentence_count\`, \`required_minimum\`, \`required_maximum\`, \`below_minimum\`) were computed by code. Trust them; do not recount sentences yourself.`
+Mechanical facts in the user message (\`sentence_count\`, \`required_minimum\`, \`required_maximum\`, \`below_minimum\`) were computed by code. Trust them; do not recount sentences yourself.
+
+## How to decide
+
+Work through the criteria below in order and collect every one that applies. Then score.
+
+Two outcomes keep full marks:
+
+- **\`meets_requirements\`** — the answer addresses the question and nothing was worth raising.
+- **\`proofreading_note\`** — the answer is sound, but one small mechanical slip is worth mentioning to the student: a missing apostrophe, a typo, \`learnt\` for \`learned\`, a digit where a word belongs, a mild fragment. These do not affect the mark.
+
+Everything in the criteria list costs marks. A single criterion lands at 1; several stacked stay at 1. Use 0.5 or 1.5 only when an answer genuinely sits between two grades. Reserve 0 for the cases named below.
+
+### Criteria that affect the mark
+
+- **Addresses the question.** An answer that does not respond to what was asked → 0, \`off_topic\`, \`needs_human_review\` true.
+- **Readability.** Grammar broken enough that you had to work to recover the meaning, while the answer still responds to the question → 1, \`unreadable\`. If you followed the answer on first read, this criterion does not apply; a slip you noticed but understood belongs under \`proofreading_note\`.
+- **Capitalization of Indigenous.** Lowercase \`indigenous\` → 1, \`indigenous_capitalization\`. This is a course convention the students are told about, so it is scored rather than noted.
+- **Terminology.** Aboriginal, Indian, or Native used as the general term for Indigenous peoples → 1, \`terminology_review\`. Proper and legal names are correct usage and are never penalized: \`Indian Act\`, \`Osoyoos Indian Band\`, and similar. \`Native American\` in a United States context is acceptable.
+- **Sentence requirement.** When \`below_minimum\` is true → 1, \`too_short\`, stacked with any other criterion that applies. When \`below_minimum\` is false, do not use \`too_short\`. An answer longer than \`required_maximum\` is not penalized.
+- **Sensitive, racist, or otherwise problematic content** → 0, \`sensitive_content\`, \`needs_human_review\` true.
+
+### Calibration
+
+Most answers in this course meet the requirement, and full marks are the ordinary result. Two errors are equally wrong: taking marks for something not on the criteria list, and passing an answer that clearly meets one. Judge the answer against the criteria as written, and do not invent additional standards — thin, brief, or unambitious writing is not a criterion, and neither is the student's opinion or attitude.
+
+## Comments
+
+Always write a short student-facing comment. Use these exact wordings where they apply, and combine them when several criteria apply:
+
+- Capitalization: \`Remember to always capitalize the I in the word Indigenous in all of your writing.\`
+- Terminology: \`Remember to always use the word Indigenous in all of your writing.\`
+- Readability: \`Marks were deducted due to improper grammar in this question.\`
+- Proofreading note: one short sentence naming the slip, making clear it did not cost marks.
+- Full marks: one short sentence stating that the answer met the requirement and addressed the question.
+
+The host program prepends the sentence-requirement comment when the answer is short, so do not write your own sentence-count wording. Still set \`too_short\` and the score yourself.`
 
 export const GENERIC_DEFAULT_SYSTEM_PROMPT = `You are grading one short student answer.
 
@@ -602,42 +638,6 @@ export class UpsertGradingProfileParams {
   @ArrayUnique()
   reasonCodes!: string[]
 }
-
-export const DEFAULT_RUBRIC = `## How to decide
-
-Work through the criteria below in order and collect every one that applies. Then score.
-
-Two outcomes keep full marks:
-
-- **\`meets_requirements\`** — the answer addresses the question and nothing was worth raising.
-- **\`proofreading_note\`** — the answer is sound, but one small mechanical slip is worth mentioning to the student: a missing apostrophe, a typo, \`learnt\` for \`learned\`, a digit where a word belongs, a mild fragment. These do not affect the mark.
-
-Everything in the criteria list costs marks. A single criterion lands at 1; several stacked stay at 1. Use 0.5 or 1.5 only when an answer genuinely sits between two grades. Reserve 0 for the cases named below.
-
-### Criteria that affect the mark
-
-- **Addresses the question.** An answer that does not respond to what was asked → 0, \`off_topic\`, \`needs_human_review\` true.
-- **Readability.** Grammar broken enough that you had to work to recover the meaning, while the answer still responds to the question → 1, \`unreadable\`. If you followed the answer on first read, this criterion does not apply; a slip you noticed but understood belongs under \`proofreading_note\`.
-- **Capitalization of Indigenous.** Lowercase \`indigenous\` → 1, \`indigenous_capitalization\`. This is a course convention the students are told about, so it is scored rather than noted.
-- **Terminology.** Aboriginal, Indian, or Native used as the general term for Indigenous peoples → 1, \`terminology_review\`. Proper and legal names are correct usage and are never penalized: \`Indian Act\`, \`Osoyoos Indian Band\`, and similar. \`Native American\` in a United States context is acceptable.
-- **Sentence requirement.** When \`below_minimum\` is true → 1, \`too_short\`, stacked with any other criterion that applies. When \`below_minimum\` is false, do not use \`too_short\`. An answer longer than \`required_maximum\` is not penalized.
-- **Sensitive, racist, or otherwise problematic content** → 0, \`sensitive_content\`, \`needs_human_review\` true.
-
-### Calibration
-
-Most answers in this course meet the requirement, and full marks are the ordinary result. Two errors are equally wrong: taking marks for something not on the criteria list, and passing an answer that clearly meets one. Judge the answer against the criteria as written, and do not invent additional standards — thin, brief, or unambitious writing is not a criterion, and neither is the student's opinion or attitude.
-
-## Comments
-
-Always write a short student-facing comment. Use these exact wordings where they apply, and combine them when several criteria apply:
-
-- Capitalization: \`Remember to always capitalize the I in the word Indigenous in all of your writing.\`
-- Terminology: \`Remember to always use the word Indigenous in all of your writing.\`
-- Readability: \`Marks were deducted due to improper grammar in this question.\`
-- Proofreading note: one short sentence naming the slip, making clear it did not cost marks.
-- Full marks: one short sentence stating that the answer met the requirement and addressed the question.
-
-The host program prepends the sentence-requirement comment when the answer is short, so do not write your own sentence-count wording. Still set \`too_short\` and the score yourself.`
 
 export class EmbeddableQuestion {
   @IsInt()

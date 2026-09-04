@@ -7,7 +7,7 @@ import {
   UserCourseFactory,
   UserFactory,
 } from './util/factories';
-import { DEFAULT_RUBRIC, Role } from '@koh/common';
+import { Role } from '@koh/common';
 import {
   INDG_DEFAULT_ALLOWED_SCORES,
   INDG_DEFAULT_REASON_CODES,
@@ -96,12 +96,12 @@ describe('Embeddable Question Integration', () => {
       expect(res.body.maxSentences).toBe(5);
     });
 
-    it('creates a question with no criteriaText and stores DEFAULT_RUBRIC', async () => {
+    it('stores a blank rubric with no Indigenous rules for a generic question', async () => {
       const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
 
       const body = {
-        name: 'INDG Reflection Default Rubric',
-        questionText: 'Reflect on the reading with default rubric.',
+        name: 'Generic Reflection',
+        questionText: 'Reflect on the reading.',
         minSentences: 3,
         maxSentences: 5,
       };
@@ -111,14 +111,12 @@ describe('Embeddable Question Integration', () => {
         .send(body)
         .expect(201);
 
-      expect(createRes.body).toHaveProperty('id');
-      expect(createRes.body.criteriaText).toBe(DEFAULT_RUBRIC);
-
       const stored = await EmbeddableQuestionModel.findOne({
         where: { id: createRes.body.id },
       });
       expect(stored).not.toBeNull();
-      expect(stored!.criteriaText).toBe(DEFAULT_RUBRIC);
+      expect(stored!.criteriaText).toBe('');
+      expect(stored!.criteriaText.toLowerCase()).not.toContain('indigenous');
     });
 
     it('rejects student from creating a question', async () => {

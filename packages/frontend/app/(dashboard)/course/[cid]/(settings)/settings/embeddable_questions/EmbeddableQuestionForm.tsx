@@ -3,7 +3,7 @@
 import { ReactElement, useEffect, useState } from 'react'
 import { Alert, Form, Input, InputNumber, Modal, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
-import { DEFAULT_RUBRIC, EmbeddableQuestion } from '@koh/common'
+import { EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -18,7 +18,7 @@ interface EmbeddableQuestionFormProps {
 interface FormValues {
   name?: string | null
   questionText: string
-  criteriaText: string
+  criteriaText?: string | null
   instructions?: string | null
   minSentences?: number
   maxSentences?: number
@@ -48,7 +48,7 @@ export default function EmbeddableQuestionForm({
             minSentences: editingQuestion.minSentences ?? 3,
             maxSentences: editingQuestion.maxSentences ?? 5,
           }
-        : { criteriaText: DEFAULT_RUBRIC, minSentences: 3, maxSentences: 5 },
+        : { minSentences: 3, maxSentences: 5 },
     )
   }, [open, editingQuestion, form])
 
@@ -60,7 +60,7 @@ export default function EmbeddableQuestionForm({
       const payload = {
         name: values.name?.trim() || null,
         questionText: values.questionText.trim(),
-        criteriaText: values.criteriaText.trim(),
+        criteriaText: values.criteriaText?.trim() || '',
         instructions: values.instructions?.trim() || null,
         minSentences: values.minSentences ?? 3,
         maxSentences: values.maxSentences ?? 5,
@@ -164,19 +164,12 @@ export default function EmbeddableQuestionForm({
           name="criteriaText"
           label={
             <div className="flex items-center gap-1">
-              <span>Grading Rubric</span>
-              <Tooltip title="This is the rubric the AI grades against and it can be edited.">
+              <span>Grading Rubric (optional)</span>
+              <Tooltip title="Optional additional rubric the AI grades against. Leave blank to grade against the course profile and instructions only.">
                 <InfoCircleOutlined className="text-gray-400" />
               </Tooltip>
             </div>
           }
-          rules={[
-            {
-              required: true,
-              whitespace: true,
-              message: 'Criteria text is required.',
-            },
-          ]}
         >
           <Input.TextArea
             rows={6}

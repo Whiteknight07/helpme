@@ -1,9 +1,16 @@
 import {
   ALLOWED_INDIGENOUS_SCORES,
+  GENERIC_DEFAULT_ALLOWED_SCORES,
+  GENERIC_DEFAULT_REASON_CODES,
+  GENERIC_DEFAULT_SYSTEM_PROMPT,
   GradingProfile,
+  INDG_DEFAULT_ALLOWED_SCORES,
+  INDG_DEFAULT_REASON_CODES,
+  INDG_DEFAULT_SYSTEM_PROMPT,
   INDIGENOUS_REASON_CODES,
 } from '@koh/common';
 import {
+  buildSystemPrompt,
   postProcessFeedback,
   TOO_SHORT_COMMENT,
   validateGradePayload,
@@ -49,6 +56,31 @@ const shortFacts: MechanicalFacts = {
 };
 
 describe('Grading Profiles', () => {
+  describe('buildSystemPrompt', () => {
+    it('includes the shared INDG rules once for INDG defaults and not at all for generic defaults', () => {
+      const indgPrompt = buildSystemPrompt(
+        {
+          policyKind: 'indg-reflection',
+          systemPrompt: INDG_DEFAULT_SYSTEM_PROMPT,
+          allowedScores: [...INDG_DEFAULT_ALLOWED_SCORES],
+          reasonCodes: [...INDG_DEFAULT_REASON_CODES],
+        },
+        '',
+      );
+      const genericPrompt = buildSystemPrompt(
+        {
+          policyKind: 'generic',
+          systemPrompt: GENERIC_DEFAULT_SYSTEM_PROMPT,
+          allowedScores: [...GENERIC_DEFAULT_ALLOWED_SCORES],
+          reasonCodes: [...GENERIC_DEFAULT_REASON_CODES],
+        },
+        '',
+      );
+      expect(indgPrompt.split('capitalize the I').length - 1).toBe(1);
+      expect(genericPrompt).not.toContain('capitalize the I');
+    });
+  });
+
   describe('validateGradePayload', () => {
     it('accepts a configured score and reason the INDG contract would reject', () => {
       const result = validateGradePayload(
