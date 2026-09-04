@@ -8,7 +8,7 @@ const sentenceSegmenter = new Intl.Segmenter('en', {
 // that never end a sentence here, so rejoin those segments.
 const NONTERMINAL_END = /\b(?:dr|mr|mrs|ms|prof|jr|sr|st|vs|[a-z])\.$/i;
 
-export function countSentences(text: string): number {
+function countSentences(text: string): number {
   const segments = [...sentenceSegmenter.segment(text)].map(
     (part) => part.segment,
   );
@@ -24,7 +24,7 @@ export function countSentences(text: string): number {
   return merged.filter((segment) => segment.trim() !== '').length;
 }
 
-export function findIndigenousCapitalizationVariants(text: string): string[] {
+function findIndigenousCapitalizationVariants(text: string): string[] {
   return [
     ...new Set(
       (text.match(/\bIndigenous\b/gi) ?? []).filter(
