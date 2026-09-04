@@ -3,7 +3,6 @@
 import React, { useEffect, useState } from 'react'
 import {
   Alert,
-  Collapse,
   DatePicker,
   Form,
   Input,
@@ -16,8 +15,6 @@ import { InfoCircleOutlined } from '@ant-design/icons'
 import {
   DEFAULT_RUBRIC,
   EmbeddableQuestion,
-  LOCKED_PROMPT_PREFIX,
-  LOCKED_PROMPT_SUFFIX,
   UpsertEmbeddableQuestionParams,
 } from '@koh/common'
 import dayjs from 'dayjs'
@@ -206,24 +203,6 @@ export default function EmbeddableQuestionForm({
           description="The AI model uses the Student Answer along with the Question Text, Criteria, and Instructions configured here to generate structured feedback."
         />
 
-        <Collapse
-          size="small"
-          className="mb-2"
-          items={[
-            {
-              key: 'locked-prefix',
-              label: 'System Prompt Prefix (Locked)',
-              children: (
-                <Input.TextArea
-                  readOnly
-                  rows={4}
-                  value={LOCKED_PROMPT_PREFIX}
-                />
-              ),
-            },
-          ]}
-        />
-
         <Form.Item
           name="criteriaText"
           label={
@@ -248,24 +227,6 @@ export default function EmbeddableQuestionForm({
             placeholder="e.g. The response should identify at least two core principles and provide specific examples."
           />
         </Form.Item>
-
-        <Collapse
-          size="small"
-          className="mb-3"
-          items={[
-            {
-              key: 'locked-suffix',
-              label: 'System Prompt Suffix (Locked)',
-              children: (
-                <Input.TextArea
-                  readOnly
-                  rows={4}
-                  value={LOCKED_PROMPT_SUFFIX}
-                />
-              ),
-            },
-          ]}
-        />
 
         <Form.Item
           name="instructions"

@@ -520,12 +520,6 @@ export interface IndigenousFeedback {
   needsHumanReview: boolean
 }
 
-export const LOCKED_PROMPT_PREFIX = `You are grading one short reflective answer from an Indigenous Studies self-assessment.
-
-You see exactly one question and one student answer. You have no memory of other students, other questions, or this student's earlier submissions.
-
-Mechanical facts in the user message (\`sentence_count\`, \`required_minimum\`, \`required_maximum\`, \`below_minimum\`) were computed by code. Trust them; do not recount sentences yourself.`
-
 export const DEFAULT_RUBRIC = `## How to decide
 
 Work through the criteria below in order and collect every one that applies. Then score.
@@ -561,25 +555,6 @@ Always write a short student-facing comment. Use these exact wordings where they
 - Full marks: one short sentence stating that the answer met the requirement and addressed the question.
 
 The host program prepends the sentence-requirement comment when the answer is short, so do not write your own sentence-count wording. Still set \`too_short\` and the score yourself.`
-
-export const LOCKED_PROMPT_SUFFIX = `## Output
-
-Return JSON only, no markdown:
-
-{"score": 0, "comment": "string", "reasons": ["meets_requirements"], "needs_human_review": false}
-
-- \`score\` is one of ${ALLOWED_INDIGENOUS_SCORES.join(', ')}.
-- \`comment\` is a non-empty student-facing string.
-- \`reasons\` is a non-empty list drawn only from: ${INDIGENOUS_REASON_CODES.map((code) => `\`${code}\``).join(', ')}.
-- \`meets_requirements\` and \`proofreading_note\` are each used alone, never with another reason, and only at a score of 2.
-- Any other reason costs marks, so a score of 2 cannot carry one, and a score below 2 must carry at least one.
-- \`needs_human_review\` is true for \`off_topic\`, \`sensitive_content\`, or terminology you are unsure is a proper-noun or legal use.`
-
-export function buildSystemPrompt(rubric?: string | null): string {
-  const trimmed = rubric?.trim()
-  const content = trimmed ? trimmed : DEFAULT_RUBRIC
-  return `${LOCKED_PROMPT_PREFIX}\n\n${content}\n\n${LOCKED_PROMPT_SUFFIX}`
-}
 
 export class EmbeddableQuestion {
   @IsInt()

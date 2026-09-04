@@ -5,8 +5,6 @@ import {
   DEDUCTION_REASONS,
   DEFAULT_RUBRIC,
   GradeParseError,
-  LOCKED_PROMPT_PREFIX,
-  LOCKED_PROMPT_SUFFIX,
   normalizeScore,
   postProcessFeedback,
   STRICT_SYSTEM_PROMPT,
@@ -205,11 +203,11 @@ describe('INDG Grading Logic', () => {
       expect(STRICT_SYSTEM_PROMPT).toBe(ORIGINAL_STRICT_SYSTEM_PROMPT);
     });
 
-    it('interpolates trimmed custom rubric between locked prefix and suffix', () => {
+    it('substitutes a trimmed custom rubric into the prompt', () => {
       const customRubric = '## Custom Criteria\n\nCustom rule here.';
       const prompt = buildSystemPrompt(`  ${customRubric}  `);
       expect(prompt).toBe(
-        `${LOCKED_PROMPT_PREFIX}\n\n${customRubric}\n\n${LOCKED_PROMPT_SUFFIX}`,
+        ORIGINAL_STRICT_SYSTEM_PROMPT.replace(DEFAULT_RUBRIC, customRubric),
       );
     });
 
