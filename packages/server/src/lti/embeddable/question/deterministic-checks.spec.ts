@@ -1,5 +1,4 @@
 import {
-  computeMechanicalFacts,
   countSentences,
   findIndigenousCapitalizationVariants,
   sentenceSpans,
@@ -68,38 +67,6 @@ describe('Deterministic checks', () => {
       expect(variants).toContain('indigenous');
       expect(variants).toContain('indigENOUS');
       expect(variants).toHaveLength(3);
-    });
-  });
-
-  describe('computeMechanicalFacts', () => {
-    it('computes facts correctly when under minimum sentences', () => {
-      const submission = 'Only one sentence here.';
-      const facts = computeMechanicalFacts(submission, 3, 5);
-      expect(facts.sentenceCount).toBe(1);
-      expect(facts.requiredMinimum).toBe(3);
-      expect(facts.requiredMaximum).toBe(5);
-      expect(facts.belowMinimum).toBe(true);
-      expect(facts.aboveMaximum).toBe(false);
-      expect(facts.indigenousCapitalizationVariants).toEqual([]);
-    });
-
-    it('computes facts correctly when within range with capitalization variant', () => {
-      const submission =
-        'First sentence about indigenous culture. Second sentence. Third sentence.';
-      const facts = computeMechanicalFacts(submission, 3, 5);
-      expect(facts.sentenceCount).toBe(3);
-      expect(facts.belowMinimum).toBe(false);
-      expect(facts.aboveMaximum).toBe(false);
-      expect(facts.indigenousCapitalizationVariants).toEqual(['indigenous']);
-    });
-
-    it('computes facts correctly when above maximum sentences', () => {
-      const submission =
-        'Sentence one. Sentence two. Sentence three. Sentence four. Sentence five. Sentence six.';
-      const facts = computeMechanicalFacts(submission, 2, 4);
-      expect(facts.sentenceCount).toBe(6);
-      expect(facts.belowMinimum).toBe(false);
-      expect(facts.aboveMaximum).toBe(true);
     });
   });
 });

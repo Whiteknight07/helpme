@@ -1,10 +1,14 @@
 import {
   INDIGENOUS_REASON_CODES,
   IndigenousReason,
-  ALLOWED_INDIGENOUS_SCORES,
   IndigenousScore,
+  ALLOWED_INDIGENOUS_SCORES,
   DEFAULT_RUBRIC,
 } from '@koh/common';
+import {
+  feedbackAnswerSchema,
+  type FeedbackAnswer,
+} from '../../../chatbot/chatbot-api.service';
 import { MechanicalFacts } from './deterministic-checks';
 
 export { DEFAULT_RUBRIC };
@@ -33,8 +37,6 @@ Return JSON only, no markdown:
 - \`needs_human_review\` is true for \`off_topic\`, \`sensitive_content\`, or terminology you are unsure is a proper-noun or legal use.`;
 }
 
-export const STRICT_SYSTEM_PROMPT = buildSystemPrompt();
-
 export const FULL_MARK_REASONS: ReadonlySet<IndigenousReason> =
   new Set<IndigenousReason>(['meets_requirements', 'proofreading_note']);
 
@@ -46,113 +48,31 @@ export const DEDUCTION_REASONS: ReadonlySet<IndigenousReason> =
 export const TOO_SHORT_COMMENT =
   'This answer does not meet the sentence requirements noted in the question.';
 
-export const REASON_ALIASES: Record<string, IndigenousReason> = {
-  grammar: 'unreadable',
-  grammar_deduction: 'unreadable',
-  'grammar deduction': 'unreadable',
-  improper_grammar: 'unreadable',
-  poor_grammar: 'unreadable',
-  capitalization: 'indigenous_capitalization',
-  indigenous_capitalization_variants: 'indigenous_capitalization',
-  uncapitalized_indigenous: 'indigenous_capitalization',
-  lowercase_indigenous: 'indigenous_capitalization',
-  terminology: 'terminology_review',
-  wrong_general_term: 'terminology_review',
-  'wrong general term': 'terminology_review',
-  incorrect_terminology: 'terminology_review',
-  proofreading: 'proofreading_note',
-  proofreading_reminder: 'proofreading_note',
-  minor_proofreading: 'proofreading_note',
-  typo: 'proofreading_note',
-  spelling: 'proofreading_note',
-};
-
-export class GradeParseError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'GradeParseError';
-  }
-}
-
-export interface ValidatedGradePayload {
-  score: IndigenousScore;
-  comment: string;
+export type ValidatedGradePayload = Pick<
+  FeedbackAnswer,
+  'score' | 'comment'
+> & {
   reasons: IndigenousReason[];
   needsHumanReview: boolean;
-}
-
-export function normalizeScore(val: unknown): IndigenousScore | null {
-  if (typeof val === 'boolean' || val === null || val === undefined) {
-    return null;
-  }
-  let num: number;
-  if (typeof val === 'number') {
-    num = val;
-  } else if (typeof val === 'string') {
-    const trimmed = val.trim();
-    if (!trimmed) return null;
-    num = Number(trimmed);
-  } else {
-    return null;
-  }
-  if (!Number.isFinite(num)) return null;
-  if ((ALLOWED_INDIGENOUS_SCORES as readonly number[]).includes(num)) {
-    return num as IndigenousScore;
-  }
-  return null;
-}
+};
 
 export function validateGradePayload(raw: unknown): ValidatedGradePayload {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new GradeParseError('Grade payload must be an object');
-  }
-  const obj = raw as Record<string, unknown>;
-
-  const score = normalizeScore(obj.score);
-  if (score === null) {
-    throw new GradeParseError(
-      `score must be 0, 0.5, 1, 1.5, or 2; got ${JSON.stringify(obj.score)}`,
-    );
+  const parsed = feedbackAnswerSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error('Grade payload does not match the feedback schema');
   }
 
-  const comment = obj.comment;
-  if (typeof comment !== 'string' || !comment.trim()) {
-    throw new GradeParseError('comment must be a non-empty string');
-  }
-  const boundedComment = comment.trim().slice(0, 15000);
+  const {
+    score,
+    comment,
+    reasons: rawReasons,
+    needs_human_review,
+  } = parsed.data;
+  const cleanedReasons = rawReasons.filter(
+    (reason, index) => rawReasons.indexOf(reason) === index,
+  );
 
-  const rawReasons = obj.reasons;
-  if (
-    !Array.isArray(rawReasons) ||
-    rawReasons.length === 0 ||
-    rawReasons.length > 20
-  ) {
-    throw new GradeParseError(
-      'reasons must be a non-empty list of at most 20 items',
-    );
-  }
-
-  const cleanedReasons: IndigenousReason[] = [];
-  for (const r of rawReasons) {
-    if (typeof r !== 'string' || !r.trim() || r.length > 200) {
-      throw new GradeParseError(`Unknown reason value: ${JSON.stringify(r)}`);
-    }
-    const key = r.trim().toLowerCase();
-    const normalized = (REASON_ALIASES[key] ?? key) as IndigenousReason;
-    if (!INDIGENOUS_REASON_CODES.includes(normalized)) {
-      throw new GradeParseError(`Unknown reason code: ${JSON.stringify(r)}`);
-    }
-    if (!cleanedReasons.includes(normalized)) {
-      cleanedReasons.push(normalized);
-    }
-  }
-
-  const rawNeedsReview = obj.needs_human_review ?? obj.needsHumanReview;
-  if (typeof rawNeedsReview !== 'boolean') {
-    throw new GradeParseError('needs_human_review must be a boolean');
-  }
-
-  let needsReview = rawNeedsReview;
+  let needsReview = needs_human_review;
   if (
     cleanedReasons.includes('off_topic') ||
     cleanedReasons.includes('sensitive_content') ||
@@ -165,7 +85,7 @@ export function validateGradePayload(raw: unknown): ValidatedGradePayload {
     cleanedReasons.includes('meets_requirements') &&
     cleanedReasons.length > 1
   ) {
-    throw new GradeParseError(
+    throw new Error(
       'meets_requirements cannot be combined with another reason',
     );
   }
@@ -173,26 +93,24 @@ export function validateGradePayload(raw: unknown): ValidatedGradePayload {
     cleanedReasons.includes('proofreading_note') &&
     cleanedReasons.length > 1
   ) {
-    throw new GradeParseError(
-      'proofreading_note cannot be combined with another reason',
-    );
+    throw new Error('proofreading_note cannot be combined with another reason');
   }
 
   const hasDeductions = cleanedReasons.some((r) => DEDUCTION_REASONS.has(r));
   if (score === 2 && hasDeductions) {
-    throw new GradeParseError(
+    throw new Error(
       `score 2 is not allowed with deduction reasons: ${cleanedReasons.join(', ')}`,
     );
   }
   if (score < 2 && !hasDeductions) {
-    throw new GradeParseError(
+    throw new Error(
       `score ${score} requires at least one deduction reason; got: ${cleanedReasons.join(', ')}`,
     );
   }
 
   return {
     score,
-    comment: boundedComment,
+    comment,
     reasons: cleanedReasons,
     needsHumanReview: needsReview,
   };

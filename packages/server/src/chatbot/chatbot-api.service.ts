@@ -2,10 +2,13 @@ import {
   AddChatbotQuestionParams,
   AddDocumentAggregateParams,
   AddDocumentChunkParams,
+  ALLOWED_INDIGENOUS_SCORES,
   ChatbotQuestionResponseChatbotDB,
   ChatbotSettings,
   ChatbotSettingsMetadata,
   ChatbotSettingsUpdateParams,
+  INDIGENOUS_REASON_CODES,
+  IndigenousScore,
   UpdateChatbotQuestionParams,
   UpdateDocumentAggregateParams,
   UpdateDocumentChunkParams,
@@ -14,17 +17,26 @@ import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 
+const indigenousScoreSchema = z.custom<IndigenousScore>(
+  (score) =>
+    typeof score === 'number' &&
+    Number.isFinite(score) &&
+    ALLOWED_INDIGENOUS_SCORES.includes(score as IndigenousScore),
+);
+
+export const feedbackAnswerSchema = z.object({
+  score: indigenousScoreSchema,
+  comment: z.string().trim().min(1).max(15000),
+  reasons: z.array(z.enum(INDIGENOUS_REASON_CODES)).min(1).max(20),
+  needs_human_review: z.boolean(),
+});
+
 const feedbackResponseSchema = z.object({
-  answer: z.object({
-    score: z.number().finite(),
-    comment: z.string(),
-    reasons: z.array(z.string()),
-    needs_human_review: z.boolean(),
-  }),
+  answer: feedbackAnswerSchema,
   model: z.string().optional(),
 });
 
-export type FeedbackAnswer = z.infer<typeof feedbackResponseSchema>['answer'];
+export type FeedbackAnswer = z.infer<typeof feedbackAnswerSchema>;
 export type FeedbackQueryResult = z.infer<typeof feedbackResponseSchema>;
 
 @Injectable()
