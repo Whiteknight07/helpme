@@ -47,18 +47,12 @@ export class EmbeddableResourceController {
       body.responseText,
       questionId,
       courseId,
-      auth.role === 'staff'
-        ? {
-            kind: 'lti',
-            ltiIssuer: auth.ltiIssuer,
-            ltiSubject: auth.ltiSubject,
-            userId: auth.userId,
-          }
-        : {
-            kind: 'lti',
-            ltiIssuer: auth.ltiIssuer,
-            ltiSubject: auth.ltiSubject,
-          },
+      {
+        kind: 'lti',
+        ltiIssuer: auth.ltiIssuer,
+        ltiSubject: auth.ltiSubject,
+        ...(auth.role === 'staff' ? { userId: auth.userId } : {}),
+      },
     );
   }
 }
