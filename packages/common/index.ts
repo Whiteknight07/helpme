@@ -633,29 +633,6 @@ export interface EmbeddableQuestion {
   maxSentences: number
 }
 
-@ValidatorConstraint({ name: 'validSentenceBounds', async: false })
-export class ValidSentenceBoundsConstraint implements ValidatorConstraintInterface {
-  validate(_value: unknown, args: ValidationArguments) {
-    if (!(args.object instanceof UpsertEmbeddableQuestionParams)) {
-      return true
-    }
-    const obj = args.object
-    if (
-      obj.minSentences !== undefined &&
-      obj.maxSentences !== undefined &&
-      obj.minSentences !== null &&
-      obj.maxSentences !== null
-    ) {
-      return obj.minSentences <= obj.maxSentences
-    }
-    return true
-  }
-
-  defaultMessage() {
-    return 'minSentences cannot be greater than maxSentences.'
-  }
-}
-
 export class UpsertEmbeddableQuestionParams {
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim() || null : value,
@@ -697,7 +674,6 @@ export class UpsertEmbeddableQuestionParams {
   @IsOptional()
   @Min(1)
   @Max(100)
-  @Validate(ValidSentenceBoundsConstraint)
   maxSentences?: number
 }
 

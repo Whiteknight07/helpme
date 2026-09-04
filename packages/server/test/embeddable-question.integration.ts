@@ -121,6 +121,38 @@ describe('Embeddable Question Integration', () => {
       expect(stored!.criteriaText).toBe('');
     });
 
+    it.each([
+      ['omitted bounds', {}],
+      ['null bounds', { minSentences: null, maxSentences: null }],
+    ])('uses sentence defaults for %s', async (_, bounds) => {
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
+
+      const res = await supertest({ userId: professor.id })
+        .post(`/lti/embeddable-question/${course.id}`)
+        .send({ questionText: 'Reflect on the reading.', ...bounds })
+        .expect(201);
+
+      expect(res.body.minSentences).toBe(3);
+      expect(res.body.maxSentences).toBe(5);
+    });
+
+    it.each([
+      ['min only above default max', { minSentences: 10 }],
+      ['max only below default min', { maxSentences: 1 }],
+      ['explicitly reversed bounds', { minSentences: 5, maxSentences: 3 }],
+    ])('rejects %s', async (_, bounds) => {
+      const { user: professor, course } = await setupUserCourse(Role.PROFESSOR);
+
+      await supertest({ userId: professor.id })
+        .post(`/lti/embeddable-question/${course.id}`)
+        .send({ questionText: 'Reflect on the reading.', ...bounds })
+        .expect(400);
+
+      expect(
+        await EmbeddableQuestionModel.count({ where: { courseId: course.id } }),
+      ).toBe(0);
+    });
+
     it('rejects student from creating a question', async () => {
       const { user: student, course } = await setupUserCourse(Role.STUDENT);
 

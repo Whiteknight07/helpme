@@ -241,6 +241,12 @@ export class EmbeddableQuestionService {
     const minSentences = params.minSentences ?? 3;
     const maxSentences = params.maxSentences ?? 5;
 
+    if (minSentences > maxSentences) {
+      throw new BadRequestException(
+        'minSentences cannot be greater than maxSentences.',
+      );
+    }
+
     if (questionId !== undefined) {
       const existing = await this.findOne(courseId, questionId);
 
