@@ -1,8 +1,8 @@
 # LTI embedded question authentication
 
 This note records the authentication and deadline questions found while adding
-Canvas Deep Linking for embeddable questions. The current branch does not solve
-these questions yet.
+Canvas Deep Linking for embeddable questions. Scoped resource authentication is
+implemented; deadline availability remains unresolved.
 
 ## Launches and later requests are different
 
@@ -12,10 +12,13 @@ token before HelpMe trusts the Canvas user, role, course, and resource link.
 
 HelpMe then redirects the iframe to the question page. Requests from that page
 come from browser JavaScript. Canvas does not sign the later question and
-feedback API requests. HelpMe therefore needs a post-launch credential. The
-proposed credential is a HelpMe-signed JWT limited to the mapped course and
-question. It must not create or represent a normal HelpMe account or course
-enrollment.
+feedback API requests. The verified question launch maps the Canvas course and
+question, then issues the learner a 24-hour HelpMe-signed course/question-scoped
+JWT in a dedicated cookie. Later GET and feedback routes use their own guard.
+Feedback stores Canvas iss+sub with no HelpMe User, organization membership,
+course enrollment, identity link, or full-app login. Staff previews require an
+existing linked HelpMe staff enrollment. Expiry tells the learner to reopen the
+Canvas quiz.
 
 ## Availability evidence from local Canvas source
 
