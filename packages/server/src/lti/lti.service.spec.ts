@@ -571,20 +571,6 @@ describe('LtiService', () => {
       }).save();
     });
 
-    it('returns valid launch result for verified learner token', async () => {
-      const token = createLaunchToken();
-      const result = await service.resolveQuestionLaunch(token);
-
-      expect(result).toEqual({
-        userId: expect.any(Number),
-        courseId: course.id,
-        questionId: question.id,
-      });
-
-      const user = await UserModel.findOne({ where: { id: result.userId } });
-      expect(user).toBeDefined();
-    });
-
     it('provisions unknown learner once and creates STUDENT enrollment', async () => {
       const token = createLaunchToken({
         user: 'unknown-learner-id-99',

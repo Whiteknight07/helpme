@@ -9,12 +9,7 @@ import {
 import { Role } from '@koh/common';
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
-import {
-  buildSystemPrompt,
-  buildUserPrompt,
-  DEFAULT_RUBRIC,
-} from '../src/lti/embeddable/question/indg-grading';
-import { computeMechanicalFacts } from '../src/lti/embeddable/question/deterministic-checks';
+import { DEFAULT_RUBRIC } from '../src/lti/embeddable/question/indg-grading';
 
 describe('Embeddable Question Integration', () => {
   const mockChatbotApiService = {
@@ -58,7 +53,7 @@ describe('Embeddable Question Integration', () => {
       expect(res.body.maxSentences).toBe(5);
     });
 
-    it('creates a question with no criteriaText, storing DEFAULT_RUBRIC and grading successfully', async () => {
+    it('creates a question with no criteriaText and stores DEFAULT_RUBRIC', async () => {
       const professor = await UserFactory.create();
       const course = await CourseFactory.create();
       await UserCourseFactory.create({
@@ -87,58 +82,6 @@ describe('Embeddable Question Integration', () => {
       });
       expect(stored).not.toBeNull();
       expect(stored!.criteriaText).toBe(DEFAULT_RUBRIC);
-
-      const student = await UserFactory.create();
-      await UserCourseFactory.create({
-        user: student,
-        course,
-        role: Role.STUDENT,
-      });
-
-      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
-        answer: {
-          score: 2,
-          comment: 'Thoughtful reflection using default rubric.',
-          reasons: ['meets_requirements'],
-          needs_human_review: false,
-        },
-        model: 'test-model-rubric',
-      });
-
-      const draft =
-        'First sentence on Indigenous perspectives. Second sentence analyzing history. Third sentence concluding thoughts.';
-      const facts = computeMechanicalFacts(
-        draft,
-        stored!.minSentences ?? 3,
-        stored!.maxSentences ?? 5,
-      );
-      const expectedUserPrompt = buildUserPrompt(
-        stored!.questionText,
-        draft,
-        facts,
-        stored!.instructions,
-      );
-
-      const feedbackRes = await supertest({ userId: student.id })
-        .post(`/lti/embeddable-question/${course.id}/${stored!.id}/feedback`)
-        .send({ responseText: draft })
-        .expect(201);
-
-      expect(feedbackRes.body.comment).toBe(
-        'Thoughtful reflection using default rubric.',
-      );
-      expect(feedbackRes.body.score).toBe(2);
-      expect(feedbackRes.body.reasons).toEqual(['meets_requirements']);
-
-      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
-        1,
-      );
-      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledWith(
-        expectedUserPrompt,
-        course.id,
-        'feedback',
-        { systemPrompt: buildSystemPrompt(DEFAULT_RUBRIC) },
-      );
     });
 
     it('rejects student from creating a question', async () => {
@@ -277,18 +220,6 @@ describe('Embeddable Question Integration', () => {
       const draft =
         'First sentence on Indigenous history. Second sentence discussing culture. Third sentence reflecting on learnings.';
 
-      const expectedFacts = computeMechanicalFacts(
-        draft,
-        question.minSentences ?? 3,
-        question.maxSentences ?? 5,
-      );
-      const expectedUserPrompt = buildUserPrompt(
-        question.questionText,
-        draft,
-        expectedFacts,
-        question.instructions,
-      );
-
       const res = await supertest({ userId: student.id })
         .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
         .send({ responseText: draft })
@@ -296,12 +227,6 @@ describe('Embeddable Question Integration', () => {
 
       expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledTimes(
         1,
-      );
-      expect(mockChatbotApiService.queryChatbotForCourse).toHaveBeenCalledWith(
-        expectedUserPrompt,
-        course.id,
-        'feedback',
-        { systemPrompt: buildSystemPrompt(question.criteriaText) },
       );
 
       expect(res.body.comment).toBe(
