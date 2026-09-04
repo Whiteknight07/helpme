@@ -20,48 +20,6 @@ course enrollment, identity link, or full-app login. Staff previews require an
 existing linked HelpMe staff enrollment. Expiry tells the learner to reopen the
 Canvas quiz.
 
-## Current instructor setup
-
-Deep Linking does not yet include a HelpMe sign-in screen. Before inserting an
-embeddable question, the instructor must link the Canvas identity to an existing
-HelpMe staff account:
-
-1. Confirm that the Canvas course is connected to the intended HelpMe course.
-2. Confirm that the HelpMe account is enrolled in that course as a Professor or
-   TA.
-3. Open **HelpMe** from the Canvas course navigation.
-4. Sign in to the existing HelpMe account. This links the exact Canvas issuer and
-   user identifier to that account.
-5. Return to the Canvas quiz editor and reopen the HelpMe editor button.
-
-HelpMe must not match accounts by email, create an account, or grant a staff
-enrollment during this flow. If the question picker still reports that no
-HelpMe account is linked, verify the course connection and the Professor or TA
-enrollment.
-
-When testing local middleware changes, restart the HelpMe backend before
-reopening the editor button. The LTI provider registers its launch callbacks at
-startup, so an old process can return the previous JSON error response instead
-of the question picker.
-
-## Planned instructor sign-in flow
-
-The intended Deep Linking experience removes the course-navigation setup step:
-
-1. Canvas sends a signed Deep Linking launch to HelpMe.
-2. HelpMe verifies the launch and saves short-lived resume state.
-3. If the Canvas identity is not linked, HelpMe asks the instructor to sign in
-   to an existing HelpMe account.
-4. HelpMe verifies that the account is already a Professor or TA in the mapped
-   course.
-5. HelpMe links the verified Canvas issuer and user identifier to the account,
-   then resumes the question picker.
-
-If browser cookie restrictions prevent sign-in inside the Canvas iframe,
-HelpMe should open the sign-in step in a top-level window and resume the picker
-after authentication. The flow must not match by email, create accounts, or
-change course roles.
-
 ## Availability evidence from local Canvas source
 
 Question-level `availableFrom` and `availableUntil` settings were removed. An
