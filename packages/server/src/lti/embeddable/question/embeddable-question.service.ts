@@ -70,19 +70,17 @@ export class EmbeddableQuestionService {
    * @param courseId The course ID.
    * @param attribution Who the attempt belongs to.
    */
-  async getFeedback(
-    {
-      submission,
-      questionId,
-      courseId,
-      attribution,
-    }: {
-      submission: string;
-      questionId: number;
-      courseId: number;
-      attribution: EmbeddableFeedbackAttribution;
-    },
-  ): Promise<EmbeddableQuestionFeedback> {
+  async getFeedback({
+    submission,
+    questionId,
+    courseId,
+    attribution,
+  }: {
+    submission: string;
+    questionId: number;
+    courseId: number;
+    attribution: EmbeddableFeedbackAttribution;
+  }): Promise<EmbeddableQuestionFeedback> {
     const question = await this.findOne(courseId, questionId);
     const profile = await this.getProfile(courseId);
 
