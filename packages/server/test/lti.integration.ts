@@ -12,6 +12,7 @@ import { CourseModel } from '../src/course/course.entity';
 import { OrganizationUserModel } from '../src/organization/organization-user.entity';
 import { UserCourseModel } from '../src/profile/user-course.entity';
 import { UserLtiIdentityModel } from '../src/lti/user_lti_identity.entity';
+import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
 import {
   CourseFactory,
   lmsCourseIntFactory,
@@ -41,8 +42,19 @@ import {
   resourceCookiePath,
 } from '../src/lti/embeddable/resource/embeddable-resource-auth';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 const testEncryptionKey = 'abcdefg';
+const testCanvasPlatform = {
+  issuer: 'https://canvas.example.edu',
+  clientId: 'canvas-client-id',
+  guid: 'canvas-platform-guid',
+} as const;
+const originalCanvasEnv = {
+  issuer: process.env.LTI_CANVAS_ISSUER,
+  clientId: process.env.LTI_CANVAS_CLIENT_ID,
+  platformGuid: process.env.LTI_CANVAS_PLATFORM_GUID,
+};
 const testLtiDbOptions: any = {
   type: 'postgres',
   host: 'localhost',
@@ -60,6 +72,14 @@ describe('LtiController', () => {
   let user: UserModel;
   let course: CourseModel;
   let customToken: IdToken | null | undefined;
+  let configServiceForRestore: ConfigService | undefined;
+  let originalCanvasConfig:
+    | {
+        issuer: string | undefined;
+        clientId: string | undefined;
+        platformGuid: string | undefined;
+      }
+    | undefined;
 
   const mockMiddleware = (
     _: express.Request,
@@ -138,7 +158,38 @@ describe('LtiController', () => {
   });
 
   afterAll(async () => {
-    await provider.close();
+    try {
+      await provider.close();
+    } finally {
+      const configService = configServiceForRestore;
+      if (configService && originalCanvasConfig) {
+        const restoreConfig = (
+          key: string,
+          envValue: string | undefined,
+          configValue: string | undefined,
+        ) => {
+          configService.set(key, configValue);
+          if (envValue === undefined) delete process.env[key];
+          else process.env[key] = envValue;
+        };
+
+        restoreConfig(
+          'LTI_CANVAS_ISSUER',
+          originalCanvasEnv.issuer,
+          originalCanvasConfig.issuer,
+        );
+        restoreConfig(
+          'LTI_CANVAS_CLIENT_ID',
+          originalCanvasEnv.clientId,
+          originalCanvasConfig.clientId,
+        );
+        restoreConfig(
+          'LTI_CANVAS_PLATFORM_GUID',
+          originalCanvasEnv.platformGuid,
+          originalCanvasConfig.platformGuid,
+        );
+      }
+    }
   });
 
   describe('ALL lti/', () => {
@@ -199,6 +250,17 @@ describe('LtiController', () => {
       const setupQuestionLaunch = async (
         roles = [LTI_MEMBERSHIP_LEARNER_ROLE],
       ) => {
+        const configService = getTestModule().get<ConfigService>(ConfigService);
+        configServiceForRestore = configService;
+        originalCanvasConfig ??= {
+          issuer: configService.get<string>('LTI_CANVAS_ISSUER'),
+          clientId: configService.get<string>('LTI_CANVAS_CLIENT_ID'),
+          platformGuid: configService.get<string>('LTI_CANVAS_PLATFORM_GUID'),
+        };
+        configService.set('LTI_CANVAS_ISSUER', testCanvasPlatform.issuer);
+        configService.set('LTI_CANVAS_CLIENT_ID', testCanvasPlatform.clientId);
+        configService.set('LTI_CANVAS_PLATFORM_GUID', testCanvasPlatform.guid);
+
         const launchCourse = await CourseFactory.create();
         await lmsCourseIntFactory.create({
           course: launchCourse,
@@ -210,15 +272,20 @@ describe('LtiController', () => {
           criteriaText: 'Criteria text',
         }).save();
 
-        customToken = {
-          iss: 'https://canvas.example.edu',
+        const token = {
+          iss: testCanvasPlatform.issuer,
+          clientId: testCanvasPlatform.clientId,
+          deploymentId: 'canvas-deployment-id',
           user: 'canvas-learner-1',
           userInfo: {
             email: 'learner@example.edu',
             given_name: 'Jane',
             family_name: 'Learner',
           },
-          platformInfo: { product_family_code: 'canvas' },
+          platformInfo: {
+            product_family_code: 'canvas',
+            guid: testCanvasPlatform.guid,
+          },
           platformContext: {
             roles,
             custom: {
@@ -227,8 +294,9 @@ describe('LtiController', () => {
             },
           },
         } as unknown as IdToken;
+        customToken = token;
 
-        return { launchCourse, question };
+        return { launchCourse, question, token };
       };
 
       const tableCounts = async () => ({
@@ -236,6 +304,7 @@ describe('LtiController', () => {
         orgUsers: await OrganizationUserModel.count(),
         enrollments: await UserCourseModel.count(),
         identities: await UserLtiIdentityModel.count(),
+        feedback: await EmbeddableQuestionFeedbackModel.count(),
       });
 
       it('issues a scoped learner cookie without any user, org, enrollment, or identity writes', async () => {
@@ -274,7 +343,7 @@ describe('LtiController', () => {
         expect(decoded).toMatchObject({
           kind: 'embeddable-resource',
           role: 'learner',
-          ltiIssuer: 'https://canvas.example.edu',
+          ltiIssuer: testCanvasPlatform.issuer,
           ltiSubject: 'canvas-learner-1',
           courseId: launchCourse.id,
           questionId: question.id,
@@ -334,6 +403,43 @@ describe('LtiController', () => {
         await expect(tableCounts()).resolves.toEqual(before);
       });
 
+      it.each([
+        [
+          'issuer',
+          (token: IdToken) => (token.iss = 'https://canvas.attacker.edu'),
+        ],
+        ['client', (token: IdToken) => (token.clientId = 'attacker-client-id')],
+        [
+          'platform guid',
+          (token: IdToken) =>
+            (token.platformInfo.guid = 'attacker-platform-guid'),
+        ],
+      ] as const)(
+        'should reject a question launch with a mismatched Canvas %s',
+        async (_field, mutateToken) => {
+          const { token } = await setupQuestionLaunch();
+          mutateToken(token);
+          const before = await tableCounts();
+
+          const response = await supertest().get('/lti').expect(403);
+          const cookies: string[] = response.get('Set-Cookie') ?? [];
+          expect(
+            cookies.some((cookie) => cookie.startsWith('lti_resource_')),
+          ).toBe(false);
+          await expect(tableCounts()).resolves.toEqual(before);
+        },
+      );
+
+      it('accepts a different Canvas deployment ID for the same platform', async () => {
+        const { launchCourse, question, token } = await setupQuestionLaunch();
+        token.deploymentId = 'canvas-course-specific-deployment';
+
+        const response = await supertest().get('/lti').expect(302);
+        expect(response.headers.location).toContain(
+          `/lti/embeddable/${launchCourse.id}/question/${question.id}`,
+        );
+      });
+
       it('should launch an existing instructor preview with a staff resource cookie and no writes', async () => {
         const { launchCourse, question } = await setupQuestionLaunch([
           'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
@@ -343,7 +449,7 @@ describe('LtiController', () => {
         });
         await UserLtiIdentityFactory.create({
           user: instructor,
-          issuer: 'https://canvas.example.edu',
+          issuer: testCanvasPlatform.issuer,
           ltiUserId: 'canvas-learner-1',
         });
         await UserCourseFactory.create({
@@ -373,7 +479,7 @@ describe('LtiController', () => {
         expect(decoded).toMatchObject({
           kind: 'embeddable-resource',
           role: 'staff',
-          ltiIssuer: 'https://canvas.example.edu',
+          ltiIssuer: testCanvasPlatform.issuer,
           ltiSubject: 'canvas-learner-1',
           courseId: launchCourse.id,
           questionId: question.id,
