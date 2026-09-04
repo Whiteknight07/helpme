@@ -41,8 +41,9 @@ function EmbeddableQuestionView() {
         if (axios.isAxiosError(err) && err.response?.status === 401) {
           setQuestionState({
             status: 'error',
-            error:
-              'Your Canvas session has expired. Reopen this quiz in Canvas to continue.',
+            error: useResource
+              ? 'Your Canvas session has expired. Reopen this quiz in Canvas to continue.'
+              : 'HelpMe login and course enrollment are required to view this question.',
           })
           return
         }
