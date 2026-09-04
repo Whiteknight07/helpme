@@ -81,8 +81,8 @@ export class EmbeddableQuestionService {
 
     const facts = computeMechanicalFacts(
       submission,
-      question.minSentences ?? 3,
-      question.maxSentences ?? 5,
+      question.minSentences,
+      question.maxSentences,
     );
 
     const userPrompt = buildUserPrompt(
@@ -254,13 +254,9 @@ export class EmbeddableQuestionService {
       return existing.save();
     }
 
-    const count = await EmbeddableQuestionModel.count({
-      where: { courseId },
-    });
-
     const question = EmbeddableQuestionModel.create({
       courseId,
-      name: name || `Question ${count + 1}`,
+      name,
       questionText,
       criteriaText,
       instructions,

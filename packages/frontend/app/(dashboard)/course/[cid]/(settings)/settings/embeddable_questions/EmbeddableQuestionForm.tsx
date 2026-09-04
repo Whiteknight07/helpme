@@ -18,6 +18,11 @@ interface EmbeddableQuestionFormProps {
   onSaveCallback: () => void
 }
 
+type EmbeddableQuestionFormValues = UpsertEmbeddableQuestionParams &
+  Required<
+    Pick<UpsertEmbeddableQuestionParams, 'minSentences' | 'maxSentences'>
+  >
+
 export default function EmbeddableQuestionForm({
   courseId,
   open,
@@ -25,7 +30,7 @@ export default function EmbeddableQuestionForm({
   editingQuestion,
   onSaveCallback,
 }: EmbeddableQuestionFormProps): ReactElement {
-  const [form] = Form.useForm<UpsertEmbeddableQuestionParams>()
+  const [form] = Form.useForm<EmbeddableQuestionFormValues>()
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
@@ -39,14 +44,14 @@ export default function EmbeddableQuestionForm({
             questionText: editingQuestion.questionText,
             criteriaText: editingQuestion.criteriaText,
             instructions: editingQuestion.instructions ?? undefined,
-            minSentences: editingQuestion.minSentences ?? 3,
-            maxSentences: editingQuestion.maxSentences ?? 5,
+            minSentences: editingQuestion.minSentences,
+            maxSentences: editingQuestion.maxSentences,
           }
         : { minSentences: 3, maxSentences: 5 },
     )
   }, [open, editingQuestion, form])
 
-  const handleSave = async (values: UpsertEmbeddableQuestionParams) => {
+  const handleSave = async (values: EmbeddableQuestionFormValues) => {
     if (isLoading) return
     setIsLoading(true)
 
@@ -56,8 +61,8 @@ export default function EmbeddableQuestionForm({
         questionText: values.questionText.trim(),
         criteriaText: values.criteriaText?.trim() || '',
         instructions: values.instructions?.trim() || null,
-        minSentences: values.minSentences ?? 3,
-        maxSentences: values.maxSentences ?? 5,
+        minSentences: values.minSentences,
+        maxSentences: values.maxSentences,
       }
 
       await (editingQuestion

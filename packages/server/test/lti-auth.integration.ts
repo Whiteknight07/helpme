@@ -16,7 +16,6 @@ import { AccountType } from '@koh/common';
 import { OrganizationUserModel } from 'organization/organization-user.entity';
 import { LoginTicket, OAuth2Client } from 'google-auth-library';
 import { LtiModule } from '../src/lti/lti.module';
-import { LtiService } from '../src/lti/lti.service';
 import { restrictPaths } from '../src/lti/lti-auth.controller';
 import { UserCourseModel } from '../src/profile/user-course.entity';
 import { UserLtiIdentityModel } from '../src/lti/user_lti_identity.entity';
@@ -93,16 +92,10 @@ describe('LTI Auth Integration', () => {
       const parts = secondPart.split(';').map((v) => v.trim());
       const flags = parts.slice(1);
 
+      expect(flags).toHaveLength(2);
       expect(flags).toContain('HttpOnly');
-      if (LtiService.cookieOptions.secure) {
-        expect(flags).toHaveLength(3);
-        expect(flags).toContain('Secure');
-        expect(flags).toContain('SameSite=None');
-      } else {
-        expect(flags).toHaveLength(2);
-        expect(flags).not.toContain('Secure');
-        expect(flags).toContain('SameSite=Lax');
-      }
+      expect(flags).not.toContain('Secure');
+      expect(flags).toContain('SameSite=Lax');
     });
 
     it('should fail with 401 if token is invalid', async () => {

@@ -132,7 +132,7 @@ export default function EmbeddableQuestionsPage(
       width: 100,
       render: (_: unknown, record: EmbeddableQuestion) => (
         <span>
-          {record.minSentences ?? 3} - {record.maxSentences ?? 5}
+          {record.minSentences} - {record.maxSentences}
         </span>
       ),
     },

@@ -33,13 +33,11 @@ export function CookieWrapper({ children }: { children: ReactNode }) {
 
 export default function Layout({ children }: LayoutProps) {
   const pathname = usePathname()
-  const isPublicLtiRoute =
-    pathname.startsWith('/lti/deep-link') ||
-    pathname.startsWith('/lti/embeddable/')
+  const isDeepLinkRoute = pathname.startsWith('/lti/deep-link')
 
   return (
     <Suspense fallback={<CenteredSpinner tip={'Loading...'} />}>
-      {isPublicLtiRoute ? children : <CookieWrapper>{children}</CookieWrapper>}
+      {isDeepLinkRoute ? children : <CookieWrapper>{children}</CookieWrapper>}
     </Suspense>
   )
 }
