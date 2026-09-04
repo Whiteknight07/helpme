@@ -29,11 +29,20 @@ including `ResourceLink.available.endDateTime` and
 the launch has an assignment context. We do not yet know whether the INDG quiz
 placement supplies these values.
 
-Until that behavior is verified, Canvas controls quiz availability. A later
-implementation can cap the HelpMe resource token at a Canvas-signed deadline.
-If the launch has no deadline, the resource token can use a fixed lifetime such
-as 24 hours. When the token expires, the iframe must tell the student to reopen
-the quiz in Canvas.
+Until that behavior is verified, Canvas controls quiz availability. The options
+to discuss with the professor are, in preferred order:
+
+1. Cap the HelpMe resource token at the Canvas-signed resource or assignment
+   deadline when Canvas supplies one.
+2. If Canvas does not supply a deadline, let the instructor set one deadline for
+   the whole HelpMe assessment instead of repeating it on every question.
+3. If HelpMe has no trusted deadline, use a fixed token lifetime such as 24
+   hours and rely on Canvas to control whether the quiz remains visible.
+
+The second option needs an assessment-level record shared by the embedded
+questions. It should only be added if real Canvas launches omit the required
+deadline. When a token expires, the iframe must tell the student to reopen the
+quiz in Canvas.
 
 ## Required tests before deadline enforcement
 
@@ -43,6 +52,8 @@ the quiz in Canvas.
   assignment lock time, both values, or neither value.
 - Check whether Canvas applies each student's availability overrides to the
   launch value.
+- If the launch has no deadline, test one assessment-level deadline across
+  several embedded questions before using the fallback in production.
 - Open a quiz again and confirm that Canvas performs a new LTI launch and HelpMe
   issues a new resource token.
 - Keep one quiz tab open until its resource token expires and confirm that the
