@@ -1,6 +1,7 @@
 import { setupIntegrationTest } from './util/testUtils';
 import { LtiModule } from '../src/lti/lti.module';
 import { ChatbotApiService } from '../src/chatbot/chatbot-api.service';
+import { JwtService } from '@nestjs/jwt';
 import {
   CourseFactory,
   UserCourseFactory,
@@ -15,6 +16,7 @@ import {
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
 import { EmbeddableGradingProfileModel } from '../src/lti/embeddable/question/grading-profile.entity';
+import { resourceCookieName } from '../src/lti/embeddable/resource/embeddable-resource-auth';
 
 type QuestionOverrides = Partial<
   Pick<
@@ -28,8 +30,12 @@ describe('Embeddable Question Integration', () => {
     queryChatbotForCourse: jest.fn(),
   };
 
-  const { supertest } = setupIntegrationTest(LtiModule, (builder) =>
-    builder.overrideProvider(ChatbotApiService).useValue(mockChatbotApiService),
+  const { supertest, getTestModule } = setupIntegrationTest(
+    LtiModule,
+    (builder) =>
+      builder
+        .overrideProvider(ChatbotApiService)
+        .useValue(mockChatbotApiService),
   );
 
   beforeEach(async () => {
@@ -479,6 +485,250 @@ describe('Embeddable Question Integration', () => {
 
       expect(res.body.score).toBe(3);
       expect(res.body.maxScore).toBe(3);
+    });
+  });
+
+  describe('Embeddable Resource (Canvas launch cookie)', () => {
+    const ISS = 'https://canvas.example.edu';
+    const SUB = 'canvas-learner-9';
+
+    const setupResourceQuiz = async () => {
+      const course = await CourseFactory.create();
+      await ensureIndgProfile(course.id);
+      const q1 = await EmbeddableQuestionModel.create({
+        courseId: course.id,
+        name: 'Q1',
+        questionText: 'Question one text',
+        criteriaText: 'Criteria',
+        minSentences: 3,
+        maxSentences: 5,
+      }).save();
+      const q2 = await EmbeddableQuestionModel.create({
+        courseId: course.id,
+        name: 'Q2',
+        questionText: 'Question two text',
+        criteriaText: 'Criteria',
+        minSentences: 3,
+        maxSentences: 5,
+      }).save();
+      return { course, q1, q2 };
+    };
+
+    const signLearner = (
+      courseId: number,
+      questionId: number,
+      sub = SUB,
+    ): string => {
+      const jwtService = getTestModule().get<JwtService>(JwtService);
+      return jwtService.sign({
+        kind: 'embeddable-resource',
+        role: 'learner',
+        iss: ISS,
+        sub,
+        courseId,
+        questionId,
+      });
+    };
+
+    const mockValidFeedback = () => {
+      mockChatbotApiService.queryChatbotForCourse.mockResolvedValue({
+        answer: {
+          score: 2,
+          comment: 'The reflection is thoughtful and meets requirements.',
+          reasons: ['meets_requirements'],
+          needs_human_review: false,
+        },
+        model: 'gemini-1.5-flash-grading',
+      });
+    };
+
+    const draft =
+      'First sentence on Indigenous history. Second sentence discussing culture. Third sentence reflecting on learnings.';
+
+    it('serves two questions side by side with distinct cookies', async () => {
+      const { course, q1, q2 } = await setupResourceQuiz();
+      const c1 = `${resourceCookieName(course.id, q1.id)}=${signLearner(course.id, q1.id)}`;
+      const c2 = `${resourceCookieName(course.id, q2.id)}=${signLearner(course.id, q2.id)}`;
+      expect(c1.split('=')[0]).not.toBe(c2.split('=')[0]);
+
+      await supertest()
+        .get(`/lti/embeddable-resource/${course.id}/${q1.id}`)
+        .set('Cookie', [c1, c2])
+        .expect(200)
+        .then((res) => {
+          expect(res.body.id).toBe(q1.id);
+        });
+
+      await supertest()
+        .get(`/lti/embeddable-resource/${course.id}/${q2.id}`)
+        .set('Cookie', [c1, c2])
+        .expect(200)
+        .then((res) => {
+          expect(res.body.id).toBe(q2.id);
+        });
+    });
+
+    it('rejects a Q1 credential on Q2 question and feedback routes without calling the model', async () => {
+      const { course, q1, q2 } = await setupResourceQuiz();
+      const q1Token = signLearner(course.id, q1.id);
+      const q2Name = resourceCookieName(course.id, q2.id);
+
+      await supertest()
+        .get(`/lti/embeddable-resource/${course.id}/${q2.id}`)
+        .set('Cookie', [`${q2Name}=${q1Token}`])
+        .expect(403);
+
+      await supertest()
+        .post(`/lti/embeddable-resource/${course.id}/${q2.id}/feedback`)
+        .set('Cookie', [`${q2Name}=${q1Token}`])
+        .send({ responseText: draft })
+        .expect(403);
+
+      expect(
+        mockChatbotApiService.queryChatbotForCourse,
+      ).not.toHaveBeenCalled();
+      expect(await EmbeddableQuestionFeedbackModel.count()).toBe(0);
+    });
+
+    it.each([
+      ['tampered', 'tampered'],
+      ['expired', 'expired'],
+      ['wrong-kind', 'wrong-kind'],
+    ])(
+      'rejects %s tokens before the chatbot on both routes',
+      async (_, kind) => {
+        const { course, q1 } = await setupResourceQuiz();
+        const jwtService = getTestModule().get<JwtService>(JwtService);
+        const name = resourceCookieName(course.id, q1.id);
+        let token: string;
+        if (kind === 'tampered') {
+          const valid = signLearner(course.id, q1.id);
+          token = valid.slice(0, -1) + (valid.endsWith('a') ? 'b' : 'a');
+        } else if (kind === 'expired') {
+          token = jwtService.sign({
+            kind: 'embeddable-resource',
+            role: 'learner',
+            iss: ISS,
+            sub: SUB,
+            courseId: course.id,
+            questionId: q1.id,
+            exp: Math.floor(Date.now() / 1000) - 10,
+          });
+        } else {
+          token = jwtService.sign({ userId: 999999 });
+        }
+
+        await supertest()
+          .get(`/lti/embeddable-resource/${course.id}/${q1.id}`)
+          .set('Cookie', [`${name}=${token}`])
+          .expect(401);
+
+        await supertest()
+          .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
+          .set('Cookie', [`${name}=${token}`])
+          .send({ responseText: draft })
+          .expect(401);
+
+        expect(
+          mockChatbotApiService.queryChatbotForCourse,
+        ).not.toHaveBeenCalled();
+        expect(await EmbeddableQuestionFeedbackModel.count()).toBe(0);
+      },
+    );
+
+    it('persists LTI issuer and subject with a null userId', async () => {
+      const { course, q1 } = await setupResourceQuiz();
+      mockValidFeedback();
+      const name = resourceCookieName(course.id, q1.id);
+
+      await supertest()
+        .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
+        .set('Cookie', [`${name}=${signLearner(course.id, q1.id)}`])
+        .send({ responseText: draft })
+        .expect(201);
+
+      const saved = await EmbeddableQuestionFeedbackModel.findOne({
+        where: { questionId: q1.id },
+      });
+      expect(saved).not.toBeNull();
+      expect(saved!.userId).toBeNull();
+      expect(saved!.ltiIssuer).toBe(ISS);
+      expect(saved!.ltiSubject).toBe(SUB);
+      expect(saved!.courseId).toBe(course.id);
+    });
+
+    it('stores repeated valid submissions as repeated rows', async () => {
+      const { course, q1 } = await setupResourceQuiz();
+      mockValidFeedback();
+      const name = resourceCookieName(course.id, q1.id);
+      const cookie = `${name}=${signLearner(course.id, q1.id)}`;
+
+      await supertest()
+        .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
+        .set('Cookie', [cookie])
+        .send({ responseText: draft })
+        .expect(201);
+      await supertest()
+        .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
+        .set('Cookie', [cookie])
+        .send({ responseText: draft })
+        .expect(201);
+
+      expect(
+        await EmbeddableQuestionFeedbackModel.count({
+          where: { questionId: q1.id },
+        }),
+      ).toBe(2);
+    });
+
+    it('persists staff userId alongside LTI identity for instructor previews', async () => {
+      const { course, q1 } = await setupResourceQuiz();
+      const staff = await UserFactory.create();
+      await UserCourseFactory.create({
+        user: staff,
+        course,
+        role: Role.PROFESSOR,
+      });
+      mockValidFeedback();
+      const jwtService = getTestModule().get<JwtService>(JwtService);
+      const token = jwtService.sign({
+        kind: 'embeddable-resource',
+        role: 'staff',
+        iss: ISS,
+        sub: 'staff-sub-1',
+        courseId: course.id,
+        questionId: q1.id,
+        userId: staff.id,
+      });
+      const name = resourceCookieName(course.id, q1.id);
+
+      await supertest()
+        .post(`/lti/embeddable-resource/${course.id}/${q1.id}/feedback`)
+        .set('Cookie', [`${name}=${token}`])
+        .send({ responseText: draft })
+        .expect(201);
+
+      const saved = await EmbeddableQuestionFeedbackModel.findOne({
+        where: { questionId: q1.id },
+      });
+      expect(saved).not.toBeNull();
+      expect(saved!.userId).toBe(staff.id);
+      expect(saved!.ltiIssuer).toBe(ISS);
+      expect(saved!.ltiSubject).toBe('staff-sub-1');
+    });
+
+    it('requires the scoped cookie even for enrolled HelpMe members', async () => {
+      const { course, q1 } = await setupResourceQuiz();
+      const { user: student } = await setupUserCourse(Role.STUDENT);
+      await UserCourseFactory.create({
+        user: student,
+        course,
+        role: Role.STUDENT,
+      });
+
+      await supertest({ userId: student.id })
+        .get(`/lti/embeddable-resource/${course.id}/${q1.id}`)
+        .expect(401);
     });
   });
 });

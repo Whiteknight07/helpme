@@ -266,6 +266,10 @@ export default class LtiMiddleware {
         route: /^\/embeddable-question(?:\/|$)/,
         method: 'ALL',
       },
+      {
+        route: /^\/embeddable-resource(?:\/|$)/,
+        method: 'ALL',
+      },
       `/static`,
     ];
 

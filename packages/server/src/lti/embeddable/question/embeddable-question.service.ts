@@ -41,6 +41,20 @@ function matchesIndgContract(scores: number[], reasons: string[]): boolean {
   );
 }
 
+/**
+ * Discriminated feedback attribution. Normal HelpMe traffic carries a
+ * userId; Canvas resource launches carry the LTI issuer+subject pair with
+ * an optional staff userId for instructor previews.
+ */
+export type EmbeddableFeedbackAttribution =
+  | { kind: 'user'; userId: number }
+  | {
+      kind: 'lti';
+      ltiIssuer: string;
+      ltiSubject: string;
+      userId?: number;
+    };
+
 @Injectable()
 export class EmbeddableQuestionService {
   private readonly logger = new Logger(EmbeddableQuestionService.name);
@@ -54,13 +68,13 @@ export class EmbeddableQuestionService {
    * @param submission The student's draft response
    * @param questionId The question ID
    * @param courseId The course ID
-   * @param userId The ID of the authenticated user
+   * @param attribution Who the attempt belongs to
    */
   async getFeedback(
     submission: string,
     questionId: number,
     courseId: number,
-    userId: number,
+    attribution: EmbeddableFeedbackAttribution,
   ): Promise<EmbeddableQuestionFeedbackModel> {
     const question = await this.findOne(courseId, questionId);
     const profile = await this.getProfile(courseId);
@@ -109,7 +123,12 @@ export class EmbeddableQuestionService {
     const feedback = EmbeddableQuestionFeedbackModel.create({
       courseId,
       questionId,
-      userId,
+      userId:
+        attribution.kind === 'user'
+          ? attribution.userId
+          : (attribution.userId ?? null),
+      ltiIssuer: attribution.kind === 'lti' ? attribution.ltiIssuer : null,
+      ltiSubject: attribution.kind === 'lti' ? attribution.ltiSubject : null,
       submission,
       aiFeedback: postProcessed.comment,
       aiGrade: postProcessed.score,

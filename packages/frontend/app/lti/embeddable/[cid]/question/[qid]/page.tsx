@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import { Card } from 'antd'
+import axios from 'axios'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
 import { type EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
@@ -13,8 +14,10 @@ type QuestionState =
   | { status: 'error'; error: string }
   | { status: 'ready'; question: EmbeddableQuestion }
 
-export default function EmbeddableQuestionPage() {
+function EmbeddableQuestionView() {
   const routeParams = useParams<{ cid: string; qid: string }>()
+  const searchParams = useSearchParams()
+  const useResource = searchParams.get('resource') === '1'
   const [questionState, setQuestionState] = useState<QuestionState>({
     status: 'loading',
   })
@@ -29,16 +32,27 @@ export default function EmbeddableQuestionPage() {
     // Reset stale data when navigating between questions without a remount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuestionState({ status: 'loading' })
-    API.lti.embeddableQuestion
-      .getOne(courseId, questionId)
+    const loader = useResource
+      ? API.lti.embeddableResource.getOne(courseId, questionId)
+      : API.lti.embeddableQuestion.getOne(courseId, questionId)
+    loader
       .then((question) => setQuestionState({ status: 'ready', question }))
-      .catch(() =>
+      .catch((err: unknown) => {
+        if (axios.isAxiosError(err) && err.response?.status === 401) {
+          setQuestionState({
+            status: 'error',
+            error:
+              'Your Canvas session has expired. Reopen this quiz in Canvas to continue.',
+          })
+          return
+        }
         setQuestionState({
           status: 'error',
-          error: 'Could not load question. It may have been deleted.',
-        }),
-      )
-  }, [courseId, hasInvalidRoute, questionId])
+          error:
+            'Could not load question. It may have been deleted. Please let your professor know.',
+        })
+      })
+  }, [courseId, hasInvalidRoute, questionId, useResource])
 
   if (hasInvalidRoute) {
     return (
@@ -60,9 +74,7 @@ export default function EmbeddableQuestionPage() {
     return (
       <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">
         <Card title="Error loading Question">
-          <p className="text-zinc-600">
-            {questionState.error} Please let your professor know.
-          </p>
+          <p className="text-zinc-600">{questionState.error}</p>
         </Card>
       </div>
     )
@@ -77,8 +89,17 @@ export default function EmbeddableQuestionPage() {
           courseId={courseId}
           questionId={question.id}
           questionText={question.questionText}
+          useResource={useResource}
         />
       </div>
     </>
+  )
+}
+
+export default function EmbeddableQuestionPage() {
+  return (
+    <Suspense fallback={<CenteredSpinner tip="Loading..." />}>
+      <EmbeddableQuestionView />
+    </Suspense>
   )
 }

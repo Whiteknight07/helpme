@@ -98,7 +98,7 @@ export class EmbeddableQuestionController {
       body.responseText,
       questionId,
       courseId,
-      userId,
+      { kind: 'user', userId },
     );
     const profile = await this.embeddableQuestionService.getProfile(courseId);
 

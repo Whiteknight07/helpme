@@ -13,12 +13,14 @@ interface EmbeddableQuestionFeedbackProps {
   courseId: number
   questionId: number
   questionText: string
+  useResource: boolean
 }
 
 export default function EmbeddableQuestionFeedback({
   courseId,
   questionId,
   questionText,
+  useResource,
 }: EmbeddableQuestionFeedbackProps) {
   const [inputText, setInputText] = useState('')
   const [feedback, setFeedback] = useState<EmbeddableQuestionFeedback | null>(
@@ -39,11 +41,17 @@ export default function EmbeddableQuestionFeedback({
     setIsLoading(true)
 
     try {
-      const response = await API.lti.embeddableQuestion.getFeedback(
-        courseId,
-        questionId,
-        trimmed,
-      )
+      const response = useResource
+        ? await API.lti.embeddableResource.getFeedback(
+            courseId,
+            questionId,
+            trimmed,
+          )
+        : await API.lti.embeddableQuestion.getFeedback(
+            courseId,
+            questionId,
+            trimmed,
+          )
       setFeedback(response)
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {

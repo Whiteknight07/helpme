@@ -48,6 +48,10 @@ import { UserCourseModel } from '../profile/user-course.entity';
 import { restrictPaths } from './lti-auth.controller';
 import { LoginService } from '../login/login.service';
 import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
+import {
+  resourceCookieName,
+  resourceCookiePath,
+} from './embeddable/resource/embeddable-resource-auth';
 
 @Controller('lti')
 @UseInterceptors(IgnoreableClassSerializerInterceptor)
@@ -77,19 +81,19 @@ export class LtiController {
     };
 
     if (LtiService.hasQuestionLaunch(token)) {
-      const { userId, courseId, questionId } =
+      const { courseId, questionId, resource } =
         await this.ltiService.resolveQuestionLaunch(token);
-      return this.loginService.enter(
-        req,
-        res,
-        userId,
-        undefined,
-        this.ltiService,
-        {
-          ...ltiLoginOptions,
-          redirect: `/lti/embeddable/${courseId}/question/${questionId}`,
-        },
-      );
+      const scopedToken = this.ltiService.signResourceToken(resource);
+      return res
+        .clearCookie('lti_auth_token', LtiService.cookieOptions)
+        .cookie(resourceCookieName(courseId, questionId), scopedToken, {
+          ...LtiService.cookieOptions,
+          path: resourceCookiePath(courseId, questionId),
+          maxAge: 24 * 60 * 60 * 1000,
+        })
+        .redirect(
+          `/lti/embeddable/${courseId}/question/${questionId}?resource=1`,
+        );
     }
 
     const qry = new URLSearchParams();

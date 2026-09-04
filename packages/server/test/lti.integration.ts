@@ -9,11 +9,12 @@ import {
 } from '@bhunt02/lti-typescript';
 import { UserModel } from '../src/profile/user.entity';
 import { CourseModel } from '../src/course/course.entity';
+import { OrganizationUserModel } from '../src/organization/organization-user.entity';
+import { UserCourseModel } from '../src/profile/user-course.entity';
+import { UserLtiIdentityModel } from '../src/lti/user_lti_identity.entity';
 import {
   CourseFactory,
   lmsCourseIntFactory,
-  OrganizationCourseFactory,
-  OrganizationFactory,
   UserCourseFactory,
   UserFactory,
   UserLtiIdentityFactory,
@@ -34,7 +35,10 @@ import {
   LtiService,
 } from '../src/lti/lti.service';
 import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
-import { restrictPaths } from '../src/lti/lti-auth.controller';
+import {
+  resourceCookieName,
+  resourceCookiePath,
+} from '../src/lti/embeddable/resource/embeddable-resource-auth';
 import { JwtService } from '@nestjs/jwt';
 
 const testEncryptionKey = 'abcdefg';
@@ -194,12 +198,7 @@ describe('LtiController', () => {
       const setupQuestionLaunch = async (
         roles = [LTI_MEMBERSHIP_LEARNER_ROLE],
       ) => {
-        const organization = await OrganizationFactory.create();
         const launchCourse = await CourseFactory.create();
-        await OrganizationCourseFactory.create({
-          course: launchCourse,
-          organization,
-        });
         await lmsCourseIntFactory.create({
           course: launchCourse,
           apiCourseId: 'canvas-launch-cid',
@@ -228,12 +227,19 @@ describe('LtiController', () => {
           },
         } as unknown as IdToken;
 
-        return { organization, launchCourse, question };
+        return { launchCourse, question };
       };
 
-      it('should provision a learner question launch, set restricted cookie, and redirect to the feedback route', async () => {
-        const { organization, launchCourse, question } =
-          await setupQuestionLaunch();
+      const tableCounts = async () => ({
+        users: await UserModel.count(),
+        orgUsers: await OrganizationUserModel.count(),
+        enrollments: await UserCourseModel.count(),
+        identities: await UserLtiIdentityModel.count(),
+      });
+
+      it('issues a scoped learner cookie without any user, org, enrollment, or identity writes', async () => {
+        const { launchCourse, question } = await setupQuestionLaunch();
+        const before = await tableCounts();
 
         const res = await supertest().get('/lti').expect(302);
         const location = new URL(
@@ -242,48 +248,88 @@ describe('LtiController', () => {
         expect(location.pathname).toEqual(
           `/lti/embeddable/${launchCourse.id}/question/${question.id}`,
         );
+        expect(location.searchParams.get('resource')).toEqual('1');
 
-        const authCookie = res
-          .get('Set-Cookie')
-          .find((cookie) => cookie.startsWith('lti_auth_token='));
-        if (!authCookie) throw new Error('Missing lti_auth_token cookie');
-        const cookieValue = authCookie
-          .split(';')[0]
-          .slice('lti_auth_token='.length);
+        const cookies: string[] = res.get('Set-Cookie') ?? [];
+        const scopedName = resourceCookieName(launchCourse.id, question.id);
+        const scoped = cookies.find((cookie) =>
+          cookie.startsWith(`${scopedName}=`),
+        );
+        if (!scoped) throw new Error(`Missing ${scopedName} cookie`);
+        expect(scoped).toContain(
+          `Path=${resourceCookiePath(launchCourse.id, question.id)}`,
+        );
+        expect(
+          cookies.some(
+            (cookie) =>
+              cookie.startsWith('lti_auth_token=') &&
+              !cookie.startsWith('lti_auth_token=;'),
+          ),
+        ).toBe(false);
+
+        const cookieValue = scoped.split(';')[0].slice(scopedName.length + 1);
         const jwtService = getTestModule().get<JwtService>(JwtService);
-        const decoded = jwtService.verify<{
-          userId: number;
-          restrictPaths: string[];
-          expiresIn: number;
-        }>(cookieValue);
-
+        const decoded = jwtService.verify<Record<string, unknown>>(cookieValue);
         expect(decoded).toMatchObject({
-          restrictPaths,
-          expiresIn: 600,
+          kind: 'embeddable-resource',
+          role: 'learner',
+          iss: 'https://canvas.example.edu',
+          sub: 'canvas-learner-1',
+          courseId: launchCourse.id,
+          questionId: question.id,
         });
+        expect(decoded).not.toHaveProperty('email');
+        expect(decoded).not.toHaveProperty('userId');
+        expect((decoded['exp'] as number) - (decoded['iat'] as number)).toBe(
+          24 * 60 * 60,
+        );
 
         await supertest()
-          .get(`/organization/${organization.id}`)
-          .set('Cookie', [`lti_auth_token=${cookieValue}`])
-          .expect(403);
-
-        await supertest()
-          .get(`/lti/embeddable-question/${launchCourse.id}/${question.id}`)
-          .set('Cookie', [`lti_auth_token=${cookieValue}`])
+          .get(`/lti/embeddable-resource/${launchCourse.id}/${question.id}`)
+          .set('Cookie', [`${scopedName}=${cookieValue}`])
           .expect(200);
+
+        await expect(tableCounts()).resolves.toEqual(before);
       });
 
-      it('should fail with 403 and cannot provision when LTI token is absent', async () => {
-        const countBefore = await UserModel.count();
+      it('issues distinct cookie names for two questions in one quiz', async () => {
+        const { launchCourse, question: q1 } = await setupQuestionLaunch();
+        const q2 = await EmbeddableQuestionModel.create({
+          courseId: launchCourse.id,
+          questionText: 'Second question',
+          criteriaText: 'Criteria text',
+        }).save();
+
+        const first = await supertest().get('/lti').expect(302);
+        if (!customToken || !customToken.platformContext?.custom) {
+          throw new Error('Missing custom token');
+        }
+        customToken.platformContext.custom['helpme_question_id'] = String(
+          q2.id,
+        );
+        const second = await supertest().get('/lti').expect(302);
+
+        const firstName = (first.get('Set-Cookie') ?? []).find((cookie) =>
+          cookie.startsWith('lti_resource_'),
+        );
+        const secondName = (second.get('Set-Cookie') ?? []).find((cookie) =>
+          cookie.startsWith('lti_resource_'),
+        );
+        expect(firstName).toBeDefined();
+        expect(secondName).toBeDefined();
+        expect(firstName!.split('=')[0]).not.toBe(secondName!.split('=')[0]);
+      });
+
+      it('should fail with 403 and write nothing when LTI token is absent', async () => {
+        const before = await tableCounts();
         customToken = null;
 
         await supertest().get('/lti').expect(403);
 
-        const countAfter = await UserModel.count();
-        expect(countAfter).toEqual(countBefore);
+        await expect(tableCounts()).resolves.toEqual(before);
       });
 
-      it('should launch an existing instructor preview without provisioning', async () => {
+      it('should launch an existing instructor preview with a staff resource cookie and no writes', async () => {
         const { launchCourse, question } = await setupQuestionLaunch([
           'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
         ]);
@@ -300,23 +346,52 @@ describe('LtiController', () => {
           course: launchCourse,
           role: Role.PROFESSOR,
         });
-        const countBefore = await UserModel.count();
+        const before = await tableCounts();
 
         const response = await supertest().get('/lti').expect(302);
-        expect(response.headers.location).toEqual(
+        const location = new URL(
+          'https://example.com' + response.headers['location'],
+        );
+        expect(location.pathname).toEqual(
           `/lti/embeddable/${launchCourse.id}/question/${question.id}`,
         );
-        expect(await UserModel.count()).toEqual(countBefore);
+        expect(location.searchParams.get('resource')).toEqual('1');
+
+        const scopedName = resourceCookieName(launchCourse.id, question.id);
+        const scoped = (response.get('Set-Cookie') ?? []).find((cookie) =>
+          cookie.startsWith(`${scopedName}=`),
+        );
+        if (!scoped) throw new Error(`Missing ${scopedName} cookie`);
+        const cookieValue = scoped.split(';')[0].slice(scopedName.length + 1);
+        const jwtService = getTestModule().get<JwtService>(JwtService);
+        const decoded = jwtService.verify<Record<string, unknown>>(cookieValue);
+        expect(decoded).toMatchObject({
+          kind: 'embeddable-resource',
+          role: 'staff',
+          iss: 'https://canvas.example.edu',
+          sub: 'canvas-learner-1',
+          courseId: launchCourse.id,
+          questionId: question.id,
+          userId: instructor.id,
+        });
+        expect(decoded).not.toHaveProperty('email');
+
+        await supertest()
+          .get(`/lti/embeddable-resource/${launchCourse.id}/${question.id}`)
+          .set('Cookie', [`${scopedName}=${cookieValue}`])
+          .expect(200);
+
+        await expect(tableCounts()).resolves.toEqual(before);
       });
 
       it('should not provision an unknown instructor question launch', async () => {
         await setupQuestionLaunch([
           'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
         ]);
-        const countBefore = await UserModel.count();
+        const before = await tableCounts();
 
         await supertest().get('/lti').expect(403);
-        expect(await UserModel.count()).toEqual(countBefore);
+        await expect(tableCounts()).resolves.toEqual(before);
       });
     });
   });

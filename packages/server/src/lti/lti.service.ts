@@ -13,7 +13,7 @@ import {
   Provider,
 } from '@bhunt02/lti-typescript';
 import { LMSCourseIntegrationModel } from '../lmsIntegration/lmsCourseIntegration.entity';
-import { ERROR_MESSAGES, isProd, OrganizationRole, Role } from '@koh/common';
+import { ERROR_MESSAGES, isProd, Role } from '@koh/common';
 import { JwtService } from '@nestjs/jwt';
 import { CookieOptions } from 'express';
 import { LtiCourseInviteModel } from './lti-course-invite.entity';
@@ -26,8 +26,10 @@ import { pick } from 'lodash';
 import { Not } from 'typeorm';
 import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionService } from './embeddable/question/embeddable-question.service';
-import { OrganizationUserModel } from '../organization/organization-user.entity';
-import { OrganizationCourseModel } from '../organization/organization-course.entity';
+import {
+  EMBEDDABLE_RESOURCE_KIND,
+  EmbeddableResourcePayload,
+} from './embeddable/resource/embeddable-resource-auth';
 
 export const HELPME_QUESTION_ID_PARAM = 'helpme_question_id';
 export const LTI_MEMBERSHIP_LEARNER_ROLE =
@@ -414,9 +416,11 @@ export class LtiService {
     return lmsIntegration.courseId;
   }
 
-  async resolveQuestionLaunch(
-    token: IdToken,
-  ): Promise<{ userId: number; courseId: number; questionId: number }> {
+  async resolveQuestionLaunch(token: IdToken): Promise<{
+    courseId: number;
+    questionId: number;
+    resource: EmbeddableResourcePayload;
+  }> {
     const roles = token.platformContext?.roles;
     const isLearner = roles?.includes(LTI_MEMBERSHIP_LEARNER_ROLE);
     const isStaff = roles?.some((role) =>
@@ -448,108 +452,49 @@ export class LtiService {
     }
 
     if (!isLearner) {
+      const userId = await this.authorizeExistingStaff(token, courseId);
       return {
-        userId: await this.authorizeExistingStaff(token, courseId),
         courseId,
         questionId,
+        resource: {
+          kind: EMBEDDABLE_RESOURCE_KIND,
+          role: 'staff',
+          iss: token.iss,
+          sub: token.user,
+          courseId,
+          questionId,
+          userId,
+        },
       };
     }
 
-    const orgCourse = await OrganizationCourseModel.findOne({
-      where: { courseId },
-    });
-    if (!orgCourse?.organizationId) {
-      throw new NotFoundException(
-        'Mapped HelpMe course does not belong to an organization',
-      );
+    if (typeof token.iss !== 'string' || token.iss.length === 0) {
+      throw new BadRequestException('LTI launch is missing its issuer');
     }
-    const organizationId = orgCourse.organizationId;
-
-    const existingIdentity = await UserLtiIdentityModel.findOne({
-      where: {
-        issuer: token.iss,
-        ltiUserId: token.user,
-      },
-      relations: { user: { organizationUser: true } },
-    });
-    let user = existingIdentity?.user;
-    const assertedEmail = token.userInfo?.email?.trim();
-
-    if (!user && assertedEmail) {
-      const candidates = await UserModel.find({
-        where: { email: assertedEmail },
-        relations: { organizationUser: true },
-      });
-      if (
-        candidates.length === 1 &&
-        (!candidates[0].organizationUser ||
-          candidates[0].organizationUser.organizationId === organizationId)
-      ) {
-        user = candidates[0];
-      }
-    }
-
-    if (!user) {
-      user = await UserModel.create({
-        email:
-          assertedEmail ??
-          `lti-${crypto.createHash('sha256').update(`${token.iss}\0${token.user}`).digest('hex')}@invalid`,
-        firstName: token.userInfo?.given_name ?? token.userInfo?.name,
-        lastName: token.userInfo?.family_name,
-        password: null,
-        emailVerified: !!assertedEmail,
-      }).save();
-    }
-
-    if (
-      user.organizationUser &&
-      user.organizationUser.organizationId !== organizationId
-    ) {
-      throw new UnauthorizedException(
-        'LTI identity belongs to a different organization',
-      );
-    }
-    if (!user.organizationUser) {
-      await OrganizationUserModel.create({
-        userId: user.id,
-        organizationId,
-        role: OrganizationRole.MEMBER,
-      }).save();
-    }
-
-    await UserLtiIdentityModel.delete({
-      userId: Not(user.id),
-      issuer: token.iss,
-      ltiUserId: token.user,
-    });
-
-    await UserLtiIdentityModel.create({
-      userId: user.id,
-      issuer: token.iss,
-      ltiUserId: token.user,
-      ltiEmail: assertedEmail,
-    }).save();
-
-    const existingEnrollment = await UserCourseModel.findOne({
-      where: {
-        userId: user.id,
-        courseId,
-      },
-    });
-
-    if (!existingEnrollment) {
-      await UserCourseModel.create({
-        userId: user.id,
-        courseId,
-        role: Role.STUDENT,
-      }).save();
+    if (typeof token.user !== 'string' || token.user.length === 0) {
+      throw new BadRequestException('LTI launch is missing its subject');
     }
 
     return {
-      userId: user.id,
       courseId,
       questionId,
+      resource: {
+        kind: EMBEDDABLE_RESOURCE_KIND,
+        role: 'learner',
+        iss: token.iss,
+        sub: token.user,
+        courseId,
+        questionId,
+      },
     };
+  }
+
+  signResourceToken(payload: EmbeddableResourcePayload): string {
+    const token = this.jwtService.sign({ ...payload }, { expiresIn: '24h' });
+    if (!token) {
+      throw new BadRequestException(ERROR_MESSAGES.ltiService.errorSigningJwt);
+    }
+    return token;
   }
 
   private async authorizeExistingStaff(
