@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Alert, Button, Card, Radio, Typography } from 'antd'
+import axios from 'axios'
 import { type EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
@@ -14,6 +15,24 @@ type QuestionsState =
   | { status: 'loading' }
   | { status: 'ready'; questions: EmbeddableQuestion[] }
   | { status: 'error'; message: string }
+
+function getDeepLinkErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    if (err.response?.status === 404) {
+      return 'This Canvas course is not connected to HelpMe. Ask your HelpMe admin to connect it, then reopen the tool.'
+    }
+    if (err.response?.status === 403) {
+      return 'The Canvas connection or your instructor access is not ready. Ask your HelpMe admin to link your account, check your Professor or TA access, or reactivate the connection, then reopen the tool.'
+    }
+    if (err.response?.status === 400) {
+      return 'This tool was opened incorrectly. Reopen it from the Canvas editor HelpMe button. If it keeps happening, ask your HelpMe admin to check the placement.'
+    }
+  }
+  const fallback = getErrorMessage(err)
+  return typeof fallback === 'string'
+    ? fallback
+    : 'Could not load questions. Please reopen the tool and try again.'
+}
 
 export default function DeepLinkPage() {
   const searchParams = useSearchParams()
@@ -33,7 +52,7 @@ export default function DeepLinkPage() {
       .catch((err: unknown) =>
         setQuestionsState({
           status: 'error',
-          message: String(getErrorMessage(err)),
+          message: getDeepLinkErrorMessage(err),
         }),
       )
   }, [ltik])
