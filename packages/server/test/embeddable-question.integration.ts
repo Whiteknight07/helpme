@@ -517,15 +517,15 @@ describe('Embeddable Question Integration', () => {
     const signLearner = (
       courseId: number,
       questionId: number,
-      sub = SUB,
+      ltiSubject = SUB,
     ): string => {
       const jwtService = getTestModule().get<JwtService>(JwtService);
       return jwtService.sign(
         {
           kind: 'embeddable-resource',
           role: 'learner',
-          iss: ISS,
-          sub,
+          ltiIssuer: ISS,
+          ltiSubject,
           courseId,
           questionId,
         },
@@ -611,8 +611,8 @@ describe('Embeddable Question Integration', () => {
           token = jwtService.sign({
             kind: 'embeddable-resource',
             role: 'learner',
-            iss: ISS,
-            sub: SUB,
+            ltiIssuer: ISS,
+            ltiSubject: SUB,
             courseId: course.id,
             questionId: q1.id,
             exp: Math.floor(Date.now() / 1000) - 10,
@@ -726,8 +726,8 @@ describe('Embeddable Question Integration', () => {
         {
           kind: 'embeddable-resource',
           role: 'staff',
-          iss: ISS,
-          sub: 'staff-sub-1',
+          ltiIssuer: ISS,
+          ltiSubject: 'staff-sub-1',
           courseId: course.id,
           questionId: q1.id,
           userId: staff.id,

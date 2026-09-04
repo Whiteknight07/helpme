@@ -50,11 +50,11 @@ export class EmbeddableResourceController {
       auth.role === 'staff'
         ? {
             kind: 'lti',
-            ltiIssuer: auth.iss,
-            ltiSubject: auth.sub,
+            ltiIssuer: auth.ltiIssuer,
+            ltiSubject: auth.ltiSubject,
             userId: auth.userId,
           }
-        : { kind: 'lti', ltiIssuer: auth.iss, ltiSubject: auth.sub },
+        : { kind: 'lti', ltiIssuer: auth.ltiIssuer, ltiSubject: auth.ltiSubject },
     );
   }
 }

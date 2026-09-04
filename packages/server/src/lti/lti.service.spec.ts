@@ -582,8 +582,8 @@ describe('LtiService', () => {
       expect(result.resource).toMatchObject({
         kind: EMBEDDABLE_RESOURCE_KIND,
         role: 'learner',
-        iss: token.iss,
-        sub: 'unknown-learner-id-99',
+        ltiIssuer: token.iss,
+        ltiSubject: 'unknown-learner-id-99',
         courseId: course.id,
         questionId: question.id,
       });
@@ -609,8 +609,8 @@ describe('LtiService', () => {
 
       expect(result.resource).toMatchObject({
         kind: EMBEDDABLE_RESOURCE_KIND,
-        iss: 'http://canvas.docker/',
-        sub: 'new-sub-for-existing-user',
+        ltiIssuer: 'http://canvas.docker/',
+        ltiSubject: 'new-sub-for-existing-user',
         courseId: course.id,
         questionId: question.id,
       });

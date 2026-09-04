@@ -274,8 +274,8 @@ describe('LtiController', () => {
         expect(decoded).toMatchObject({
           kind: 'embeddable-resource',
           role: 'learner',
-          iss: 'https://canvas.example.edu',
-          sub: 'canvas-learner-1',
+          ltiIssuer: 'https://canvas.example.edu',
+          ltiSubject: 'canvas-learner-1',
           courseId: launchCourse.id,
           questionId: question.id,
         });
@@ -373,8 +373,8 @@ describe('LtiController', () => {
         expect(decoded).toMatchObject({
           kind: 'embeddable-resource',
           role: 'staff',
-          iss: 'https://canvas.example.edu',
-          sub: 'canvas-learner-1',
+          ltiIssuer: 'https://canvas.example.edu',
+          ltiSubject: 'canvas-learner-1',
           courseId: launchCourse.id,
           questionId: question.id,
           userId: instructor.id,

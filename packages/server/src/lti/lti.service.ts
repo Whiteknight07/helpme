@@ -460,8 +460,8 @@ export class LtiService {
         resource: {
           kind: EMBEDDABLE_RESOURCE_KIND,
           role: 'staff',
-          iss: token.iss,
-          sub: token.user,
+          ltiIssuer: token.iss,
+          ltiSubject: token.user,
           courseId,
           questionId,
           userId,
@@ -482,8 +482,8 @@ export class LtiService {
       resource: {
         kind: EMBEDDABLE_RESOURCE_KIND,
         role: 'learner',
-        iss: token.iss,
-        sub: token.user,
+        ltiIssuer: token.iss,
+        ltiSubject: token.user,
         courseId,
         questionId,
       },
