@@ -9,11 +9,9 @@ import {
   Space,
   Table,
   Tooltip,
-  Typography,
   message,
 } from 'antd'
 import {
-  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
@@ -86,20 +84,6 @@ export default function EmbeddableQuestionsPage(
     return `${origin}/lti/embeddable/${courseId}/question/${q.id}`
   }
 
-  const getIFrameHtml = (q: EmbeddableQuestion) => {
-    return `<iframe src="${getIFrameUrl(q)}" width="100%" height="280" style="border:0;display:block;" allow="clipboard-write"></iframe>`
-  }
-
-  const copyEmbedHtml = async (q: EmbeddableQuestion) => {
-    try {
-      const embedCode = getIFrameHtml(q)
-      await navigator.clipboard.writeText(embedCode)
-      message.success('Canvas embed HTML copied to clipboard!')
-    } catch (err: unknown) {
-      message.error(`Failed to copy embed HTML: ${getErrorMessage(err)}`)
-    }
-  }
-
   const columns = [
     {
       title: 'Name',
@@ -159,34 +143,16 @@ export default function EmbeddableQuestionsPage(
       ),
     },
     {
-      title: 'Canvas Embed',
-      key: 'embed',
-      width: 180,
+      title: 'Actions',
+      key: 'actions',
+      width: 140,
       render: (_: unknown, record: EmbeddableQuestion) => (
         <Space size="small">
-          <Button
-            icon={<CopyOutlined />}
-            size="small"
-            onClick={() => copyEmbedHtml(record)}
-          >
-            Copy HTML
-          </Button>
           <Button
             icon={<EyeOutlined />}
             size="small"
             onClick={() => setPreviewQuestion(record)}
-          >
-            Preview
-          </Button>
-        </Space>
-      ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      width: 100,
-      render: (_: unknown, record: EmbeddableQuestion) => (
-        <Space size="small">
+          />
           <Button
             icon={<EditOutlined />}
             size="small"
@@ -224,8 +190,8 @@ export default function EmbeddableQuestionsPage(
     >
       <GradingProfileForm courseId={courseId} />
       <p className="mb-4 text-gray-600">
-        Configure questions that can be embedded into Canvas quizzes or pages as
-        an iframe (`/lti/embeddable/:courseId/question/:questionId`).
+        Configure questions for this course. To add a question to Canvas, use
+        the HelpMe button in the Canvas editor to insert a question.
         Authenticated students can type an answer draft to receive immediate
         AI-powered feedback before final submission.
       </p>
@@ -257,13 +223,6 @@ export default function EmbeddableQuestionsPage(
           onCancel={() => setPreviewQuestion(undefined)}
           footer={[
             <Button
-              key="copy"
-              icon={<CopyOutlined />}
-              onClick={() => copyEmbedHtml(previewQuestion)}
-            >
-              Copy Embed Code
-            </Button>,
-            <Button
               key="close"
               type="primary"
               onClick={() => setPreviewQuestion(undefined)}
@@ -274,17 +233,6 @@ export default function EmbeddableQuestionsPage(
           width={700}
         >
           <div className="flex flex-col gap-3">
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Canvas Iframe Embed HTML
-              </p>
-              <Typography.Paragraph
-                copyable
-                className="rounded bg-gray-50 p-2 font-mono text-xs text-gray-800"
-              >
-                {getIFrameHtml(previewQuestion)}
-              </Typography.Paragraph>
-            </div>
             <div>
               <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
                 Live Iframe Preview

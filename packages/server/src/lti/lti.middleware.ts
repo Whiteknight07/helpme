@@ -26,39 +26,6 @@ const dynRegScopes = [
   'https://purl.imsglobal.org/spec/lti-reg/scope/registration.readonly',
 ];
 
-// LIS roles allowed to see the Canvas Rich Content Editor button.
-const deepLinkingInstructorRoles = [
-  'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
-  'http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant',
-];
-
-export const ltiMessages = (
-  targetLinkUri: string,
-): (LtiMessageRegistration & Record<string, unknown>)[] => [
-  {
-    type: 'LtiResourceLinkRequest',
-    placements: [
-      'link_selection',
-      'course_home_sub_navigation',
-      'course_navigation',
-      'module_menu',
-    ],
-    'https://canvas.instructure.com/lti/launch_height': '100%',
-    'https://canvas.instructure.com/lti/launch_width': '100%',
-    'https://canvas.instructure.com/lti/display_type': 'full_width_in_context',
-  },
-  {
-    type: 'LtiDeepLinkingRequest',
-    target_link_uri: targetLinkUri,
-    label: 'HelpMe',
-    placements: ['editor_button'],
-    roles: deepLinkingInstructorRoles,
-    preferred_presentation: 'iframe',
-    iframe: { width: 800, height: 600 },
-    'https://canvas.instructure.com/lti/visibility': 'admins',
-  },
-];
-
 export default class LtiMiddleware {
   private prefix: string;
   private reservedRoutes: {
@@ -139,7 +106,34 @@ export default class LtiMiddleware {
       ].join(' '),
       client_name: 'HelpMe',
       'https://purl.imsglobal.org/spec/lti-tool-configuration': {
-        messages: ltiMessages(this.baseRoute()),
+        messages: [
+          {
+            type: 'LtiResourceLinkRequest',
+            placements: [
+              'link_selection',
+              'course_home_sub_navigation',
+              'course_navigation',
+              'module_menu',
+            ],
+            'https://canvas.instructure.com/lti/launch_height': '100%',
+            'https://canvas.instructure.com/lti/launch_width': '100%',
+            'https://canvas.instructure.com/lti/display_type':
+              'full_width_in_context',
+          },
+          {
+            type: 'LtiDeepLinkingRequest',
+            target_link_uri: this.baseRoute(),
+            label: 'HelpMe',
+            placements: ['editor_button'],
+            roles: [
+              'http://purl.imsglobal.org/vocab/lis/v2/membership#Instructor',
+              'http://purl.imsglobal.org/vocab/lis/v2/membership#TeachingAssistant',
+            ],
+            preferred_presentation: 'iframe',
+            iframe: { width: 800, height: 600 },
+            'https://canvas.instructure.com/lti/visibility': 'admins',
+          },
+        ] as (LtiMessageRegistration & any)[],
       },
       // CANVAS PROPERTIES
       'https://canvas.instructure.com/lti/privacy_level': 'public',
