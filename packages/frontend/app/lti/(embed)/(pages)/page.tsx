@@ -19,31 +19,27 @@ export default function LtiLandingPage(): ReactElement {
     platform: LMSIntegrationPlatform
   }>('lms_info', null)
 
-  function checkForceClose() {
-    if (
-      window &&
-      window.self === window.top &&
-      searchParams.get('force_close')
-    ) {
-      window.self.close()
-      setShouldClose(true)
-    }
-  }
-
   useEffect(() => {
-    checkForceClose()
-  }, [window, window.self, window.top, searchParams])
+    if (window.self !== window.top || !searchParams.get('force_close')) return
 
-  useEffect(() => {
-    checkForceClose()
-  }, [])
+    window.close()
+    const timeout = window.setTimeout(() => setShouldClose(true), 0)
+    return () => window.clearTimeout(timeout)
+  }, [searchParams])
 
   useEffect(() => {
     if (shouldClose) return
     const platform = searchParams.get('lms_platform')
     const apiCourseId = searchParams.get('api_course_id')
-    if (platform && apiCourseId) {
-      setLmsInfo({ platform: platform as LMSIntegrationPlatform, apiCourseId })
+    const lmsPlatform = Object.values(LMSIntegrationPlatform).find(
+      (value) => value === platform,
+    )
+    if (lmsPlatform && apiCourseId) {
+      setLmsInfo((current) =>
+        current?.platform === lmsPlatform && current.apiCourseId === apiCourseId
+          ? current
+          : { platform: lmsPlatform, apiCourseId },
+      )
     }
     const cid = searchParams.get('cid')
     if (cid) {
@@ -55,7 +51,7 @@ export default function LtiLandingPage(): ReactElement {
         `/lti/${cid}${newSearchParams.size > 0 ? '?' + newSearchParams.toString() : ''}`,
       )
     }
-  }, [router, searchParams])
+  }, [router, searchParams, setLmsInfo, shouldClose])
 
   const { userInfo } = useUserInfo()
 
@@ -75,7 +71,7 @@ export default function LtiLandingPage(): ReactElement {
             userInfo.organization?.orgId,
         )
       })
-  }, [userInfo.organization?.orgId])
+  }, [shouldClose, userInfo.organization?.orgId])
 
   if (shouldClose) {
     return (

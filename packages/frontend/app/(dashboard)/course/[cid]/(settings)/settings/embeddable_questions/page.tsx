@@ -9,6 +9,7 @@ import {
   Space,
   Table,
   Tooltip,
+  type TableColumnsType,
   message,
 } from 'antd'
 import {
@@ -54,9 +55,7 @@ export default function EmbeddableQuestionsPage(
   }, [courseId])
 
   useEffect(() => {
-    // Initial data loading is the external synchronization this effect owns.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchQuestions()
+    void Promise.resolve().then(fetchQuestions)
   }, [fetchQuestions])
 
   const openCreateModal = () => {
@@ -79,7 +78,7 @@ export default function EmbeddableQuestionsPage(
     }
   }
 
-  const columns = [
+  const columns: TableColumnsType<EmbeddableQuestion> = [
     {
       title: 'Name',
       dataIndex: 'name',
@@ -146,13 +145,13 @@ export default function EmbeddableQuestionsPage(
           <Button
             icon={<EyeOutlined />}
             size="small"
-            aria-label="Preview"
+            aria-label={`Preview ${record.name || `Question ${record.id}`}`}
             onClick={() => setPreviewQuestion(record)}
           />
           <Button
             icon={<EditOutlined />}
             size="small"
-            aria-label="Edit"
+            aria-label={`Edit ${record.name || `Question ${record.id}`}`}
             onClick={() => openEditModal(record)}
           />
           <Popconfirm
@@ -166,7 +165,7 @@ export default function EmbeddableQuestionsPage(
               icon={<DeleteOutlined />}
               size="small"
               danger
-              aria-label="Delete"
+              aria-label={`Delete ${record.name || `Question ${record.id}`}`}
             />
           </Popconfirm>
         </Space>

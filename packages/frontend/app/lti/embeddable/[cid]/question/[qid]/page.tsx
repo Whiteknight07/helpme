@@ -10,9 +10,9 @@ import { API } from '@/app/api'
 import EmbeddableQuestionFeedback from '@/app/lti/embeddable/[cid]/components/EmbeddableQuestionFeedback'
 
 type QuestionState =
-  | { status: 'loading' }
-  | { status: 'error'; error: string }
-  | { status: 'ready'; question: EmbeddableQuestion }
+  | { status: 'loading'; routeKey: string }
+  | { status: 'error'; routeKey: string; error: string }
+  | { status: 'ready'; routeKey: string; question: EmbeddableQuestion }
 
 function EmbeddableQuestionView() {
   const routeParams = useParams<{ cid: string; qid: string }>()
@@ -20,28 +20,34 @@ function EmbeddableQuestionView() {
   const useResource = searchParams.get('resource') === '1'
   const [questionState, setQuestionState] = useState<QuestionState>({
     status: 'loading',
+    routeKey: '',
   })
   const contentRef = useRef<HTMLDivElement>(null)
 
   const courseId = Number(routeParams.cid)
   const questionId = Number(routeParams.qid)
   const hasInvalidRoute = !questionId || !courseId
+  const routeKey = `${courseId}:${questionId}:${useResource ? 'resource' : 'session'}`
 
   useEffect(() => {
     if (hasInvalidRoute) return
 
-    // Reset stale data when navigating between questions without a remount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setQuestionState({ status: 'loading' })
+    let cancelled = false
     const loader = useResource
       ? API.lti.embeddableResource.getOne(courseId, questionId)
       : API.lti.embeddableQuestion.getOne(courseId, questionId)
     loader
-      .then((question) => setQuestionState({ status: 'ready', question }))
+      .then((question) => {
+        if (!cancelled) {
+          setQuestionState({ status: 'ready', routeKey, question })
+        }
+      })
       .catch((err: unknown) => {
+        if (cancelled) return
         if (axios.isAxiosError(err) && err.response?.status === 401) {
           setQuestionState({
             status: 'error',
+            routeKey,
             error: useResource
               ? 'Your Canvas session has expired. Reopen this quiz in Canvas to continue.'
               : 'HelpMe login and course enrollment are required to view this question.',
@@ -50,11 +56,15 @@ function EmbeddableQuestionView() {
         }
         setQuestionState({
           status: 'error',
+          routeKey,
           error:
             'Could not load question. It may have been deleted. Please let your professor know.',
         })
       })
-  }, [courseId, hasInvalidRoute, questionId, useResource])
+    return () => {
+      cancelled = true
+    }
+  }, [courseId, hasInvalidRoute, questionId, routeKey, useResource])
 
   useEffect(() => {
     const content = contentRef.current
@@ -72,7 +82,7 @@ function EmbeddableQuestionView() {
     observer.observe(content)
     resize()
     return () => observer.disconnect()
-  }, [questionState.status])
+  }, [questionState.routeKey, questionState.status])
 
   if (hasInvalidRoute) {
     return (
@@ -86,7 +96,10 @@ function EmbeddableQuestionView() {
     )
   }
 
-  if (questionState.status === 'loading') {
+  if (
+    questionState.status === 'loading' ||
+    questionState.routeKey !== routeKey
+  ) {
     return <CenteredSpinner tip="Loading..." />
   }
 

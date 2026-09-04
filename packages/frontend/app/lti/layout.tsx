@@ -1,25 +1,28 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
-import { LayoutProps } from 'antd'
+import { Suspense, useEffect, useState, type ReactNode } from 'react'
+import type { LayoutProps } from 'antd'
+import { usePathname } from 'next/navigation'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
 import ThirdPartyCookiesWarning from '@/app/lti/components/ThirdPartyCookiesWarning'
 
-export function CookieWrapper({ children }: { children: React.ReactNode }) {
+export function CookieWrapper({ children }: { children: ReactNode }) {
   const [hasCookieAccess, setHasCookieAccess] = useState<boolean>(true)
 
   useEffect(() => {
-    try {
-      const testCookie = '__helpme_cookie_test=1'
-      document.cookie = `${testCookie}; path=/`
-      // Cookie access is only observable after the client mounts.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHasCookieAccess(document.cookie.split('; ').includes(testCookie))
-      document.cookie = '__helpme_cookie_test=; Max-Age=0; path=/'
-    } catch (err: unknown) {
-      console.error(err)
-      setHasCookieAccess(false)
-    }
+    const checkCookieAccess = window.setTimeout(() => {
+      try {
+        const testCookie = '__helpme_cookie_test=1'
+        document.cookie = `${testCookie}; path=/`
+        setHasCookieAccess(document.cookie.split('; ').includes(testCookie))
+        document.cookie = '__helpme_cookie_test=; Max-Age=0; path=/'
+      } catch (err: unknown) {
+        console.error(err)
+        setHasCookieAccess(false)
+      }
+    }, 0)
+
+    return () => window.clearTimeout(checkCookieAccess)
   }, [])
 
   if (!hasCookieAccess) {
@@ -29,9 +32,14 @@ export function CookieWrapper({ children }: { children: React.ReactNode }) {
 }
 
 export default function Layout({ children }: LayoutProps) {
+  const pathname = usePathname()
+  const isPublicLtiRoute =
+    pathname.startsWith('/lti/deep-link') ||
+    pathname.startsWith('/lti/embeddable/')
+
   return (
     <Suspense fallback={<CenteredSpinner tip={'Loading...'} />}>
-      <CookieWrapper>{children}</CookieWrapper>
+      {isPublicLtiRoute ? children : <CookieWrapper>{children}</CookieWrapper>}
     </Suspense>
   )
 }

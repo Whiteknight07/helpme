@@ -46,15 +46,27 @@ export default function DeepLinkPage() {
     if (!ltik) {
       return
     }
+
+    let cancelled = false
     API.lti.deepLink
       .getQuestions(ltik)
-      .then((questions) => setQuestionsState({ status: 'ready', questions }))
-      .catch((err: unknown) =>
-        setQuestionsState({
-          status: 'error',
-          message: getDeepLinkErrorMessage(err),
-        }),
-      )
+      .then((questions) => {
+        if (!cancelled) {
+          setQuestionsState({ status: 'ready', questions })
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setQuestionsState({
+            status: 'error',
+            message: getDeepLinkErrorMessage(err),
+          })
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [ltik])
 
   if (!ltik) {
@@ -115,6 +127,7 @@ export default function DeepLinkPage() {
           <form method="POST" action={API.lti.deepLink.selectAction(ltik)}>
             <input type="hidden" name="questionId" value={selectedId ?? ''} />
             <Radio.Group
+              aria-label="HelpMe questions"
               className="flex w-full flex-col gap-2"
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}

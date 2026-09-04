@@ -11,13 +11,15 @@ import {
   INDG_DEFAULT_REASON_CODES,
   INDG_DEFAULT_SYSTEM_PROMPT,
   type GradingPolicyKind,
+  type UpsertGradingProfileParams,
 } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
-interface ProfileFormValues {
-  policyKind: GradingPolicyKind
-  systemPrompt: string
+type ProfileFormValues = Omit<
+  UpsertGradingProfileParams,
+  'allowedScores' | 'reasonCodes'
+> & {
   allowedScores: string
   reasonCodes: string
 }
@@ -158,15 +160,18 @@ export default function GradingProfileForm({
                   )
                 }
                 const parts = value.split(',').map((part) => part.trim())
+                const scores = parts.map(Number)
                 if (
                   parts.some(
                     (part) =>
                       part.length === 0 || !Number.isFinite(Number(part)),
-                  )
+                  ) ||
+                  scores.some((score) => score < 0 || score > 100) ||
+                  new Set(scores).size !== scores.length
                 ) {
                   return Promise.reject(
                     new Error(
-                      'Allowed scores must be comma-separated numbers.',
+                      'Allowed scores must be unique comma-separated numbers from 0 to 100.',
                     ),
                   )
                 }
@@ -194,6 +199,21 @@ export default function GradingProfileForm({
               required: true,
               whitespace: true,
               message: 'Reason codes are required.',
+            },
+            {
+              validator(_, value: unknown) {
+                if (typeof value !== 'string') return Promise.resolve()
+                const codes = value
+                  .split(',')
+                  .map((code) => code.trim())
+                  .filter(Boolean)
+                if (new Set(codes).size !== codes.length) {
+                  return Promise.reject(
+                    new Error('Reason codes must be unique.'),
+                  )
+                }
+                return Promise.resolve()
+              },
             },
           ]}
         >

@@ -85,6 +85,7 @@ export default function EmbeddableQuestionFeedback({
       <TextArea
         value={inputText}
         onChange={(e) => setInputText(e.target.value)}
+        aria-label="Your response"
         placeholder="Type your response here..."
         rows={4}
         disabled={isLoading}
