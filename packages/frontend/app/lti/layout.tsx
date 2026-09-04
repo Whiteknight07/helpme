@@ -12,9 +12,13 @@ export function CookieWrapper({ children }: { children: ReactNode }) {
     const checkCookieAccess = window.setTimeout(() => {
       try {
         const testCookie = '__helpme_cookie_test=1'
-        document.cookie = `${testCookie}; path=/`
+        const cookieAttributes =
+          window.location.protocol === 'https:'
+            ? '; SameSite=None; Secure'
+            : '; SameSite=Lax'
+        document.cookie = `${testCookie}; path=/${cookieAttributes}`
         setHasCookieAccess(document.cookie.split('; ').includes(testCookie))
-        document.cookie = '__helpme_cookie_test=; Max-Age=0; path=/'
+        document.cookie = `__helpme_cookie_test=; Max-Age=0; path=/${cookieAttributes}`
       } catch (err: unknown) {
         console.error(err)
         setHasCookieAccess(false)
