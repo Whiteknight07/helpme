@@ -17,20 +17,47 @@ proposed credential is a HelpMe-signed JWT limited to the mapped course and
 question. It must not create or represent a normal HelpMe account or course
 enrollment.
 
-## Availability is deferred
+## Availability evidence from local Canvas source
 
 Question-level `availableFrom` and `availableUntil` settings were removed. An
 instructor should not copy one quiz window into every embedded question, and
 HelpMe and Canvas could disagree about the deadline.
 
-Canvas supports launch substitutions for resource and assignment dates,
-including `ResourceLink.available.endDateTime` and
-`Canvas.assignment.lockAt.iso8601`. Canvas supplies assignment dates only when
-the launch has an assignment context. We do not yet know whether the INDG quiz
-placement supplies these values.
+HelpMe currently requests only `canvas_course_id` plus its own question ID. The
+dynamic-registration `customParameters` carry only
+`canvas_course_id: '$Canvas.course.id'`
+(`packages/server/src/lti/lti.middleware.ts`), and the Deep Linking response
+carries only `helpme_question_id`
+(`packages/server/src/lti/lti.service.ts`). HelpMe does not request Canvas
+deadline substitutions.
 
-Until that behavior is verified, Canvas controls quiz availability. The options
-to discuss with the professor are, in preferred order:
+Local Canvas source shows resource and assignment dates are available only as
+requested custom-variable substitutions guarded by assignment context. In
+`lib/lti/variable_expander.rb`, `ResourceLink.available.endDateTime` expands
+from `@assignment.lock_at` only when `@assignment && @assignment.lock_at` is
+present, `Canvas.assignment.lockAt.iso8601` expands only when `@assignment &&
+@assignment.lock_at` is present, and the shared `ASSIGNMENT_GUARD` is simply
+`-> { @assignment }`. Without an assignment on the expander, these values stay
+unexpanded.
+
+A HelpMe resource link embedded inside Classic or New Quiz question content
+follows the assignment-less external-tool retrieve path. In
+`app/controllers/external_tools_controller.rb`, `retrieve` calls `lti_launch`
+without an `assignment_id`, `lti_launch` carries an assignment reference only
+from `secure_params`, and `basic_lti_launch_request` resolves its assignment
+through `assignment_from_assignment_id` (from `params[:assignment_id]` or the
+secure-params `lti_assignment_id`) before passing that possibly-nil assignment
+to `variable_expander`. The New Quizzes quiz-level launch is separate: in
+`app/controllers/new_quizzes_controller.rb`, `build_launch_data` and
+`build_variable_expander` attach the quiz assignment to the quiz tool launch,
+but that does not transfer assignment context to the nested HelpMe retrieve
+launch.
+
+Therefore the current placement should be assumed to provide no trusted
+deadline until a real authenticated launch proves otherwise. Canvas controls
+quiz visibility; HelpMe uses the 24-hour resource credential lifetime. Until
+that behavior is verified, the options to discuss with the professor are, in
+preferred order:
 
 1. Cap the HelpMe resource token at the Canvas-signed resource or assignment
    deadline when Canvas supplies one.
@@ -40,11 +67,15 @@ to discuss with the professor are, in preferred order:
    hours and rely on Canvas to control whether the quiz remains visible.
 
 The second option needs an assessment-level record shared by the embedded
-questions. It should only be added if real Canvas launches omit the required
-deadline. When a token expires, the iframe must tell the student to reopen the
-quiz in Canvas.
+questions. If the professor requires HelpMe to enforce a deadline, prefer one
+assessment-level HelpMe deadline shared across questions. Do not restore
+per-question dates. When a token expires, the iframe must tell the student to
+reopen the quiz in Canvas.
 
 ## Required tests before deadline enforcement
+
+Live verification was blocked at Canvas login, so Classic/New Quiz launch
+claims and per-student override behavior remain an explicit test item.
 
 - Capture the verified LTI claims from the INDG quiz placement without logging
   names, email addresses, or tokens.
