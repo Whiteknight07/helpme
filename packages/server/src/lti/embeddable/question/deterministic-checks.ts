@@ -1,126 +1,27 @@
-const NONTERMINAL_ABBREVIATIONS = new Set([
-  'dr.',
-  'e.g.',
-  'etc.',
-  'i.e.',
-  'jr.',
-  'mr.',
-  'mrs.',
-  'ms.',
-  'prof.',
-  'sr.',
-  'st.',
-  'vs.',
-]);
+/// <reference lib="es2022.intl" />
 
-function isDigit(char: string): boolean {
-  return char >= '0' && char <= '9';
-}
+const sentenceSegmenter = new Intl.Segmenter('en', {
+  granularity: 'sentence',
+});
 
-function isPeriodNonterminal(text: string, index: number): boolean {
-  if (
-    index > 0 &&
-    index + 1 < text.length &&
-    isDigit(text[index - 1]) &&
-    isDigit(text[index + 1])
-  ) {
-    return true;
-  }
-  const match = text.slice(0, index + 1).match(/[A-Za-z.]+$/);
-  if (!match) return false;
-  const token = match[0];
-  const lowered = token.toLowerCase();
-  if (NONTERMINAL_ABBREVIATIONS.has(lowered)) return true;
-  if (/^[A-Za-z]\.$/.test(token)) return true;
-  if (/^(?:[A-Za-z]\.){2,}$/.test(token)) return true;
-  return false;
-}
-
-export function sentenceSpans(text: string): [number, number][] {
-  const spans: [number, number][] = [];
-  const length = text.length;
-  let start = 0;
-
-  const advanceStart = (pos: number) => {
-    while (pos < length && /\s/.test(text[pos])) {
-      pos++;
-    }
-    return pos;
-  };
-
-  start = advanceStart(start);
-  let index = start;
-
-  while (index < length) {
-    const char = text[index];
-    if (char === '\r' || char === '\n') {
-      let end = index;
-      while (end > start && /\s/.test(text[end - 1])) {
-        end--;
-      }
-      if (end > start) {
-        spans.push([start, end]);
-      }
-      while (index < length && (text[index] === '\r' || text[index] === '\n')) {
-        index++;
-      }
-      start = advanceStart(index);
-      index = start;
-      continue;
-    }
-
-    if (char !== '.' && char !== '!' && char !== '?') {
-      index++;
-      continue;
-    }
-
-    let punctuationEnd = index + 1;
-    while (
-      punctuationEnd < length &&
-      (text[punctuationEnd] === '.' ||
-        text[punctuationEnd] === '!' ||
-        text[punctuationEnd] === '?')
-    ) {
-      punctuationEnd++;
-    }
-
-    if (
-      char === '.' &&
-      punctuationEnd === index + 1 &&
-      isPeriodNonterminal(text, index)
-    ) {
-      index++;
-      continue;
-    }
-
-    let boundaryEnd = punctuationEnd;
-    while (boundaryEnd < length && `"'’”)]}`.includes(text[boundaryEnd])) {
-      boundaryEnd++;
-    }
-
-    if (boundaryEnd < length && !/\s/.test(text[boundaryEnd])) {
-      index = punctuationEnd;
-      continue;
-    }
-
-    spans.push([start, boundaryEnd]);
-    start = advanceStart(boundaryEnd);
-    index = start;
-  }
-
-  let end = length;
-  while (end > start && /\s/.test(text[end - 1])) {
-    end--;
-  }
-  if (end > start) {
-    spans.push([start, end]);
-  }
-
-  return spans;
-}
+// Intl.Segmenter splits title abbreviations (Dr.) and single initials (J.)
+// that never end a sentence here, so rejoin those segments.
+const NONTERMINAL_END = /\b(?:dr|mr|mrs|ms|prof|jr|sr|st|vs|[a-z])\.$/i;
 
 export function countSentences(text: string): number {
-  return sentenceSpans(text).length;
+  const segments = [...sentenceSegmenter.segment(text)].map(
+    (part) => part.segment,
+  );
+  const merged: string[] = [];
+  for (const segment of segments) {
+    const previous: string | undefined = merged[merged.length - 1];
+    if (previous !== undefined && NONTERMINAL_END.test(previous.trimEnd())) {
+      merged[merged.length - 1] = previous + segment;
+    } else {
+      merged.push(segment);
+    }
+  }
+  return merged.filter((segment) => segment.trim() !== '').length;
 }
 
 export function findIndigenousCapitalizationVariants(text: string): string[] {

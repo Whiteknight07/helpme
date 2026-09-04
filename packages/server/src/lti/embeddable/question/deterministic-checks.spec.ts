@@ -1,72 +1,59 @@
 import {
   countSentences,
   findIndigenousCapitalizationVariants,
-  sentenceSpans,
 } from './deterministic-checks';
 
 describe('Deterministic checks', () => {
-  describe('sentenceSpans and countSentences', () => {
-    it('splits basic sentences', () => {
-      const text = 'First sentence. Second sentence! Third sentence?';
-      const spans = sentenceSpans(text);
-      expect(spans).toHaveLength(3);
-      expect(countSentences(text)).toBe(3);
-    });
+  describe('countSentences', () => {
+    const cases: [string, string, number][] = [
+      [
+        'basic sentences',
+        'First sentence. Second sentence! Third sentence?',
+        3,
+      ],
+      [
+        'abbreviations and initials',
+        'Dr. Smith visited the U.B.C. campus e.g. yesterday. It was great.',
+        2,
+      ],
+      ['decimals', 'The score was 3.5 out of 5.0 points. Good job.', 2],
+      ['quotes at boundaries', 'He said, "Hello!" Then he walked away.', 2],
+      ['line breaks', 'First sentence\nSecond sentence\r\nThird sentence', 3],
+      [
+        'trailing text without punctuation',
+        'This is a single sentence without a period at the end',
+        1,
+      ],
+      ['empty text', '', 0],
+      ['whitespace only', '   \n\t  ', 0],
+    ];
 
-    it('handles abbreviations without splitting', () => {
-      const text =
-        'Dr. Smith visited the U.B.C. campus e.g. yesterday. It was great.';
-      const spans = sentenceSpans(text);
-      expect(spans).toHaveLength(2);
-      expect(countSentences(text)).toBe(2);
-    });
-
-    it('handles decimal points without splitting', () => {
-      const text = 'The score was 3.5 out of 5.0 points. Good job.';
-      expect(countSentences(text)).toBe(2);
-    });
-
-    it('handles quotes and closing parentheses at boundaries', () => {
-      const text = 'He said, "Hello!" Then he walked away.';
-      expect(countSentences(text)).toBe(2);
-    });
-
-    it('handles line breaks as sentence boundaries', () => {
-      const text = 'First sentence\nSecond sentence\r\nThird sentence';
-      expect(countSentences(text)).toBe(3);
-    });
-
-    it('counts trailing text without punctuation as a sentence', () => {
-      const text = 'This is a single sentence without a period at the end';
-      expect(countSentences(text)).toBe(1);
-    });
-
-    it('handles empty or whitespace string', () => {
-      expect(countSentences('')).toBe(0);
-      expect(countSentences('   \n\t  ')).toBe(0);
+    it.each(cases)('%s', (_label, text, expected) => {
+      expect(countSentences(text)).toBe(expected);
     });
   });
 
   describe('findIndigenousCapitalizationVariants', () => {
-    it('returns empty array when properly capitalized', () => {
-      const text = 'We recognize Indigenous peoples and their rights.';
-      expect(findIndigenousCapitalizationVariants(text)).toEqual([]);
-    });
+    const cases: [string, string, string[]][] = [
+      [
+        'properly capitalized',
+        'We recognize Indigenous peoples and their rights.',
+        [],
+      ],
+      [
+        'lowercase',
+        'We recognize indigenous communities across Canada.',
+        ['indigenous'],
+      ],
+      [
+        'mixed variants',
+        'INDIGENOUS and indigenous and indigENOUS.',
+        ['INDIGENOUS', 'indigenous', 'indigENOUS'],
+      ],
+    ];
 
-    it('detects lowercase indigenous', () => {
-      const text = 'We recognize indigenous communities across Canada.';
-      expect(findIndigenousCapitalizationVariants(text)).toEqual([
-        'indigenous',
-      ]);
-    });
-
-    it('detects all-caps or mixed-case variants and deduplicates', () => {
-      const text = 'INDIGENOUS and indigenous and indigENOUS.';
-      const variants = findIndigenousCapitalizationVariants(text);
-      expect(variants).toContain('INDIGENOUS');
-      expect(variants).toContain('indigenous');
-      expect(variants).toContain('indigENOUS');
-      expect(variants).toHaveLength(3);
+    it.each(cases)('%s', (_label, text, expected) => {
+      expect(findIndigenousCapitalizationVariants(text)).toEqual(expected);
     });
   });
 });
