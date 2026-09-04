@@ -151,11 +151,13 @@ export default function EmbeddableQuestionsPage(
           <Button
             icon={<EyeOutlined />}
             size="small"
+            aria-label="Preview"
             onClick={() => setPreviewQuestion(record)}
           />
           <Button
             icon={<EditOutlined />}
             size="small"
+            aria-label="Edit"
             onClick={() => openEditModal(record)}
           />
           <Popconfirm
@@ -165,7 +167,12 @@ export default function EmbeddableQuestionsPage(
             okText="Delete"
             okButtonProps={{ danger: true }}
           >
-            <Button icon={<DeleteOutlined />} size="small" danger />
+            <Button
+              icon={<DeleteOutlined />}
+              size="small"
+              danger
+              aria-label="Delete"
+            />
           </Popconfirm>
         </Space>
       ),
@@ -191,9 +198,10 @@ export default function EmbeddableQuestionsPage(
       <GradingProfileForm courseId={courseId} />
       <p className="mb-4 text-gray-600">
         Configure questions for this course. To add a question to Canvas, use
-        the HelpMe button in the Canvas editor to insert a question.
-        Authenticated students can type an answer draft to receive immediate
-        AI-powered feedback before final submission.
+        the HelpMe button in the Canvas editor to insert a question. Canvas
+        students can request feedback without a separate HelpMe login by typing
+        an answer draft to receive immediate AI-powered feedback before final
+        submission.
       </p>
 
       <Table

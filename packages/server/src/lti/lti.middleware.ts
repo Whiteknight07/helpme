@@ -188,24 +188,11 @@ export default class LtiMiddleware {
 
     provider.onConnect(this.onConnectHandler);
 
-    // Runs only after the provider verifies a Deep Linking launch. Instructors
-    // are authorized (never provisioned) before the verified ltik is carried
-    // to the picker page.
-    provider.onDeepLinking(async (token, _, res) => {
-      try {
-        await this.ltiService.authorizeDeepLinking(token);
-        return provider.redirect(res, '/lti/deep-link');
-      } catch (err) {
-        Debug.log(this, err);
-        if (err instanceof HttpException) {
-          return res.status(err.getStatus()).send(err.getResponse());
-        }
-        return res.status(500).send({
-          status: 500,
-          error: 'Internal Server Error',
-          details: { message: 'Internal Server Error' },
-        });
-      }
+    // Runs only after the provider verifies a Deep Linking launch. Redirect
+    // the verified launch to the picker; the picker's GET and selection POST
+    // authorize via authorizeDeepLinking.
+    provider.onDeepLinking(async (_, __, res) => {
+      return provider.redirect(res, '/lti/deep-link');
     });
 
     provider.onDynamicRegistration(
