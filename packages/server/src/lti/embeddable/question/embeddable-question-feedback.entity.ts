@@ -60,7 +60,7 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
   @Column({ type: 'double precision', nullable: false })
   aiGrade: number;
 
-  @Column({ type: 'text', array: true, nullable: false })
+  @Column({ type: 'text', array: true, nullable: false, default: [] })
   reasons: string[];
 
   @Column({ type: 'boolean', default: false })
