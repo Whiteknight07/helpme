@@ -6,7 +6,6 @@ import { InfoCircleOutlined } from '@ant-design/icons'
 import {
   INDG_DEFAULT_ALLOWED_SCORES,
   INDG_DEFAULT_REASON_CODES,
-  INDG_DEFAULT_SYSTEM_PROMPT,
   type GradingPolicyKind,
 } from '@koh/common'
 import { API } from '@/app/api'
@@ -50,15 +49,6 @@ export default function GradingProfileForm({
     fetchProfile()
   }, [fetchProfile])
 
-  const useIndgDefaults = () => {
-    form.setFieldsValue({
-      policyKind: 'indg-reflection',
-      systemPrompt: INDG_DEFAULT_SYSTEM_PROMPT,
-      allowedScores: INDG_DEFAULT_ALLOWED_SCORES.join(', '),
-      reasonCodes: INDG_DEFAULT_REASON_CODES.join(', '),
-    })
-  }
-
   const handlePolicyChange = (value: GradingPolicyKind) => {
     if (value === 'indg-reflection') {
       form.setFieldsValue({
@@ -98,16 +88,7 @@ export default function GradingProfileForm({
   }
 
   return (
-    <Card
-      title="Grading Profile"
-      className="mb-4"
-      loading={loading}
-      extra={
-        <Button onClick={useIndgDefaults} disabled={loading}>
-          Use INDG defaults
-        </Button>
-      }
-    >
+    <Card title="Grading Profile" className="mb-4" loading={loading}>
       <p className="mb-4 text-gray-600">
         One shared profile per course: the system prompt, allowed scores, reason
         codes, and grading policy used for every embeddable question. Each
