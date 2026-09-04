@@ -26,6 +26,7 @@ const publicPages: string[] = [
   '/lti/failed*',
   '/lti/password*',
   '/lti/deep-link*',
+  '/lti/embeddable/*',
 ]
 
 /* This represents the proxy on the FRONTEND NEXT.JS server.
