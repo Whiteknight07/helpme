@@ -3,7 +3,6 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
 import { ERROR_MESSAGES, UpsertEmbeddableQuestionParams } from '@koh/common';
@@ -43,24 +42,6 @@ export class EmbeddableQuestionService {
     userId: number,
   ): Promise<EmbeddableQuestionFeedbackModel> {
     const question = await this.findOne(courseId, questionId);
-
-    if (
-      question.availableFrom &&
-      question.availableFrom.getTime() > Date.now()
-    ) {
-      throw new UnauthorizedException(
-        ERROR_MESSAGES.embeddableModule.notAvailableYet,
-      );
-    }
-
-    if (
-      question.availableUntil &&
-      question.availableUntil.getTime() < Date.now()
-    ) {
-      throw new UnauthorizedException(
-        ERROR_MESSAGES.embeddableModule.noLongerAvailable,
-      );
-    }
 
     const facts = computeMechanicalFacts(
       submission,
@@ -155,8 +136,6 @@ export class EmbeddableQuestionService {
     const questionText = params.questionText;
     const criteriaText = params.criteriaText ?? DEFAULT_RUBRIC;
     const instructions = params.instructions ?? null;
-    const availableFrom = params.availableFrom ?? null;
-    const availableUntil = params.availableUntil ?? null;
     const minSentences = params.minSentences ?? 3;
     const maxSentences = params.maxSentences ?? 5;
 
@@ -167,8 +146,6 @@ export class EmbeddableQuestionService {
       existing.questionText = questionText;
       existing.criteriaText = criteriaText;
       existing.instructions = instructions;
-      existing.availableFrom = availableFrom;
-      existing.availableUntil = availableUntil;
       existing.minSentences = minSentences;
       existing.maxSentences = maxSentences;
 
@@ -185,8 +162,6 @@ export class EmbeddableQuestionService {
       questionText,
       criteriaText,
       instructions,
-      availableFrom,
-      availableUntil,
       minSentences,
       maxSentences,
     });

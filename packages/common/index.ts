@@ -568,16 +568,6 @@ export class EmbeddableQuestion {
   @Type(() => Date)
   createdAt!: Date
 
-  @IsDate()
-  @IsOptional()
-  @Type(() => Date)
-  availableFrom?: Date | null
-
-  @IsDate()
-  @IsOptional()
-  @Type(() => Date)
-  availableUntil?: Date | null
-
   @IsInt()
   courseId!: number
 
@@ -623,26 +613,6 @@ export class ValidSentenceBoundsConstraint implements ValidatorConstraintInterfa
   }
 }
 
-@ValidatorConstraint({ name: 'validAvailabilityDates', async: false })
-export class ValidAvailabilityDatesConstraint implements ValidatorConstraintInterface {
-  validate(_value: unknown, args: ValidationArguments) {
-    if (!(args.object instanceof UpsertEmbeddableQuestionParams)) {
-      return true
-    }
-    const obj = args.object
-    if (obj.availableFrom && obj.availableUntil) {
-      const from = new Date(obj.availableFrom).getTime()
-      const until = new Date(obj.availableUntil).getTime()
-      return from <= until
-    }
-    return true
-  }
-
-  defaultMessage(_args: ValidationArguments) {
-    return 'availableUntil cannot be before availableFrom.'
-  }
-}
-
 export class UpsertEmbeddableQuestionParams {
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim() || null : value,
@@ -665,17 +635,6 @@ export class UpsertEmbeddableQuestionParams {
   @IsOptional()
   @MaxLength(15000)
   criteriaText?: string | null
-
-  @IsDate()
-  @IsOptional()
-  @Type(() => Date)
-  availableFrom?: Date | null
-
-  @IsDate()
-  @IsOptional()
-  @Type(() => Date)
-  @Validate(ValidAvailabilityDatesConstraint)
-  availableUntil?: Date | null
 
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim() || null : value,
@@ -5330,10 +5289,6 @@ export const ERROR_MESSAGES = {
   },
   embeddableModule: {
     notFound: 'Question not found.',
-    notAvailableYet:
-      'This assessment/question is not available to receive feedback for yet.',
-    noLongerAvailable:
-      'This assessment/question can no longer receive feedback.',
   },
 }
 

@@ -8,8 +8,6 @@ export class IndgEmbeddableQuestion1788000000000 implements MigrationInterface {
       `CREATE TABLE "embeddable_question_model" (
         "id" SERIAL NOT NULL,
         "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-        "availableFrom" TIMESTAMP WITH TIME ZONE,
-        "availableUntil" TIMESTAMP WITH TIME ZONE,
         "courseId" integer NOT NULL,
         "name" text,
         "questionText" text NOT NULL,

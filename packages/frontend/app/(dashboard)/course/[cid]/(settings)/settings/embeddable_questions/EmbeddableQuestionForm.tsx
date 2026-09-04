@@ -1,19 +1,9 @@
 'use client'
 
 import { ReactElement, useEffect, useState } from 'react'
-import {
-  Alert,
-  DatePicker,
-  Form,
-  Input,
-  InputNumber,
-  Modal,
-  Tooltip,
-  message,
-} from 'antd'
+import { Alert, Form, Input, InputNumber, Modal, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import { DEFAULT_RUBRIC, EmbeddableQuestion } from '@koh/common'
-import dayjs from 'dayjs'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
@@ -32,7 +22,6 @@ interface FormValues {
   instructions?: string | null
   minSentences?: number
   maxSentences?: number
-  availabilityDates?: [dayjs.Dayjs | null, dayjs.Dayjs | null] | null
 }
 
 export default function EmbeddableQuestionForm({
@@ -58,14 +47,6 @@ export default function EmbeddableQuestionForm({
             instructions: editingQuestion.instructions ?? undefined,
             minSentences: editingQuestion.minSentences ?? 3,
             maxSentences: editingQuestion.maxSentences ?? 5,
-            availabilityDates: [
-              editingQuestion.availableFrom
-                ? dayjs(editingQuestion.availableFrom)
-                : null,
-              editingQuestion.availableUntil
-                ? dayjs(editingQuestion.availableUntil)
-                : null,
-            ],
           }
         : { criteriaText: DEFAULT_RUBRIC, minSentences: 3, maxSentences: 5 },
     )
@@ -76,7 +57,6 @@ export default function EmbeddableQuestionForm({
     setIsLoading(true)
 
     try {
-      const [availableFrom, availableUntil] = values.availabilityDates ?? []
       const payload = {
         name: values.name?.trim() || null,
         questionText: values.questionText.trim(),
@@ -84,8 +64,6 @@ export default function EmbeddableQuestionForm({
         instructions: values.instructions?.trim() || null,
         minSentences: values.minSentences ?? 3,
         maxSentences: values.maxSentences ?? 5,
-        availableFrom: availableFrom?.toDate() ?? null,
-        availableUntil: availableUntil?.toDate() ?? null,
       }
 
       await (editingQuestion
@@ -258,24 +236,6 @@ export default function EmbeddableQuestionForm({
             <InputNumber min={1} max={100} className="w-full" />
           </Form.Item>
         </div>
-
-        <Form.Item
-          name="availabilityDates"
-          label={
-            <div className="flex items-center gap-1">
-              <span>Availability Window (Optional)</span>
-              <Tooltip title="Leave empty for always available. If set, feedback is only available during this window.">
-                <InfoCircleOutlined className="text-gray-400" />
-              </Tooltip>
-            </div>
-          }
-        >
-          <DatePicker.RangePicker
-            showTime
-            className="w-full"
-            format="YYYY-MM-DD HH:mm"
-          />
-        </Form.Item>
       </div>
     </Modal>
   )

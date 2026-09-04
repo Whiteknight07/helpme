@@ -44,6 +44,14 @@ export default function EmbeddableQuestionFeedback({
       )
       setFeedback(response)
     } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        const authMessage =
+          'Your Canvas session has expired. Reopen this quiz in Canvas to continue.'
+        setError(authMessage)
+        message.warning(authMessage)
+        return
+      }
+
       if (axios.isAxiosError(err) && err.response?.status === 429) {
         const rateLimitMessage =
           'Too many attempts. Please wait a few minutes before requesting more feedback.'

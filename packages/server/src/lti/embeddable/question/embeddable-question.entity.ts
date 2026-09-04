@@ -18,12 +18,6 @@ export class EmbeddableQuestionModel extends BaseEntity {
   @CreateDateColumn({ type: 'timestamptz', nullable: false })
   createdAt: Date;
 
-  @Column({ type: 'timestamptz', nullable: true })
-  availableFrom: Date | null;
-
-  @Column({ type: 'timestamptz', nullable: true })
-  availableUntil: Date | null;
-
   @ManyToOne(() => CourseModel, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'courseId' })
   @Exclude()
