@@ -65,16 +65,23 @@ export class EmbeddableQuestionService {
    * Evaluates student draft against the course grading profile and
    * returns/saves validated feedback.
    *
-   * @param submission The student's draft response
-   * @param questionId The question ID
-   * @param courseId The course ID
-   * @param attribution Who the attempt belongs to
+   * @param submission The student's draft response.
+   * @param questionId The question ID.
+   * @param courseId The course ID.
+   * @param attribution Who the attempt belongs to.
    */
   async getFeedback(
-    submission: string,
-    questionId: number,
-    courseId: number,
-    attribution: EmbeddableFeedbackAttribution,
+    {
+      submission,
+      questionId,
+      courseId,
+      attribution,
+    }: {
+      submission: string;
+      questionId: number;
+      courseId: number;
+      attribution: EmbeddableFeedbackAttribution;
+    },
   ): Promise<EmbeddableQuestionFeedback> {
     const question = await this.findOne(courseId, questionId);
     const profile = await this.getProfile(courseId);

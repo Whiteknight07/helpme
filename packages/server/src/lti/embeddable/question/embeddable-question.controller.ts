@@ -94,12 +94,12 @@ export class EmbeddableQuestionController {
     @Body() body: EmbeddableQuestionFeedbackParams,
     @UserId() userId: number,
   ): Promise<EmbeddableQuestionFeedback> {
-    return this.embeddableQuestionService.getFeedback(
-      body.responseText,
+    return this.embeddableQuestionService.getFeedback({
+      submission: body.responseText,
       questionId,
       courseId,
-      { kind: 'user', userId },
-    );
+      attribution: { kind: 'user', userId },
+    });
   }
 
   /**
