@@ -614,8 +614,8 @@ export class LtiService {
       custom: {
         [HELPME_QUESTION_ID_PARAM]: String(question.id),
       },
-      // Sized for the existing feedback UI.
-      iframe: { src: launchUrl, width: 800, height: 600 },
+      // The embedded page requests its content height after launch.
+      iframe: { src: launchUrl, width: 800, height: 300 },
     };
 
     return this.provider.DeepLinkingService.createDeepLinkingForm(token, item, {

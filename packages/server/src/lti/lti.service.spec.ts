@@ -875,7 +875,7 @@ describe('LtiService', () => {
           title: 'Week 3',
           url: launchUrl,
           custom: { [HELPME_QUESTION_ID_PARAM]: '42' },
-          iframe: { src: launchUrl, width: 800, height: 600 },
+          iframe: { src: launchUrl, width: 800, height: 300 },
         },
         { message: 'HelpMe question linked' },
       );

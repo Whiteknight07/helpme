@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { Card } from 'antd'
 import axios from 'axios'
@@ -21,6 +21,7 @@ function EmbeddableQuestionView() {
   const [questionState, setQuestionState] = useState<QuestionState>({
     status: 'loading',
   })
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const courseId = Number(routeParams.cid)
   const questionId = Number(routeParams.qid)
@@ -55,6 +56,24 @@ function EmbeddableQuestionView() {
       })
   }, [courseId, hasInvalidRoute, questionId, useResource])
 
+  useEffect(() => {
+    const content = contentRef.current
+    if (!content || window.parent === window) return
+
+    const parentOrigin = document.referrer
+      ? new URL(document.referrer).origin
+      : '*'
+    const resize = () =>
+      window.parent.postMessage(
+        { subject: 'lti.frameResize', height: content.scrollHeight },
+        parentOrigin,
+      )
+    const observer = new ResizeObserver(resize)
+    observer.observe(content)
+    resize()
+    return () => observer.disconnect()
+  }, [questionState.status])
+
   if (hasInvalidRoute) {
     return (
       <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">
@@ -85,7 +104,10 @@ function EmbeddableQuestionView() {
   return (
     <>
       <title>HelpMe | Embeddable Question</title>
-      <div className="flex w-full flex-col items-stretch px-2 py-1">
+      <div
+        ref={contentRef}
+        className="flex w-full flex-col items-stretch px-2 py-1"
+      >
         <EmbeddableQuestionFeedback
           courseId={courseId}
           questionId={question.id}
