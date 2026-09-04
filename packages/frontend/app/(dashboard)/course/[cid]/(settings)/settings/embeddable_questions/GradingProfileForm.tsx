@@ -4,8 +4,12 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import { Button, Card, Form, Input, Select, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import {
+  GENERIC_DEFAULT_ALLOWED_SCORES,
+  GENERIC_DEFAULT_REASON_CODES,
+  GENERIC_DEFAULT_SYSTEM_PROMPT,
   INDG_DEFAULT_ALLOWED_SCORES,
   INDG_DEFAULT_REASON_CODES,
+  INDG_DEFAULT_SYSTEM_PROMPT,
   type GradingPolicyKind,
 } from '@koh/common'
 import { API } from '@/app/api'
@@ -52,8 +56,15 @@ export default function GradingProfileForm({
   const handlePolicyChange = (value: GradingPolicyKind) => {
     if (value === 'indg-reflection') {
       form.setFieldsValue({
+        systemPrompt: INDG_DEFAULT_SYSTEM_PROMPT,
         allowedScores: INDG_DEFAULT_ALLOWED_SCORES.join(', '),
         reasonCodes: INDG_DEFAULT_REASON_CODES.join(', '),
+      })
+    } else {
+      form.setFieldsValue({
+        systemPrompt: GENERIC_DEFAULT_SYSTEM_PROMPT,
+        allowedScores: GENERIC_DEFAULT_ALLOWED_SCORES.join(', '),
+        reasonCodes: GENERIC_DEFAULT_REASON_CODES.join(', '),
       })
     }
   }
@@ -90,9 +101,10 @@ export default function GradingProfileForm({
   return (
     <Card title="Grading Profile" className="mb-4" loading={loading}>
       <p className="mb-4 text-gray-600">
-        One shared profile per course: the system prompt, allowed scores, reason
-        codes, and grading policy used for every embeddable question. Each
-        question keeps its own rubric, instructions, and sentence bounds.
+        One shared profile per course: the grading instructions, shared rubric,
+        allowed scores, reason codes, and grading policy used for every
+        embeddable question. Each question can add its own rubric, instructions,
+        and sentence bounds.
       </p>
       <Form form={form} onFinish={handleSave} layout="vertical">
         <Form.Item
@@ -110,7 +122,7 @@ export default function GradingProfileForm({
         </Form.Item>
         <Form.Item
           name="systemPrompt"
-          label="System Prompt"
+          label="Course-wide Grading Instructions and Rubric"
           rules={[
             {
               required: true,

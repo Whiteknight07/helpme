@@ -157,15 +157,15 @@ export default function EmbeddableQuestionForm({
           type="info"
           showIcon
           message="AI Feedback Prompt Configuration"
-          description="The AI model uses the Student Answer along with the Question Text, Criteria, and Instructions configured here to generate structured feedback."
+          description="The AI model uses the course grading profile, student answer, question text, and any question-specific rubric or instructions configured here."
         />
 
         <Form.Item
           name="criteriaText"
           label={
             <div className="flex items-center gap-1">
-              <span>Grading Rubric (optional)</span>
-              <Tooltip title="Optional additional rubric the AI grades against. Leave blank to grade against the course profile and instructions only.">
+              <span>Question-specific Rubric (optional)</span>
+              <Tooltip title="Add grading criteria unique to this question. Leave blank to grade using the course grading profile and instructions.">
                 <InfoCircleOutlined className="text-gray-400" />
               </Tooltip>
             </div>
