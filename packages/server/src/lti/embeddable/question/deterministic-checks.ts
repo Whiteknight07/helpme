@@ -34,20 +34,11 @@ function findIndigenousCapitalizationVariants(text: string): string[] {
   ];
 }
 
-export interface MechanicalFacts {
-  sentenceCount: number;
-  requiredMinimum: number;
-  requiredMaximum: number;
-  belowMinimum: boolean;
-  aboveMaximum: boolean;
-  indigenousCapitalizationVariants: string[];
-}
-
 export function computeMechanicalFacts(
   submission: string,
   minSentences: number,
   maxSentences: number,
-): MechanicalFacts {
+) {
   const sentenceCount = countSentences(submission);
   const belowMinimum = sentenceCount < minSentences;
   const aboveMaximum = sentenceCount > maxSentences;
@@ -63,3 +54,5 @@ export function computeMechanicalFacts(
     indigenousCapitalizationVariants,
   };
 }
+
+export type MechanicalFacts = ReturnType<typeof computeMechanicalFacts>;

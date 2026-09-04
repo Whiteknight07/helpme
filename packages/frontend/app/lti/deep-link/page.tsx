@@ -13,8 +13,8 @@ const { Paragraph, Text } = Typography
 
 type QuestionsState =
   | { status: 'loading' }
-  | { status: 'ready'; questions: EmbeddableQuestion[] }
-  | { status: 'error'; message: string }
+  | { status: 'ready'; ltik: string; questions: EmbeddableQuestion[] }
+  | { status: 'error'; ltik: string; message: string }
 
 function getDeepLinkErrorMessage(err: unknown): string {
   if (axios.isAxiosError(err)) {
@@ -52,13 +52,14 @@ export default function DeepLinkPage() {
       .getQuestions(ltik)
       .then((questions) => {
         if (!cancelled) {
-          setQuestionsState({ status: 'ready', questions })
+          setQuestionsState({ status: 'ready', ltik, questions })
         }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
           setQuestionsState({
             status: 'error',
+            ltik,
             message: getDeepLinkErrorMessage(err),
           })
         }
@@ -69,33 +70,26 @@ export default function DeepLinkPage() {
     }
   }, [ltik])
 
-  if (!ltik) {
+  const errorMessage = !ltik
+    ? 'This page must be opened from Canvas.'
+    : questionsState.status === 'error' && questionsState.ltik === ltik
+      ? questionsState.message
+      : undefined
+
+  if (errorMessage) {
     return (
       <div className="flex w-full justify-center px-2 py-6">
         <Alert
           type="error"
           message="Could not open the question picker"
-          description="This page must be opened from Canvas."
+          description={errorMessage}
           showIcon
         />
       </div>
     )
   }
 
-  if (questionsState.status === 'error') {
-    return (
-      <div className="flex w-full justify-center px-2 py-6">
-        <Alert
-          type="error"
-          message="Could not open the question picker"
-          description={questionsState.message}
-          showIcon
-        />
-      </div>
-    )
-  }
-
-  if (questionsState.status === 'loading') {
+  if (questionsState.status !== 'ready' || questionsState.ltik !== ltik) {
     return <CenteredSpinner tip="Loading questions..." />
   }
 

@@ -84,33 +84,24 @@ function EmbeddableQuestionView() {
     return () => observer.disconnect()
   }, [questionState.routeKey, questionState.status])
 
-  if (hasInvalidRoute) {
+  const errorMessage = hasInvalidRoute
+    ? 'Invalid course or question ID. Please let your professor know.'
+    : questionState.status === 'error' && questionState.routeKey === routeKey
+      ? questionState.error
+      : undefined
+
+  if (errorMessage) {
     return (
       <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">
         <Card title="Error loading Question">
-          <p className="text-zinc-600">
-            Invalid course or question ID. Please let your professor know.
-          </p>
+          <p className="text-zinc-600">{errorMessage}</p>
         </Card>
       </div>
     )
   }
 
-  if (
-    questionState.status === 'loading' ||
-    questionState.routeKey !== routeKey
-  ) {
+  if (questionState.status !== 'ready' || questionState.routeKey !== routeKey) {
     return <CenteredSpinner tip="Loading..." />
-  }
-
-  if (questionState.status === 'error') {
-    return (
-      <div className="flex min-h-32 flex-col items-center justify-center px-3 py-2">
-        <Card title="Error loading Question">
-          <p className="text-zinc-600">{questionState.error}</p>
-        </Card>
-      </div>
-    )
   }
 
   const { question } = questionState
