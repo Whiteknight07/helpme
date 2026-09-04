@@ -1,7 +1,6 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
-import type { ReactElement } from 'react'
+import { use, useCallback, useEffect, useState, type ReactElement } from 'react'
 import {
   Button,
   Card,

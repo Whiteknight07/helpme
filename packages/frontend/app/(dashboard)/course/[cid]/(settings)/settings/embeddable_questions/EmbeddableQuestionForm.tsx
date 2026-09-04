@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import type { ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { Alert, Form, Input, InputNumber, Modal, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import type { EmbeddableQuestion } from '@koh/common'

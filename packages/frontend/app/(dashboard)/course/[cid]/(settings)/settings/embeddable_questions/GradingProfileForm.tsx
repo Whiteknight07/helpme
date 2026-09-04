@@ -1,15 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import type { ReactElement } from 'react'
+import { useCallback, useEffect, useState, type ReactElement } from 'react'
 import { Button, Card, Form, Input, Select, Tooltip, message } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import {
   INDG_DEFAULT_ALLOWED_SCORES,
   INDG_DEFAULT_REASON_CODES,
   INDG_DEFAULT_SYSTEM_PROMPT,
+  type GradingPolicyKind,
 } from '@koh/common'
-import type { GradingPolicyKind } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
