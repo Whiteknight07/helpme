@@ -3,7 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
-import { getAppAuthUserId } from './auth-token';
+import { getAppAuthPayload } from './auth-token';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -17,7 +17,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: unknown): Record<string, unknown> {
-    getAppAuthUserId(payload);
-    return { ...(payload as Record<string, unknown>) };
+    return getAppAuthPayload(payload);
   }
 }

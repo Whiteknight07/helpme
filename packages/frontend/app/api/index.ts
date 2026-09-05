@@ -1638,11 +1638,6 @@ export class APIClient {
         undefined,
         props,
       ),
-    linkCourseFromLti: async (
-      courseId: number,
-      props: UpsertLMSCourseParams,
-    ): Promise<string> =>
-      this.req('POST', `/api/v1/lms/course/${courseId}/link`, undefined, props),
     removeCourseIntegration: async (
       courseId: number,
     ): Promise<string | undefined> =>

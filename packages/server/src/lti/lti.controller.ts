@@ -179,12 +179,6 @@ export class LtiController {
       this.ltiService,
       {
         ...ltiLoginOptions,
-        custom: hasLtiCourseContext
-          ? {
-              ltiApiCourseId: apiCid,
-              ltiPlatform: platformMatch,
-            }
-          : undefined,
         redirect: `/lti${course ? `/${course.id}` : ''}${qry.size > 0 ? '?' + qry.toString() : ''}`,
       },
     );

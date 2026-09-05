@@ -163,26 +163,6 @@ export default function LtiIntegrationPage(): React.ReactElement {
       .catch((err) => message.error(getErrorMessage(err)))
   }
 
-  const [linking, setLinking] = useState(false)
-  const linkFromLti = async () => {
-    if (!apiCourseId || !platform) return
-    setLinking(true)
-    await API.lmsIntegration
-      .linkCourseFromLti(courseId, {
-        apiPlatform: platform,
-        apiCourseId,
-      })
-      .then((result) => {
-        if (result?.includes('Success')) message.success(result)
-        else message.error(result ?? 'Could not link courses')
-      })
-      .catch((err) => message.error(getErrorMessage(err)))
-      .finally(() => {
-        setLinking(false)
-        setUpdateFlag((f) => !f)
-      })
-  }
-
   if (!courseIntegration) {
     return <CenteredSpinner tip={'Loading...'} />
   }
@@ -401,16 +381,6 @@ export default function LtiIntegrationPage(): React.ReactElement {
             )}
           </div>
           <div className={'flex w-min flex-col gap-2'}>
-            {!integrationExists && orgIntegration && apiCourseId && platform && (
-              <Button
-                type={'primary'}
-                icon={<PlusCircleOutlined />}
-                loading={linking}
-                onClick={linkFromLti}
-              >
-                {`Link Canvas course ${apiCourseId} to this course`}
-              </Button>
-            )}
             <Button
               type={'primary'}
               icon={

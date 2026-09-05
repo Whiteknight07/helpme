@@ -21,6 +21,7 @@ import {
   UserFactory,
 } from '../../test/util/factories';
 import { LoginService } from './login.service';
+import { LOGIN_ENTRY_KIND } from './auth-token';
 import { EmbeddableQuestionService } from '../lti/embeddable/question/embeddable-question.service';
 import { ERROR_MESSAGES, QUERY_PARAMS } from '@koh/common';
 import { Request } from 'express';
@@ -111,7 +112,10 @@ describe('LoginService', () => {
       const user = await UserFactory.create();
       const res = new MockResponse() as any;
 
-      const token = jwtService.sign({ userId: user.id });
+      const token = jwtService.sign({
+        kind: LOGIN_ENTRY_KIND,
+        userId: user.id,
+      });
       const spy = jest.spyOn(service, 'enter');
       spy.mockResolvedValue(undefined);
 
@@ -434,31 +438,5 @@ describe('LoginService', () => {
         }
       },
     );
-  });
-
-  describe('generateAuthToken', () => {
-    it('should throw an error if the auth token is invalid', async () => {
-      const spy = jest.spyOn(JwtService.prototype, 'signAsync');
-      spy.mockResolvedValue(null);
-      await expect(service.generateAuthToken(1)).rejects.toThrow(
-        ERROR_MESSAGES.loginController.invalidTempJWTToken,
-      );
-      spy.mockRestore();
-    });
-
-    it('should sign an auth token with the provided params', async () => {
-      const result = await service.generateAuthToken(1);
-
-      expect(typeof result).toEqual('string');
-      const decoded = await jwtService.decode(result);
-      expect(decoded).toBeDefined();
-      expect(decoded).toEqual(
-        expect.objectContaining({
-          userId: 1,
-          iat: expect.anything(),
-          expiresIn: 60 * 60 * 24 * 30,
-        }),
-      );
-    });
   });
 });
