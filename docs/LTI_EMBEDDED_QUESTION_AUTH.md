@@ -34,7 +34,7 @@ For local development, follow [Test HelpMe questions in local Canvas](LOCAL_CANV
 
 The embedded-question flow originally considered a longer 10-hour session. The current decision is a **5-hour LTI application session**.
 
-Five hours is intentionally long enough for a normal quiz/exam session, including students moving among several embedded questions, while reducing the time a copied browser credential remains useful compared with a 10-hour session. The LTI controller must use the same 5-hour lifetime when it creates `lti_auth_token`; this is enforced with the standard JWT `exp` claim.
+Five hours is intentionally long enough for a normal quiz/exam session, including students moving among several embedded questions, while reducing the time a copied browser credential remains useful compared with a 10-hour session. All LTI session issuance paths use the same 5-hour lifetime, enforced with the standard JWT `exp` claim.
 
 This is a product/security tradeoff, not a Canvas deadline. Canvas remains responsible for whether the quiz itself is available.
 
@@ -51,6 +51,12 @@ This assumption should be confirmed with the professor in the real target Canvas
 The MVP assumes quiz students already have HelpMe accounts that the existing LTI identity flow can match.
 
 If a student reaches an embedded question before their HelpMe account is ready, the existing HelpMe login/registration flow can be completed and the student can reopen the Canvas quiz/question to trigger a fresh LTI launch. Exact-question return-through-registration machinery is intentionally deferred until the real course workflow demonstrates that it is needed.
+
+## Accepted same-course question access tradeoff
+
+The learner UI does **not** list all embeddable questions. However, once a student has a valid HelpMe LTI session and is enrolled in the HelpMe course, a technically knowledgeable student could manually change the question ID in an API request and retrieve another student-visible embeddable question from the same course.
+
+For the current low-stakes self-assessment use case, this is an explicit MVP tradeoff accepted in exchange for deleting the separate per-question authentication system. The server still blocks questions from other HelpMe courses, and the learner response never exposes grading criteria. Revisit exact per-question authorization only if the professor considers early access to another question unacceptable or the assessments become higher stakes.
 
 ## Criteria are hidden from the student response
 
@@ -97,6 +103,7 @@ Before production use, verify the actual target quiz behavior rather than buildi
 - Confirm that each embedded HelpMe question receives a fresh signed LTI launch when loaded.
 - Confirm that a normal ten-question quiz can move among embedded questions without requiring manual HelpMe login.
 - Confirm that a student whose 5-hour HelpMe session expires can reopen the Canvas question and continue through a fresh launch.
+- Confirm whether the accepted same-course question access tradeoff is appropriate for this self-assessment.
 - Capture only the non-sensitive claim names needed to determine whether Canvas supplies a trustworthy effective quiz/resource deadline. Do not log names, email addresses, ID tokens, or session tokens.
 - Confirm that students cannot retrieve `criteriaText` from the single-question API while staff can still edit criteria through the staff-only question-management flow.
 
