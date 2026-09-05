@@ -210,7 +210,7 @@ You do not need to register the app again unless you replace its databases or ch
 - **Connection refused from Canvas:** Confirm that the forwarder is running on `3100` and HelpMe is running on `3000`.
 - **Timeout from Canvas:** Check the Docker host mapping and local firewall. Docker distributions can route the host differently; verify the address with the connectivity command above.
 - **Port already in use:** Stop the old forwarder before starting another copy. Do not change ports without updating the configured URLs.
-- **Launch returns 403:** Check all three trust identifiers and restart HelpMe. Staff also need a linked identity and course access.
+- **Launch returns 403:** Check the client ID and restart HelpMe. Staff also need a linked identity and course access.
 - **Launch works but feedback fails:** Check the chatbot backend and course grading configuration.
 - **Old hostname appears after a redirect:** Update the existing app registration and HelpMe environment settings consistently. Reinsert saved Canvas links that contain the old hostname.
 
