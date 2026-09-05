@@ -308,13 +308,16 @@ export class LoginService {
     restrictPaths?: (RegExp | string) | (RegExp | string)[],
     custom?: Record<string, unknown>,
   ) {
-    const authToken = await this.jwtService.signAsync({
-      kind: APP_AUTH_KIND,
-      userId,
-      expiresIn,
-      restrictPaths,
-      custom,
-    });
+    const authToken = await this.jwtService.signAsync(
+      {
+        kind: APP_AUTH_KIND,
+        userId,
+        expiresIn,
+        restrictPaths,
+        custom,
+      },
+      { expiresIn },
+    );
 
     if (authToken === null || authToken === undefined) {
       throw new HttpException(
