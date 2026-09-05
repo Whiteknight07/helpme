@@ -157,8 +157,15 @@ export class LtiController {
         (v) => v.toLowerCase() == token.platformInfo.product_family_code,
       ) ?? LMSIntegrationPlatform.None;
     const apiCid = LtiService.extractCourseId(token);
-    qry.set('api_course_id', String(apiCid));
-    qry.set('lms_platform', platformMatch);
+    const hasLtiCourseContext =
+      typeof apiCid === 'string' &&
+      apiCid.length > 0 &&
+      platformMatch !== LMSIntegrationPlatform.None;
+
+    if (hasLtiCourseContext) {
+      qry.set('api_course_id', apiCid);
+      qry.set('lms_platform', platformMatch);
+    }
 
     if (lti_storage_target) {
       qry.set('lti_storage_target', lti_storage_target);
@@ -172,6 +179,12 @@ export class LtiController {
       this.ltiService,
       {
         ...ltiLoginOptions,
+        custom: hasLtiCourseContext
+          ? {
+              ltiApiCourseId: apiCid,
+              ltiPlatform: platformMatch,
+            }
+          : undefined,
         redirect: `/lti${course ? `/${course.id}` : ''}${qry.size > 0 ? '?' + qry.toString() : ''}`,
       },
     );

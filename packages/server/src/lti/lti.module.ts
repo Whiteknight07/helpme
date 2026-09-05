@@ -12,9 +12,10 @@ import { AuthModule } from '../auth/auth.module';
 import { AuthService } from '../auth/auth.service';
 import { OrganizationModule } from '../organization/organization.module';
 import { EmbeddableModule } from './embeddable/embeddable.module';
+import { LtiCourseLinkController } from './lti-course-link.controller';
 
 @Module({
-  controllers: [LtiController, LtiAuthController],
+  controllers: [LtiController, LtiAuthController, LtiCourseLinkController],
   providers: [LtiService, LoginService, AuthService],
   imports: [
     AuthModule,

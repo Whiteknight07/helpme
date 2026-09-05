@@ -116,6 +116,8 @@ function EmbeddableQuestionView() {
           courseId={courseId}
           questionId={question.id}
           questionText={question.questionText}
+          minSentences={question.minSentences}
+          maxSentences={question.maxSentences}
           useResource={useResource}
         />
       </div>

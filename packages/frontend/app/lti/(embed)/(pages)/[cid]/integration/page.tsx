@@ -401,7 +401,7 @@ export default function LtiIntegrationPage(): React.ReactElement {
             )}
           </div>
           <div className={'flex w-min flex-col gap-2'}>
-            {!integrationExists && apiCourseId && platform && (
+            {!integrationExists && orgIntegration && apiCourseId && platform && (
               <Button
                 type={'primary'}
                 icon={<PlusCircleOutlined />}

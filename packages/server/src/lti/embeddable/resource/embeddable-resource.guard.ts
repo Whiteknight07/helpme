@@ -6,7 +6,10 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Role } from '@koh/common';
+import { UserCourseModel } from '../../../profile/user-course.entity';
 import {
   EmbeddableResourceRequest,
   parseResourcePayload,
@@ -15,7 +18,15 @@ import {
 
 @Injectable()
 export class EmbeddableResourceGuard implements CanActivate {
-  constructor(private readonly jwtService: JwtService) {}
+  private readonly requireHttpsOrigin: boolean;
+
+  constructor(
+    private readonly jwtService: JwtService,
+    configService: ConfigService,
+  ) {
+    this.requireHttpsOrigin =
+      new URL(configService.getOrThrow<string>('DOMAIN')).protocol === 'https:';
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<EmbeddableResourceRequest>();
@@ -51,6 +62,18 @@ export class EmbeddableResourceGuard implements CanActivate {
       throw new ForbiddenException();
     }
 
+    if (payload.role === 'staff') {
+      const enrollment = await UserCourseModel.findOne({
+        where: { userId: payload.userId, courseId },
+      });
+      if (
+        !enrollment ||
+        (enrollment.role !== Role.PROFESSOR && enrollment.role !== Role.TA)
+      ) {
+        throw new ForbiddenException();
+      }
+    }
+
     if (req.method === 'POST') {
       const origin = req.headers.origin;
       const host = req.headers.host;
@@ -61,13 +84,17 @@ export class EmbeddableResourceGuard implements CanActivate {
       ) {
         throw new ForbiddenException();
       }
-      let originHost: string;
+
+      let originUrl: URL;
       try {
-        originHost = new URL(origin).host;
+        originUrl = new URL(origin);
       } catch {
         throw new ForbiddenException();
       }
-      if (originHost !== host) {
+      if (
+        originUrl.host !== host ||
+        (this.requireHttpsOrigin && originUrl.protocol !== 'https:')
+      ) {
         throw new ForbiddenException();
       }
     }

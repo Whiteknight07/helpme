@@ -13,6 +13,8 @@ interface EmbeddableQuestionFeedbackProps {
   courseId: number
   questionId: number
   questionText: string
+  minSentences: number
+  maxSentences: number
   useResource: boolean
 }
 
@@ -20,6 +22,8 @@ export default function EmbeddableQuestionFeedback({
   courseId,
   questionId,
   questionText,
+  minSentences,
+  maxSentences,
   useResource,
 }: EmbeddableQuestionFeedbackProps) {
   const [inputText, setInputText] = useState('')
@@ -78,9 +82,17 @@ export default function EmbeddableQuestionFeedback({
     }
   }
 
+  const sentenceRequirement =
+    minSentences === maxSentences
+      ? `${minSentences} sentence${minSentences === 1 ? '' : 's'}`
+      : `${minSentences}-${maxSentences} sentences`
+
   return (
     <div className="flex w-full flex-col gap-2">
       <p className="text-sm font-medium text-zinc-700">{questionText}</p>
+      <p className="text-xs text-zinc-500">
+        Suggested response length: {sentenceRequirement}.
+      </p>
 
       <TextArea
         value={inputText}
@@ -118,6 +130,14 @@ export default function EmbeddableQuestionFeedback({
           <div className="w-full whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
             {feedback.comment}
           </div>
+          {feedback.needsHumanReview && (
+            <Alert
+              type="warning"
+              message="Instructor review recommended"
+              description="This automated result was flagged for instructor review. Treat the score as provisional."
+              showIcon
+            />
+          )}
           <p className="text-sm font-medium text-zinc-700">
             {`Provisional score: ${feedback.score}/${feedback.maxScore}`}
           </p>

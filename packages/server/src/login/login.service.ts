@@ -12,6 +12,7 @@ import { ERROR_MESSAGES } from '@koh/common';
 import { CookieOptions, Request, Response } from 'express';
 import { getCookie } from '../common/helpers';
 import { ProfInviteService } from 'course/prof-invite/prof-invite.service';
+import { APP_AUTH_KIND, getAppAuthUserId } from './auth-token';
 
 export type LoginEntryOptions = {
   cookieName?: string;
@@ -21,6 +22,7 @@ export type LoginEntryOptions = {
   redirect?: string;
   returnImmediate?: boolean;
   returnImmediateMessage?: string;
+  custom?: Record<string, unknown>;
 };
 
 @Injectable()
@@ -39,17 +41,18 @@ export class LoginService {
     ltiService?: LtiService,
     options?: LoginEntryOptions,
   ) {
-    const isVerified = await this.jwtService.verifyAsync(token);
-
-    if (!isVerified) {
+    let payload: unknown;
+    try {
+      payload = await this.jwtService.verifyAsync(token);
+    } catch {
       throw new UnauthorizedException();
     }
 
-    const payload = this.jwtService.decode(token) as { userId: number };
+    const userId = getAppAuthUserId(payload);
     await this.enter(
       req,
       res,
-      payload.userId,
+      userId,
       courseService,
       ltiService,
       options,
@@ -70,7 +73,7 @@ export class LoginService {
    * @param {String} options.redirect Override all other redirections to follow this path. Query parameters are extracted and applied after.
    * @Param {boolean} options.returnImmediate Override all redirections and cookies to return immediately with 200 OK.
    * @Param {String} options.returnImmediateMessage (Optional) Message to be sent with return immediate. Defaults to 'OK'.
-   * @Param {String} options.custom (Optional) Custom properties for the authorization token.
+   * @Param {Record<string, unknown>} options.custom (Optional) Custom properties for the authorization token.
    * @returns {void | Response} Returns 'void' if authorization is successful. Returns 500-level error response otherwise.
    */
   async enter(
@@ -88,6 +91,7 @@ export class LoginService {
       redirect,
       returnImmediate,
       returnImmediateMessage,
+      custom,
     } = options ?? {};
     let cookieOptions = options?.cookieOptions ?? { httpOnly: true };
 
@@ -107,6 +111,7 @@ export class LoginService {
         userId,
         expiresIn,
         restrictPaths,
+        custom,
       );
     } catch (err) {
       if (err instanceof HttpException) {
@@ -301,9 +306,10 @@ export class LoginService {
     userId: number,
     expiresIn: number = 60 * 60 * 24 * 30, // Expires in 30 days (Default)
     restrictPaths?: (RegExp | string) | (RegExp | string)[],
-    custom?: Record<string, any>,
+    custom?: Record<string, unknown>,
   ) {
     const authToken = await this.jwtService.signAsync({
+      kind: APP_AUTH_KIND,
       userId,
       expiresIn,
       restrictPaths,

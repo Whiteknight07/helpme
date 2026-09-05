@@ -44,6 +44,34 @@ course enrollment, identity link, or full-app login. Staff previews require an
 existing linked HelpMe staff enrollment. Expiry tells the learner to reopen the
 Canvas quiz.
 
+## App-session and question-session JWTs are separate purposes
+
+Both token families currently use `JWT_SECRET`, so runtime purpose checks are
+required. New application login tokens carry `kind: "app-auth"`. The normal JWT
+strategy accepts these tokens and older application tokens without a `kind` only
+when they contain a positive safe-integer `userId`. It rejects any other token
+kind, including `embeddable-resource`. Login-entry token exchange applies the
+same check before it can create a session.
+
+The resource guard separately requires `kind: "embeddable-resource"`, the exact
+course and question IDs, valid signed timing, and its learner/staff payload shape.
+A copied resource credential therefore cannot become a normal HelpMe session by
+moving its value into `auth_token` or `lti_auth_token`.
+
+## One-click course linking trusts the launch, not browser storage
+
+The LTI integration page keeps the Canvas course ID in browser session storage for
+presentation. That value is not authority. When an ordinary verified LTI launch
+creates `lti_auth_token`, HelpMe also stores the verified Canvas course ID and
+platform inside that signed session token.
+
+`POST /lms/course/:courseId/link` reads `lti_auth_token` directly so an unrelated
+normal `auth_token` cannot replace the LTI context when both cookies exist. The
+endpoint requires a HelpMe Professor enrollment in the selected HelpMe course and
+rejects any submitted Canvas course/platform value that differs from the signed
+launch context. A normal HelpMe session without verified LTI context cannot use
+this shortcut.
+
 ## Availability evidence from local Canvas source
 
 Question-level `availableFrom` and `availableUntil` settings were removed. An
