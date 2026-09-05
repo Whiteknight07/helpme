@@ -579,6 +579,64 @@ export class LMSIntegrationController {
     );
   }
 
+  @Post('course/:courseId/link')
+  @UseGuards(JwtAuthGuard, CourseRolesGuard)
+  @Roles(Role.PROFESSOR)
+  async linkCourseFromLti(
+    @Param('courseId', ParseIntPipe) courseId: number,
+    @Body() props: UpsertLMSCourseParams,
+  ): Promise<string> {
+    const orgCourse = await OrganizationCourseModel.findOne({
+      where: { courseId: courseId },
+    });
+    if (!orgCourse) {
+      throw new NotFoundException(
+        ERROR_MESSAGES.lmsController.organizationCourseNotFound,
+      );
+    }
+
+    const orgIntegration = await LMSOrganizationIntegrationModel.findOne({
+      where: {
+        organizationId: orgCourse.organizationId,
+        apiPlatform: props.apiPlatform,
+      },
+    });
+
+    if (!props.apiCourseId || String(props.apiCourseId).trim() === '') {
+      throw new BadRequestException(
+        ERROR_MESSAGES.lmsController.apiCourseIdInUse,
+      );
+    }
+
+    const existing = await LMSCourseIntegrationModel.findOne({
+      where: { courseId: courseId },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        ERROR_MESSAGES.lmsController.apiCourseIdInUse,
+      );
+    }
+
+    const taken = await LMSCourseIntegrationModel.findOne({
+      where: {
+        courseId: Not(courseId),
+        apiCourseId: props.apiCourseId,
+      },
+    });
+    if (taken) {
+      throw new BadRequestException(
+        ERROR_MESSAGES.lmsController.apiCourseIdInUse,
+      );
+    }
+
+    await LMSCourseIntegrationModel.save({
+      courseId,
+      apiCourseId: props.apiCourseId,
+      orgIntegration: orgIntegration ?? null,
+    });
+    return `Successfully linked ${props.apiPlatform} course ${props.apiCourseId}`;
+  }
+
   @Post('course/:courseId/upsert')
   @UseGuards(JwtAuthGuard, CourseRolesGuard)
   @Roles(Role.PROFESSOR)
