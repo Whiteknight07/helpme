@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useRef, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { Card } from 'antd'
 import axios from 'axios'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
@@ -9,15 +9,22 @@ import type { EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import EmbeddableQuestionFeedback from '@/app/lti/embeddable/[cid]/components/EmbeddableQuestionFeedback'
 
+type StudentEmbeddableQuestion = Pick<
+  EmbeddableQuestion,
+  'id' | 'courseId' | 'questionText' | 'minSentences' | 'maxSentences'
+>
+
 type QuestionState =
   | { status: 'loading'; routeKey: string }
   | { status: 'error'; routeKey: string; error: string }
-  | { status: 'ready'; routeKey: string; question: EmbeddableQuestion }
+  | {
+      status: 'ready'
+      routeKey: string
+      question: StudentEmbeddableQuestion
+    }
 
 function EmbeddableQuestionView() {
   const routeParams = useParams<{ cid: string; qid: string }>()
-  const searchParams = useSearchParams()
-  const useResource = searchParams.get('resource') === '1'
   const [questionState, setQuestionState] = useState<QuestionState>({
     status: 'loading',
     routeKey: '',
@@ -27,16 +34,14 @@ function EmbeddableQuestionView() {
   const courseId = Number(routeParams.cid)
   const questionId = Number(routeParams.qid)
   const hasInvalidRoute = !questionId || !courseId
-  const routeKey = `${courseId}:${questionId}:${useResource ? 'resource' : 'session'}`
+  const routeKey = `${courseId}:${questionId}`
 
   useEffect(() => {
     if (hasInvalidRoute) return
 
     let cancelled = false
-    const loader = useResource
-      ? API.lti.embeddableResource.getOne(courseId, questionId)
-      : API.lti.embeddableQuestion.getOne(courseId, questionId)
-    loader
+    API.lti.embeddableQuestion
+      .getOne(courseId, questionId)
       .then((question) => {
         if (!cancelled) {
           setQuestionState({ status: 'ready', routeKey, question })
@@ -48,9 +53,8 @@ function EmbeddableQuestionView() {
           setQuestionState({
             status: 'error',
             routeKey,
-            error: useResource
-              ? 'Your Canvas session has expired. Reopen this quiz in Canvas to continue.'
-              : 'HelpMe login and course enrollment are required to view this question.',
+            error:
+              'Your HelpMe session has expired. Reopen this quiz in Canvas to continue.',
           })
           return
         }
@@ -64,7 +68,7 @@ function EmbeddableQuestionView() {
     return () => {
       cancelled = true
     }
-  }, [courseId, hasInvalidRoute, questionId, routeKey, useResource])
+  }, [courseId, hasInvalidRoute, questionId, routeKey])
 
   useEffect(() => {
     const content = contentRef.current
@@ -118,7 +122,6 @@ function EmbeddableQuestionView() {
           questionText={question.questionText}
           minSentences={question.minSentences}
           maxSentences={question.maxSentences}
-          useResource={useResource}
         />
       </div>
     </>

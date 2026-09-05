@@ -1,6 +1,5 @@
 import {
   BaseEntity,
-  Check,
   Column,
   CreateDateColumn,
   Entity,
@@ -13,10 +12,6 @@ import { UserModel } from '../../../profile/user.entity';
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
 
 @Entity('embeddable_question_feedback_model')
-@Check(
-  'CHK_embeddable_feedback_attribution',
-  '"userId" IS NOT NULL OR ("ltiIssuer" IS NOT NULL AND "ltiSubject" IS NOT NULL)',
-)
 export class EmbeddableQuestionFeedbackModel extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
@@ -38,18 +33,12 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
   @JoinColumn({ name: 'questionId' })
   embeddableQuestion: EmbeddableQuestionModel;
 
-  @Column({ type: 'integer', nullable: true })
-  userId: number | null;
+  @Column({ type: 'integer', nullable: false })
+  userId: number;
 
-  @ManyToOne(() => UserModel, { onDelete: 'CASCADE', nullable: true })
+  @ManyToOne(() => UserModel, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
-  user: UserModel | null;
-
-  @Column({ type: 'text', nullable: true })
-  ltiIssuer: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  ltiSubject: string | null;
+  user: UserModel;
 
   @Column({ type: 'text', nullable: false })
   submission: string;

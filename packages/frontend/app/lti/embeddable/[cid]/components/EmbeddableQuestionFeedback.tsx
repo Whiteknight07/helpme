@@ -15,7 +15,6 @@ interface EmbeddableQuestionFeedbackProps {
   questionText: string
   minSentences: number
   maxSentences: number
-  useResource: boolean
 }
 
 export default function EmbeddableQuestionFeedback({
@@ -24,7 +23,6 @@ export default function EmbeddableQuestionFeedback({
   questionText,
   minSentences,
   maxSentences,
-  useResource,
 }: EmbeddableQuestionFeedbackProps) {
   const [inputText, setInputText] = useState('')
   const [feedback, setFeedback] = useState<EmbeddableQuestionFeedback | null>(
@@ -45,22 +43,16 @@ export default function EmbeddableQuestionFeedback({
     setIsLoading(true)
 
     try {
-      const response = useResource
-        ? await API.lti.embeddableResource.getFeedback(
-            courseId,
-            questionId,
-            trimmed,
-          )
-        : await API.lti.embeddableQuestion.getFeedback(
-            courseId,
-            questionId,
-            trimmed,
-          )
+      const response = await API.lti.embeddableQuestion.getFeedback(
+        courseId,
+        questionId,
+        trimmed,
+      )
       setFeedback(response)
     } catch (err) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {
         const authMessage =
-          'Your Canvas session has expired. Reopen this quiz in Canvas to continue.'
+          'Your HelpMe session has expired. Reopen this quiz in Canvas to continue.'
         setError(authMessage)
         message.warning(authMessage)
         return

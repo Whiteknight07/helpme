@@ -1,7 +1,7 @@
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '@koh/common';
 import { LtiModule } from '../src/lti/lti.module';
-import { EMBEDDABLE_RESOURCE_TTL_SECONDS } from '../src/lti/embeddable/resource/embeddable-resource-auth';
+import { LOGIN_ENTRY_KIND } from '../src/login/auth-token';
 import {
   CourseFactory,
   UserCourseFactory,
@@ -12,28 +12,22 @@ import { setupIntegrationTest } from './util/testUtils';
 describe('JWT purpose isolation', () => {
   const { supertest, getTestModule } = setupIntegrationTest(LtiModule);
 
-  it('rejects a question resource token as a normal HelpMe session', async () => {
+  it('does not accept a login-entry credential as an application session', async () => {
     const user = await UserFactory.create();
     const course = await CourseFactory.create();
     await UserCourseFactory.create({ user, course, role: Role.PROFESSOR });
 
-    const jwtService = getTestModule().get<JwtService>(JwtService);
-    const resourceToken = jwtService.sign(
+    const loginEntryToken = getTestModule().get<JwtService>(JwtService).sign(
       {
-        kind: 'embeddable-resource',
-        role: 'staff',
-        ltiIssuer: 'https://canvas.example.edu',
-        ltiSubject: 'staff-user',
-        courseId: course.id,
-        questionId: 1,
+        kind: LOGIN_ENTRY_KIND,
         userId: user.id,
       },
-      { expiresIn: EMBEDDABLE_RESOURCE_TTL_SECONDS },
+      { expiresIn: 60 },
     );
 
     await supertest()
       .get(`/lti/embeddable-question/${course.id}`)
-      .set('Cookie', [`auth_token=${resourceToken}`])
+      .set('Cookie', [`auth_token=${loginEntryToken}`])
       .expect(401);
   });
 });

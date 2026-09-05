@@ -28,11 +28,6 @@ import { pick } from 'lodash';
 import { Not } from 'typeorm';
 import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
 import { EmbeddableQuestionService } from './embeddable/question/embeddable-question.service';
-import {
-  EMBEDDABLE_RESOURCE_KIND,
-  EMBEDDABLE_RESOURCE_TTL_SECONDS,
-  EmbeddableResourcePayload,
-} from './embeddable/resource/embeddable-resource-auth';
 
 export const HELPME_QUESTION_ID_PARAM = 'helpme_question_id';
 export const LTI_MEMBERSHIP_LEARNER_ROLE =
@@ -50,6 +45,7 @@ export class LtiService {
     secure: useSecureCookies,
     sameSite: useSecureCookies ? 'none' : 'lax',
   };
+
   constructor(
     private jwtService: JwtService,
     private embeddableQuestionService: EmbeddableQuestionService,
@@ -57,12 +53,14 @@ export class LtiService {
   ) {}
 
   private _provider: Provider | undefined;
+
   get provider(): Provider {
     if (!this._provider) {
       throw new Error('LTI Provider not initialized!');
     }
     return this._provider;
   }
+
   set provider(provider: Provider) {
     this._provider = provider;
   }
@@ -93,10 +91,7 @@ export class LtiService {
       code = crypto.randomBytes(64).toString('hex');
     } while (await LtiIdentityTokenModel.findOne({ where: { code } }));
 
-    await LtiIdentityTokenModel.delete({
-      issuer,
-      ltiUserId,
-    });
+    await LtiIdentityTokenModel.delete({ issuer, ltiUserId });
 
     await LtiIdentityTokenModel.create({
       code,
@@ -105,14 +100,10 @@ export class LtiService {
       ltiEmail,
     }).save();
 
-    const token = this.jwtService.sign({
-      code,
-    });
-
+    const token = this.jwtService.sign({ code });
     if (!token) {
       throw new BadRequestException(ERROR_MESSAGES.ltiService.errorSigningJwt);
     }
-
     return token;
   }
 
@@ -120,24 +111,16 @@ export class LtiService {
     userId: number,
     signedToken: string,
   ): Promise<boolean> {
-    const token = this.jwtService.decode<{
-      code: string;
-    }>(signedToken);
-
+    const token = this.jwtService.decode<{ code: string }>(signedToken);
     if (!token || !token.code) {
       throw new BadRequestException(
         ERROR_MESSAGES.ltiService.invalidIdentityJwt,
       );
     }
 
-    const { code } = token;
-
     const matchingToken = await LtiIdentityTokenModel.findOne({
-      where: {
-        code,
-      },
+      where: { code: token.code },
     });
-
     if (!matchingToken) {
       return false;
     }
@@ -151,8 +134,6 @@ export class LtiService {
       return false;
     }
 
-    // If user has logged in with a different account prior, remove the identity entry for that account for
-    // this ISS + user ID combo
     await UserLtiIdentityModel.delete({
       userId: Not(userId),
       issuer: matchingToken.issuer,
@@ -163,9 +144,6 @@ export class LtiService {
       userId,
       ...pick(matchingToken, ['issuer', 'ltiEmail', 'ltiUserId']),
     }).save();
-
-    // The matching token is not removed as it may be re-used later
-    // await matchingToken.remove();
 
     return true;
   }
@@ -184,15 +162,10 @@ export class LtiService {
       email,
     }).save();
 
-    const token = this.jwtService.sign({
-      courseId,
-      inviteCode,
-    });
-
+    const token = this.jwtService.sign({ courseId, inviteCode });
     if (!token) {
       throw new BadRequestException(ERROR_MESSAGES.ltiService.errorSigningJwt);
     }
-
     return token;
   }
 
@@ -212,26 +185,13 @@ export class LtiService {
     }
 
     const { courseId, inviteCode } = token;
-
     const user = await UserModel.findOne({
-      where: {
-        id: userId,
-      },
-      relations: {
-        organizationUser: true,
-      },
+      where: { id: userId },
+      relations: { organizationUser: true },
     });
-
     const matchingInvite = await LtiCourseInviteModel.findOne({
-      where: {
-        inviteCode,
-        courseId,
-      },
-      relations: {
-        course: {
-          organizationCourse: true,
-        },
-      },
+      where: { inviteCode, courseId },
+      relations: { course: { organizationCourse: true } },
     });
 
     if (!matchingInvite) {
@@ -239,13 +199,11 @@ export class LtiService {
         ERROR_MESSAGES.ltiService.courseInviteNotFound,
       );
     }
-
     if (matchingInvite.email != user.email) {
       throw new BadRequestException(
         ERROR_MESSAGES.ltiService.courseInviteEmailMismatch,
       );
     }
-
     if (
       user.organizationUser.organizationId !=
       matchingInvite.course.organizationCourse.organizationId
@@ -254,7 +212,6 @@ export class LtiService {
         ERROR_MESSAGES.ltiService.courseInviteOrganizationMismatch,
       );
     }
-
     if (
       matchingInvite.expiresInSeconds != undefined &&
       (Date.now() - matchingInvite.createdAt.getTime()) / 1000 >=
@@ -267,22 +224,15 @@ export class LtiService {
     }
 
     const enrollment = await UserCourseModel.findOne({
-      where: {
-        userId,
-        courseId: courseId,
-      },
+      where: { userId, courseId },
     });
 
-    // Delete any invites for this course for this email
-    await LtiCourseInviteModel.delete({
-      email: user.email,
-      courseId,
-    });
+    await LtiCourseInviteModel.delete({ email: user.email, courseId });
 
     if (!enrollment) {
       await UserCourseModel.create({
         userId,
-        courseId: courseId,
+        courseId,
         role: Role.STUDENT,
       }).save();
     }
@@ -294,7 +244,7 @@ export class LtiService {
     token: IdToken,
   ): Promise<{ userId?: number; courseId?: number }> {
     let userId: number | undefined;
-    let courseId: number | undefined = undefined;
+    let courseId: number | undefined;
 
     const matchingUserIds: number[] = (
       await UserModel.createQueryBuilder('user_model')
@@ -303,42 +253,29 @@ export class LtiService {
           UserLtiIdentityModel,
           'lti_user',
           'lti_user."userId" = user_model.id AND lti_user.issuer = :issuer AND lti_user."ltiUserId" = :ltiUserId',
-          {
-            issuer: token.iss,
-            ltiUserId: token.user,
-          },
+          { issuer: token.iss, ltiUserId: token.user },
         )
         .addSelect('lti_user.issuer', 'ltiIssuer')
         .addSelect('lti_user."ltiUserId"', 'ltiUserId')
-        .where('email = :email', {
-          email: token.userInfo.email,
-        })
+        .where('email = :email', { email: token.userInfo.email })
         .orWhere('lti_user."userId" IS NOT NULL')
         .orderBy('lti_user."userId"', 'ASC', 'NULLS LAST')
         .getRawMany<{ userId: number }>()
-    ).map(({ userId }) => userId);
+    ).map(({ userId: matchingUserId }) => matchingUserId);
     userId = matchingUserIds[0];
-
-    let lmsCourseIntegration: LMSCourseIntegrationModel;
 
     const platformCourseId = LtiService.extractCourseId(token);
     if (platformCourseId != undefined) {
-      lmsCourseIntegration = await LMSCourseIntegrationModel.findOne({
-        where: {
-          apiCourseId: platformCourseId,
-        },
+      const lmsCourseIntegration = await LMSCourseIntegrationModel.findOne({
+        where: { apiCourseId: platformCourseId },
       });
       courseId = lmsCourseIntegration?.courseId;
     }
 
-    // We only need to narrow it down if there's > 1
     if (matchingUserIds.length > 1 && courseId != undefined) {
       for (const matchingUserId of matchingUserIds) {
         const userCourse = await UserCourseModel.findOne({
-          where: {
-            userId: matchingUserId,
-            courseId,
-          },
+          where: { userId: matchingUserId, courseId },
         });
         if (!userCourse) {
           continue;
@@ -348,16 +285,12 @@ export class LtiService {
       }
     }
 
-    // Refresh identity in case it's changed and the user was found
     if (userId != undefined) {
-      // If user has logged in with a different account prior, remove the identity entry for that account for
-      // this ISS + user ID combo
       await UserLtiIdentityModel.delete({
         userId: Not(userId),
         issuer: token.iss,
         ltiUserId: token.user,
       });
-
       await UserLtiIdentityModel.create({
         userId,
         issuer: token.iss,
@@ -366,10 +299,7 @@ export class LtiService {
       }).save();
     }
 
-    return {
-      userId,
-      courseId,
-    };
+    return { userId, courseId };
   }
 
   static extractCourseId(token: IdToken) {
@@ -404,13 +334,11 @@ export class LtiService {
 
   assertTrustedCanvasPlatform(token: IdToken): void {
     const clientId = this.configService.get<string>('LTI_CANVAS_CLIENT_ID');
-
     if (typeof clientId !== 'string' || clientId.length === 0) {
       throw new InternalServerErrorException(
         'LTI Canvas trust configuration is incomplete; set LTI_CANVAS_CLIENT_ID.',
       );
     }
-
     if (token.clientId !== clientId) {
       throw new ForbiddenException(
         'LTI launch is not from the trusted Canvas platform',
@@ -438,11 +366,14 @@ export class LtiService {
     return lmsIntegration.courseId;
   }
 
-  async resolveQuestionLaunch(token: IdToken): Promise<{
-    courseId: number;
-    questionId: number;
-    resource: EmbeddableResourcePayload;
-  }> {
+  /**
+   * Validates the signed Canvas context for an embedded question. This does
+   * not create another credential or identity. Once it succeeds, the
+   * controller continues through the ordinary HelpMe LTI login/session flow.
+   */
+  async validateQuestionLaunch(
+    token: IdToken,
+  ): Promise<{ courseId: number; questionId: number }> {
     const roles = token.platformContext?.roles;
     const isLearner = roles?.includes(LTI_MEMBERSHIP_LEARNER_ROLE);
     const isStaff = roles?.some((role) =>
@@ -455,71 +386,19 @@ export class LtiService {
     }
 
     const courseId = await this.findMappedCourseId(token);
-
     const questionId = LtiService.parseStrictQuestionId(
       token.platformContext.custom?.[HELPME_QUESTION_ID_PARAM],
     );
-
     const question = await EmbeddableQuestionModel.findOne({
-      where: {
-        id: questionId,
-        courseId,
-      },
+      where: { id: questionId, courseId },
     });
-
     if (!question) {
       throw new NotFoundException(
         'Question not found in the mapped HelpMe course',
       );
     }
 
-    if (!isLearner) {
-      const userId = await this.authorizeExistingStaff(token, courseId);
-      return {
-        courseId,
-        questionId,
-        resource: {
-          kind: EMBEDDABLE_RESOURCE_KIND,
-          role: 'staff',
-          ltiIssuer: token.iss,
-          ltiSubject: token.user,
-          courseId,
-          questionId,
-          userId,
-        },
-      };
-    }
-
-    if (typeof token.iss !== 'string' || token.iss.length === 0) {
-      throw new BadRequestException('LTI launch is missing its issuer');
-    }
-    if (typeof token.user !== 'string' || token.user.length === 0) {
-      throw new BadRequestException('LTI launch is missing its subject');
-    }
-
-    return {
-      courseId,
-      questionId,
-      resource: {
-        kind: EMBEDDABLE_RESOURCE_KIND,
-        role: 'learner',
-        ltiIssuer: token.iss,
-        ltiSubject: token.user,
-        courseId,
-        questionId,
-      },
-    };
-  }
-
-  signResourceToken(payload: EmbeddableResourcePayload): string {
-    const token = this.jwtService.sign(
-      { ...payload },
-      { expiresIn: EMBEDDABLE_RESOURCE_TTL_SECONDS },
-    );
-    if (!token) {
-      throw new BadRequestException(ERROR_MESSAGES.ltiService.errorSigningJwt);
-    }
-    return token;
+    return { courseId, questionId };
   }
 
   private async authorizeExistingStaff(
@@ -527,10 +406,7 @@ export class LtiService {
     courseId: number,
   ): Promise<number> {
     const identity = await UserLtiIdentityModel.findOne({
-      where: {
-        issuer: token.iss,
-        ltiUserId: token.user,
-      },
+      where: { issuer: token.iss, ltiUserId: token.user },
     });
     if (!identity) {
       throw new ForbiddenException(
@@ -539,10 +415,7 @@ export class LtiService {
     }
 
     const enrollment = await UserCourseModel.findOne({
-      where: {
-        userId: identity.userId,
-        courseId,
-      },
+      where: { userId: identity.userId, courseId },
     });
     if (
       !enrollment ||
@@ -552,7 +425,6 @@ export class LtiService {
         'LTI instructor launch requires a Professor or TA enrollment in the mapped course',
       );
     }
-
     return identity.userId;
   }
 
@@ -572,17 +444,14 @@ export class LtiService {
         'LTI Deep Linking requires an Instructor or TeachingAssistant role',
       );
     }
-
     if (token.platformContext?.messageType !== 'LtiDeepLinkingRequest') {
       throw new BadRequestException('Expected an LTI Deep Linking request');
     }
-
     if (!token.platformContext?.deepLinkingSettings?.deep_link_return_url) {
       throw new BadRequestException(
         'Deep Linking request is missing its return settings',
       );
     }
-
     if (token.platformInfo?.product_family_code !== 'canvas') {
       throw new BadRequestException(
         'Deep Linking is only supported for Canvas',
@@ -595,15 +464,10 @@ export class LtiService {
     }
 
     const courseId = await this.findMappedCourseId(token);
-
     const userId = await this.authorizeExistingStaff(token, courseId);
-
     return { userId, courseId };
   }
 
-  /**
-   * Lists the mapped course's existing embeddable questions for the picker.
-   */
   async getDeepLinkingQuestions(
     token: IdToken,
   ): Promise<EmbeddableQuestionModel[]> {
@@ -611,18 +475,11 @@ export class LtiService {
     return this.embeddableQuestionService.findAllForCourse(courseId);
   }
 
-  /**
-   * Returns the library-signed Deep Linking form carrying exactly one
-   * `ltiResourceLink` that re-enters the ordinary question launch. The
-   * question is reloaded under the trusted mapped course so cross-course ids
-   * are rejected.
-   */
   async createDeepLinkingResponse(
     token: IdToken,
     questionId: unknown,
   ): Promise<string> {
     const parsedQuestionId = LtiService.parseStrictQuestionId(questionId);
-
     const { courseId } = await this.authorizeDeepLinking(token);
 
     const launchUrl = token.platformContext?.targetLinkUri;
@@ -643,7 +500,6 @@ export class LtiService {
       custom: {
         [HELPME_QUESTION_ID_PARAM]: String(question.id),
       },
-      // The embedded page requests its content height after launch.
       iframe: { src: launchUrl, width: 800, height: 300 },
     };
 

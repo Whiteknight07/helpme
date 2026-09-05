@@ -5,6 +5,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Header,
   Param,
@@ -45,14 +46,12 @@ import {
 import { EmailVerifiedGuard } from '../guards/email-verified.guard';
 import { CourseModel } from '../course/course.entity';
 import { UserCourseModel } from '../profile/user-course.entity';
-import { restrictPaths } from './lti-auth.controller';
+import {
+  LTI_APP_SESSION_SECONDS,
+  restrictPaths,
+} from './lti-auth.controller';
 import { LoginService } from '../login/login.service';
 import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
-import {
-  EMBEDDABLE_RESOURCE_TTL_SECONDS,
-  resourceCookieName,
-  resourceCookiePath,
-} from './embeddable/resource/embeddable-resource-auth';
 
 @Controller('lti')
 @UseInterceptors(IgnoreableClassSerializerInterceptor)
@@ -74,38 +73,25 @@ export class LtiController {
     course?: CourseModel,
     @Query('lti_storage_target') lti_storage_target?: string,
   ) {
+    const questionLaunch = LtiService.hasQuestionLaunch(token)
+      ? await this.ltiService.validateQuestionLaunch(token)
+      : undefined;
+
+    if (questionLaunch && course?.id !== questionLaunch.courseId) {
+      throw new ForbiddenException(
+        'Verified Canvas course does not match the HelpMe launch course',
+      );
+    }
+
     const ltiLoginOptions = {
       cookieName: 'lti_auth_token',
       cookieOptions: LtiService.cookieOptions,
       restrictPaths,
-      expiresIn: 60 * 10,
+      expiresIn: LTI_APP_SESSION_SECONDS,
     };
-
-    if (LtiService.hasQuestionLaunch(token)) {
-      const { courseId, questionId, resource } =
-        await this.ltiService.resolveQuestionLaunch(token);
-      const scopedToken = this.ltiService.signResourceToken(resource);
-      return res
-        .clearCookie('lti_auth_token', LtiService.cookieOptions)
-        .cookie(resourceCookieName(courseId, questionId), scopedToken, {
-          ...LtiService.cookieOptions,
-          path: resourceCookiePath(courseId, questionId),
-          maxAge: EMBEDDABLE_RESOURCE_TTL_SECONDS * 1000,
-        })
-        .redirect(
-          `/lti/embeddable/${courseId}/question/${questionId}?resource=1`,
-        );
-    }
-
     const qry = new URLSearchParams();
 
     try {
-      /*
-      This is essentially a secondary 'session' cookie/token which carries
-      a key to unlock information regarding the user who launched the LTI
-      tool. Used to set auto-login when the HelpMe email of the user doesn't
-      match their Canvas email.
-      */
       const identity = await this.ltiService.createLtiIdentityToken(
         token.iss,
         token.user,
@@ -114,10 +100,8 @@ export class LtiController {
       res.cookie('__LTI_IDENTITY', identity, LtiService.cookieOptions);
     } catch {}
 
-    // If the user does not exist, but the course was found, create an invite and set it as a cookie
     if (!user && course && token.userInfo.email != undefined) {
       qry.set('redirect', `/lti/${course.id}`);
-
       try {
         const invite = await this.ltiService.createCourseInvite(
           course.id,
@@ -127,7 +111,8 @@ export class LtiController {
       } catch {}
     }
 
-    // If the user does not exist, redirect to login.
+    // Exact-question return through first-time registration is intentionally
+    // deferred. After registration, reopen the Canvas question for a fresh LTI launch.
     if (!user) {
       return res
         .clearCookie('lti_auth_token', LtiService.cookieOptions)
@@ -136,13 +121,8 @@ export class LtiController {
 
     if (course) {
       const enrollment = await UserCourseModel.findOne({
-        where: {
-          userId: user.id,
-          courseId: course?.id,
-        },
+        where: { userId: user.id, courseId: course.id },
       });
-
-      // If the user has no enrollment.
       if (!enrollment) {
         await UserCourseModel.create({
           userId: user.id,
@@ -166,29 +146,20 @@ export class LtiController {
       qry.set('api_course_id', apiCid);
       qry.set('lms_platform', platformMatch);
     }
-
     if (lti_storage_target) {
       qry.set('lti_storage_target', lti_storage_target);
     }
 
-    await this.loginService.enter(
-      req,
-      res,
-      user.id,
-      undefined,
-      this.ltiService,
-      {
-        ...ltiLoginOptions,
-        redirect: `/lti${course ? `/${course.id}` : ''}${qry.size > 0 ? '?' + qry.toString() : ''}`,
-      },
-    );
+    const destination = questionLaunch
+      ? `/lti/embeddable/${questionLaunch.courseId}/question/${questionLaunch.questionId}`
+      : `/lti${course ? `/${course.id}` : ''}`;
+
+    await this.loginService.enter(req, res, user.id, undefined, this.ltiService, {
+      ...ltiLoginOptions,
+      redirect: `${destination}${qry.size > 0 ? '?' + qry.toString() : ''}`,
+    });
   }
 
-  /**
-   * Lists the mapped course's embeddable questions for the Canvas Deep
-   * Linking picker. Authorized from the verified launch behind `ltik`; no
-   * HelpMe session is required or created.
-   */
   @Get('deep-link/questions')
   @UseGuards(LtiGuard)
   @IgnoreSerializer()
@@ -198,11 +169,6 @@ export class LtiController {
     return this.ltiService.getDeepLinkingQuestions(token);
   }
 
-  /**
-   * Accepts the picker's single question selection and returns the
-   * library-signed Deep Linking form as HTML. The frontend posts here with a
-   * native form so the returned document auto-submits to Canvas.
-   */
   @Post('deep-link/selection')
   @UseGuards(LtiGuard)
   @Header('Content-Type', 'text/html')
@@ -290,7 +256,6 @@ export class LtiController {
     @Param('kid') kid: string,
   ): Promise<LtiPlatform> {
     const platform = await this.ltiService.provider.getPlatformById(kid);
-
     return await this.ltiService.provider.DynamicRegistration.getRegistration(
       platform,
     );
@@ -299,14 +264,9 @@ export class LtiController {
 
 export function mapToLocalPlatform(platform: PlatformModel): LtiPlatform {
   if (!platform) return undefined;
-
   const authToken = platform.authToken();
   if (authToken.method !== AuthTokenMethodEnum.JWK_SET) {
     authToken.key = '********************************';
   }
-
-  return plainToClass(LtiPlatform, {
-    ...platform,
-    authToken,
-  });
+  return plainToClass(LtiPlatform, { ...platform, authToken });
 }

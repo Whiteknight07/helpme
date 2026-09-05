@@ -41,20 +41,6 @@ function matchesIndgContract(scores: number[], reasons: string[]): boolean {
   );
 }
 
-/**
- * Discriminated feedback attribution. Normal HelpMe traffic carries a
- * userId; Canvas resource launches carry the LTI issuer+subject pair with
- * an optional staff userId for instructor previews.
- */
-export type EmbeddableFeedbackAttribution =
-  | { kind: 'user'; userId: number }
-  | {
-      kind: 'lti';
-      ltiIssuer: string;
-      ltiSubject: string;
-      userId?: number;
-    };
-
 @Injectable()
 export class EmbeddableQuestionService {
   private readonly logger = new Logger(EmbeddableQuestionService.name);
@@ -62,24 +48,19 @@ export class EmbeddableQuestionService {
   constructor(private readonly chatbotApiService: ChatbotApiService) {}
 
   /**
-   * Evaluates student draft against the course grading profile and
-   * returns/saves validated feedback.
-   *
-   * @param submission The student's draft response.
-   * @param questionId The question ID.
-   * @param courseId The course ID.
-   * @param attribution Who the attempt belongs to.
+   * Evaluates a course member's draft against the course grading profile and
+   * returns/saves validated feedback attributed to their HelpMe user account.
    */
   async getFeedback({
     submission,
     questionId,
     courseId,
-    attribution,
+    userId,
   }: {
     submission: string;
     questionId: number;
     courseId: number;
-    attribution: EmbeddableFeedbackAttribution;
+    userId: number;
   }): Promise<EmbeddableQuestionFeedback> {
     const question = await this.findOne(courseId, questionId);
     const profile = await this.getProfile(courseId);
@@ -128,12 +109,7 @@ export class EmbeddableQuestionService {
     const feedback = EmbeddableQuestionFeedbackModel.create({
       courseId,
       questionId,
-      userId:
-        attribution.kind === 'user'
-          ? attribution.userId
-          : (attribution.userId ?? null),
-      ltiIssuer: attribution.kind === 'lti' ? attribution.ltiIssuer : null,
-      ltiSubject: attribution.kind === 'lti' ? attribution.ltiSubject : null,
+      userId,
       submission,
       aiFeedback: postProcessed.comment,
       aiGrade: postProcessed.score,
@@ -216,7 +192,9 @@ export class EmbeddableQuestionService {
   }
 
   /**
-   * Finds one question scoped to a course.
+   * Finds one question scoped to a course. This returns the complete server
+   * model because grading needs the hidden criteria. Controllers are
+   * responsible for exposing only student-safe fields.
    */
   async findOne(
     courseId: number,

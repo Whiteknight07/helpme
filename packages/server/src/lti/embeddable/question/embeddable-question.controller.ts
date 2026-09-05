@@ -27,6 +27,11 @@ import { EmbeddableQuestionModel } from './embeddable-question.entity';
 import { EmbeddableGradingProfileModel } from './grading-profile.entity';
 import { UserId } from '../../../decorators/user.decorator';
 
+type StudentEmbeddableQuestion = Pick<
+  EmbeddableQuestionModel,
+  'id' | 'courseId' | 'questionText' | 'minSentences' | 'maxSentences'
+>;
+
 @Controller('lti/embeddable-question')
 @UseGuards(JwtAuthGuard, CourseRolesGuard)
 @UseInterceptors(ClassSerializerInterceptor)
@@ -35,11 +40,6 @@ export class EmbeddableQuestionController {
     private readonly embeddableQuestionService: EmbeddableQuestionService,
   ) {}
 
-  /**
-   * Returns the course's single grading profile. TA and Professor only.
-   * Declared before the `:questionId` routes so `grading-profile` is never
-   * parsed as a question ID.
-   */
   @Get(':courseId/grading-profile')
   @Roles(Role.TA, Role.PROFESSOR)
   async getProfile(
@@ -48,9 +48,6 @@ export class EmbeddableQuestionController {
     return this.embeddableQuestionService.getProfile(courseId);
   }
 
-  /**
-   * Updates the course's single grading profile. TA and Professor only.
-   */
   @Patch(':courseId/grading-profile')
   @Roles(Role.TA, Role.PROFESSOR)
   async updateProfile(
@@ -61,7 +58,7 @@ export class EmbeddableQuestionController {
   }
 
   /**
-   * Lists all embeddable questions for a course. TA and Professor only.
+   * Staff use the full list for question management, including criteria.
    */
   @Get(':courseId')
   @Roles(Role.TA, Role.PROFESSOR)
@@ -72,19 +69,29 @@ export class EmbeddableQuestionController {
   }
 
   /**
-   * Retrieves a single question. Accessible to all enrolled course members.
+   * Course members can load the question, but grading criteria stay server-side.
    */
   @Get(':courseId/:questionId')
   @Roles(Role.STUDENT, Role.TA, Role.PROFESSOR)
   async findOne(
     @Param('courseId', ParseIntPipe) courseId: number,
     @Param('questionId', ParseIntPipe) questionId: number,
-  ): Promise<EmbeddableQuestionModel> {
-    return this.embeddableQuestionService.findOne(courseId, questionId);
+  ): Promise<StudentEmbeddableQuestion> {
+    const question = await this.embeddableQuestionService.findOne(
+      courseId,
+      questionId,
+    );
+    return {
+      id: question.id,
+      courseId: question.courseId,
+      questionText: question.questionText,
+      minSentences: question.minSentences,
+      maxSentences: question.maxSentences,
+    };
   }
 
   /**
-   * Submits a draft answer for feedback. Accessible to all enrolled course members.
+   * Feedback is always attributed to the authenticated HelpMe user.
    */
   @Post(':courseId/:questionId/feedback')
   @Roles(Role.STUDENT, Role.TA, Role.PROFESSOR)
@@ -98,13 +105,10 @@ export class EmbeddableQuestionController {
       submission: body.responseText,
       questionId,
       courseId,
-      attribution: { kind: 'user', userId },
+      userId,
     });
   }
 
-  /**
-   * Creates a new embeddable question. TA and Professor only.
-   */
   @Post(':courseId')
   @Roles(Role.TA, Role.PROFESSOR)
   async create(
@@ -114,9 +118,6 @@ export class EmbeddableQuestionController {
     return this.embeddableQuestionService.upsert(courseId, body);
   }
 
-  /**
-   * Updates an embeddable question. TA and Professor only.
-   */
   @Patch(':courseId/:questionId')
   @Roles(Role.TA, Role.PROFESSOR)
   async update(
@@ -127,9 +128,6 @@ export class EmbeddableQuestionController {
     return this.embeddableQuestionService.upsert(courseId, body, questionId);
   }
 
-  /**
-   * Deletes an embeddable question. TA and Professor only.
-   */
   @Delete(':courseId/:questionId')
   @Roles(Role.TA, Role.PROFESSOR)
   async delete(

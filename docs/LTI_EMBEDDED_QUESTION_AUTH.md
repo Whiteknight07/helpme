@@ -1,212 +1,107 @@
 # LTI embedded question authentication
 
-This note records the authentication, course-linking, and deadline decisions found
-while adding Canvas Deep Linking for embeddable questions. Scoped resource
-authentication is implemented. One-click course linking is deferred. Deadline
-availability remains unresolved.
+This note records the intentionally simplified authentication and availability design for Canvas-embedded HelpMe questions.
 
-## Canvas platform configuration
+## Current design
 
-Each HelpMe environment is pinned to one Canvas registration: production uses UBC
-Canvas only; local uses local Canvas only. The launch guard requires this exact
-`ConfigService` value:
+A HelpMe question linked into Canvas uses the ordinary HelpMe LTI launch and ordinary HelpMe LTI application session. There is no second question-scoped JWT, no second resource cookie, and no separate resource-auth controller or guard.
+
+The flow is:
+
+1. Canvas launches HelpMe through LTI and sends a signed ID token.
+2. HelpMe verifies the LTI launch through the existing middleware.
+3. For a question launch, HelpMe additionally verifies that the launch is from the configured Canvas client, maps the signed Canvas course ID to the HelpMe course, parses the signed `helpme_question_id`, and verifies that the question belongs to that mapped HelpMe course.
+4. HelpMe then uses the existing main LTI identity path to find the HelpMe user.
+5. If that user is not yet enrolled in the mapped HelpMe course, the existing LTI flow enrolls them as a student.
+6. HelpMe issues the normal `lti_auth_token` application-session cookie and redirects the iframe to the selected question.
+7. Question and feedback requests use the existing JWT and course-role guards. Feedback is always stored against the authenticated HelpMe `userId`.
+
+The URL course ID and question ID are navigation inputs, not authorization. Course membership is rechecked by the normal course-role guard, and the question lookup remains scoped to the course.
+
+## Canvas trust configuration
+
+Each HelpMe environment is pinned to one Canvas registration through:
 
 ```text
 LTI_CANVAS_CLIENT_ID
 ```
 
-This is the verified LTI client ID from the Canvas registration screen, not a value
-inferred from the browser hostname or the first launch. `assertTrustedCanvasPlatform`
-enforces the check. The LTI library verifies the token signature before this check.
-Missing configuration denies launches; a client mismatch returns `403`. Do not guess
-production IDs.
+`assertTrustedCanvasPlatform` requires the verified LTI token's client ID to match this value. Missing configuration fails closed. The LTI library verifies the token signature before HelpMe relies on the launch claims.
 
 For local development, follow [Test HelpMe questions in local Canvas](LOCAL_CANVAS_SETUP.md).
-That guide uses HTTP and a shared hostname on different ports. Separate HTTPS
-hostnames are an additional production-parity check, not a prerequisite for
-that local workflow.
 
-Production rollout must set the client ID before enabling launches. The
-existing 24-hour resource credential expiry remains in effect.
+## Session lifetime: 5 hours, not 10 hours
 
-## Launches and later requests are different
+The embedded-question flow originally considered a longer 10-hour session. The current decision is a **5-hour LTI application session**.
 
-Canvas starts an LTI launch when it loads a linked HelpMe question. Canvas sends
-a signed ID token to the HelpMe launch endpoint. The LTI middleware verifies the
-token before HelpMe trusts the Canvas user, role, course, and resource link.
+Five hours is intentionally long enough for a normal quiz/exam session, including students moving among several embedded questions, while reducing the time a copied browser credential remains useful compared with a 10-hour session. The LTI controller must use the same 5-hour lifetime when it creates `lti_auth_token`; this is enforced with the standard JWT `exp` claim.
 
-HelpMe then redirects the iframe to the question page. Requests from that page
-come from browser JavaScript. Canvas does not sign the later question and
-feedback API requests. The verified question launch maps the Canvas course and
-question, then issues the learner a 24-hour HelpMe-signed course/question-scoped
-JWT in a dedicated cookie. Later GET and feedback routes use their own guard.
-Feedback stores Canvas iss+sub with no HelpMe User, organization membership,
-course enrollment, identity link, or full-app login. Staff previews require an
-existing linked HelpMe staff enrollment. Expiry tells the learner to reopen the
-Canvas quiz.
+This is a product/security tradeoff, not a Canvas deadline. Canvas remains responsible for whether the quiz itself is available.
 
-## JWT purposes are explicit
+## Multi-question quiz assumption to confirm with the professor
 
-The JWT families currently use `JWT_SECRET`, so every consumer must also require
-the correct token purpose.
+The expected course design is approximately one HelpMe LTI embed per Canvas quiz question. A ten-question quiz can therefore contain ten HelpMe embeds.
 
-Normal HelpMe and LTI application sessions carry `kind: "app-auth"`. The normal
-JWT strategy accepts only that kind and a positive safe-integer `userId`.
+Our working assumption is that loading each embedded external-tool question causes Canvas to perform the normal LTI launch for that resource. Repeated launches are acceptable for the current MVP because each successful launch simply re-establishes the same ordinary HelpMe LTI session and routes the student to the selected question.
 
-The short token exchanged by `/login/entry` carries `kind: "login-entry"`. The
-login-entry exchange accepts only that kind. This token is not an application
-session.
+This assumption should be confirmed with the professor in the real target Canvas quiz configuration. We are deliberately not adding a second resource-token system merely to optimize repeated question launches before that workflow proves it is necessary.
 
-Question credentials carry `kind: "embeddable-resource"`. The resource guard
-requires that exact kind, the exact course and question IDs, valid JWT timing,
-and the expected learner or staff payload shape.
+## Existing HelpMe account assumption
 
-All new JWTs rely on the standard JWT `exp` claim generated by the JWT library.
-There is no separate `expiresIn` value stored inside the payload. This branch has
-not been deployed, so there is no compatibility path for older kind-less session
-tokens.
+The MVP assumes quiz students already have HelpMe accounts that the existing LTI identity flow can match.
 
-A copied question credential therefore cannot become a normal HelpMe session by
-moving its value into `auth_token` or `lti_auth_token`.
+If a student reaches an embedded question before their HelpMe account is ready, the existing HelpMe login/registration flow can be completed and the student can reopen the Canvas quiz/question to trigger a fresh LTI launch. Exact-question return-through-registration machinery is intentionally deferred until the real course workflow demonstrates that it is needed.
 
-## One-click LTI course linking is deferred
+## Criteria are hidden from the student response
 
-A one-click shortcut was evaluated and removed before deployment. The proposed
-shortcut would have used the verified Canvas LTI launch to record:
+`criteriaText` is grading configuration and must not be returned by the student-accessible single-question endpoint.
 
-```text
-Canvas course ID <-> HelpMe course ID
-```
+The single-question response exposes only the fields the embedded learner UI needs:
 
-The problem is that the existing `LMSCourseIntegrationModel` means more than a
-course-ID mapping. It is also the configuration used by the existing Canvas API
-features such as roster access, document synchronization, assignments, files,
-and quizzes. An LTI launch proves which Canvas course launched the tool, but it
-does not by itself grant HelpMe Canvas API access.
+- question ID
+- course ID
+- question text
+- minimum sentence guidance
+- maximum sentence guidance
 
-Creating an `LMSCourseIntegrationModel` row from LTI alone would therefore create
-an ambiguous state: the course would look integrated even though Canvas API
-credentials and organization API configuration might not exist. Creating a
-second LTI-only mapping model would avoid that ambiguity, but it adds another
-mapping concept, schema, migration, and product behavior.
+The staff-only course question list still returns the complete question model so professors and TAs can create and edit grading criteria. The grading service also loads the complete server-side model when it builds the grading prompt.
 
-For now, do not add either design. The professor should first decide whether the
-one-click experience is valuable enough to make course identity separate from
-Canvas API integration.
+## JWT purposes remain explicit
 
-The removed shortcut included the LTI-only link endpoint, the one-click frontend
-button, and the extra signed session claims used only by that endpoint.
+Normal HelpMe and LTI application sessions carry `kind: "app-auth"`. The normal JWT strategy accepts only that kind and a positive safe-integer `userId`.
 
-## Current Canvas-to-HelpMe course linking flow
+The short token exchanged by `/login/entry` carries `kind: "login-entry"` and is accepted only by the login-entry exchange.
 
-Until the one-click decision is revisited, course linking uses the existing
-API-backed LMS integration flow.
+The old `embeddable-resource` credential family is no longer part of the embedded-question runtime flow. There is no compatibility path for it because this branch has not been deployed.
 
-1. An organization administrator configures Canvas for the organization. For
-   OAuth access-token generation, this includes the Canvas client ID and client
-   secret.
-2. A professor launches HelpMe from a Canvas course. The verified LTI launch
-   provides the Canvas platform and Canvas course ID. HelpMe passes these values
-   to the LTI frontend for the integration UI.
-3. If that Canvas course is not mapped yet, the LTI landing page shows the
-   professor's HelpMe courses. The professor chooses the intended HelpMe course
-   and opens its **LMS Integration** page.
-4. The LTI integration page pre-fills and locks the Canvas course ID from the
-   launch. The professor selects an existing Canvas access token or generates a
-   new one through the existing Canvas OAuth flow.
-5. HelpMe uses the access token to test Canvas API access to the selected Canvas
-   course.
-6. The professor confirms the integration. The existing
-   `POST /lms/course/:courseId/upsert` route creates or updates the
-   `LMSCourseIntegrationModel` after checking the HelpMe course role,
-   organization Canvas configuration, access-token ownership, platform, and
-   duplicate Canvas-course mappings.
-7. Later LTI launches can use that stored Canvas-course-to-HelpMe-course mapping.
-   The same integration can also support the existing Canvas API features.
+All application sessions rely on the standard JWT `exp` claim generated by the JWT library.
 
-The LTI frontend lock is a user-interface aid. The existing API-backed flow is
-responsible for Canvas authorization. There is no separate one-click LTI mapping
-endpoint after this change.
+## Course mapping
 
-## Availability evidence from local Canvas source
+Question launches still require an existing Canvas-course-to-HelpMe-course mapping. The signed Canvas course ID is resolved through the existing `LMSCourseIntegrationModel` mapping.
 
-Question-level `availableFrom` and `availableUntil` settings were removed. An
-instructor should not copy one quiz window into every embedded question, and
-HelpMe and Canvas could disagree about the deadline.
+One-click LTI-only course mapping remains deferred. The existing LMS integration record also represents Canvas API configuration, so silently creating that record from an LTI launch would mix course identity with API authorization. Revisit that product decision separately if the professor needs a one-click setup flow.
 
-HelpMe currently requests only `canvas_course_id` plus its own question ID. The
-dynamic-registration `customParameters` carry only
-`canvas_course_id: '$Canvas.course.id'`
-(`packages/server/src/lti/lti.middleware.ts`), and the Deep Linking response
-carries only `helpme_question_id`
-(`packages/server/src/lti/lti.service.ts`). HelpMe does not request Canvas
-deadline substitutions.
+## Deadline decision for the MVP
 
-Local Canvas source shows resource and assignment dates are available only as
-requested custom-variable substitutions guarded by assignment context. In
-`lib/lti/variable_expander.rb`, `ResourceLink.available.endDateTime` expands
-from `@assignment.lock_at` only when `@assignment && @assignment.lock_at` is
-present, `Canvas.assignment.lockAt.iso8601` expands only when `@assignment &&
-@assignment.lock_at` is present, and the shared `ASSIGNMENT_GUARD` is simply
-`-> { @assignment }`. Without an assignment on the expander, these values stay
-unexpanded.
+HelpMe does not currently receive a sufficiently trusted per-question or quiz deadline from the nested external-tool launch used by this placement. We therefore do **not** add HelpMe-side deadline enforcement in this MVP.
 
-A HelpMe resource link embedded inside Classic or New Quiz question content
-follows the assignment-less external-tool retrieve path. In
-`app/controllers/external_tools_controller.rb`, `retrieve` calls `lti_launch`
-without an `assignment_id`, `lti_launch` carries an assignment reference only
-from `secure_params`, and `basic_lti_launch_request` resolves its assignment
-through `assignment_from_assignment_id` (from `params[:assignment_id]` or the
-secure-params `lti_assignment_id`) before passing that possibly-nil assignment
-to `variable_expander`. The New Quizzes quiz-level launch is separate: in
-`app/controllers/new_quizzes_controller.rb`, `build_launch_data` and
-`build_variable_expander` attach the quiz assignment to the quiz tool launch,
-but that does not transfer assignment context to the nested HelpMe retrieve
-launch.
+Canvas controls quiz visibility and availability. HelpMe controls only the 5-hour application-session lifetime. If a session expires while the quiz is still legitimately available, the student reopens the Canvas quiz/question and receives a fresh verified LTI launch.
 
-Therefore the current placement should be assumed to provide no trusted
-deadline until a real authenticated launch proves otherwise. Canvas controls
-quiz visibility; HelpMe uses the 24-hour resource credential lifetime. Until
-that behavior is verified, the options to discuss with the professor are, in
-preferred order:
+Do not restore per-question `availableFrom` / `availableUntil` fields merely to duplicate Canvas settings. If the professor later requires HelpMe to enforce a deadline, first verify the real launch claims. If Canvas does not provide a trustworthy effective deadline, prefer one assessment-level HelpMe deadline shared across the embedded questions rather than ten duplicated per-question deadlines.
 
-1. Cap the HelpMe resource token at the Canvas-signed resource or assignment
-   deadline when Canvas supplies one.
-2. If Canvas does not supply a deadline, let the instructor set one deadline for
-   the whole HelpMe assessment instead of repeating it on every question.
-3. If HelpMe has no trusted deadline, use a fixed token lifetime such as 24
-   hours and rely on Canvas to control whether the quiz remains visible.
+## Verification to do with the professor / real Canvas course
 
-The second option needs an assessment-level record shared by the embedded
-questions. If the professor requires HelpMe to enforce a deadline, prefer one
-assessment-level HelpMe deadline shared across questions. Do not restore
-per-question dates. When a token expires, the iframe must tell the student to
-reopen the quiz in Canvas.
+Before production use, verify the actual target quiz behavior rather than building more authentication machinery from assumptions:
 
-## Required tests before deadline enforcement
+- Confirm that each embedded HelpMe question receives a fresh signed LTI launch when loaded.
+- Confirm that a normal ten-question quiz can move among embedded questions without requiring manual HelpMe login.
+- Confirm that a student whose 5-hour HelpMe session expires can reopen the Canvas question and continue through a fresh launch.
+- Capture only the non-sensitive claim names needed to determine whether Canvas supplies a trustworthy effective quiz/resource deadline. Do not log names, email addresses, ID tokens, or session tokens.
+- Confirm that students cannot retrieve `criteriaText` from the single-question API while staff can still edit criteria through the staff-only question-management flow.
 
-Live verification was blocked at Canvas login, so Classic/New Quiz launch
-claims and per-student override behavior remain an explicit test item.
+## Testing principle
 
-- Capture the verified LTI claims from the INDG quiz placement without logging
-  names, email addresses, or tokens.
-- Check whether classic quizzes and new quizzes supply a resource end time, an
-  assignment lock time, both values, or neither value.
-- Check whether Canvas applies each student's availability overrides to the
-  launch value.
-- If the launch has no deadline, test one assessment-level deadline across
-  several embedded questions before using the fallback in production.
-- Open a quiz again and confirm that Canvas performs a new LTI launch and HelpMe
-  issues a new resource token.
-- Keep one quiz tab open until its resource token expires and confirm that the
-  next feedback request tells the student to reopen the Canvas quiz.
-- If Canvas supplies a deadline, confirm that a copied token cannot request
-  feedback after that deadline.
+Tests for this flow should protect externally meaningful behavior: a verified mapped question launch should establish the ordinary HelpMe session and land on the selected question; an enrolled student should be able to load and submit that question; outsiders and cross-course question IDs should be rejected; and the learner response must not expose grading criteria.
 
-## Grading configuration
-
-Authentication must remain independent of the INDG grading policy. A shared
-grading profile can store the INDG system prompt, score range, and reason codes
-for all questions that use that policy. The INDG capitalization check may stay
-in code with a comment that explains why the course needs the check. Do not
-infer the grading profile from a course name.
+Avoid tests whose only purpose is to mirror JWT payload construction, cookie-name helpers, or private implementation structure.

@@ -24,6 +24,8 @@ import { LoginService } from '../login/login.service';
 import { UserId } from '../decorators/user.decorator';
 import { UserModel } from 'profile/user.entity';
 
+export const LTI_APP_SESSION_SECONDS = 60 * 60 * 5;
+
 // LTI Tool can only access the following API routes
 export const restrictPaths = [
   'r^\\/lti.*$',
@@ -67,9 +69,9 @@ export class LtiAuthController {
       {
         cookieName: 'lti_auth_token',
         restrictPaths,
-        redirect: redirect,
+        redirect,
         cookieOptions: LtiService.cookieOptions,
-        expiresIn: 60 * 10,
+        expiresIn: LTI_APP_SESSION_SECONDS,
       },
     );
   }
@@ -92,7 +94,7 @@ export class LtiAuthController {
         restrictPaths,
         redirect: '/lti?force_close=true',
         cookieOptions: LtiService.cookieOptions,
-        expiresIn: 60 * 10,
+        expiresIn: LTI_APP_SESSION_SECONDS,
       },
     );
   }
@@ -128,9 +130,7 @@ export class LtiAuthController {
       req,
       res,
       userId,
-      {
-        cookieOptions: LtiService.cookieOptions,
-      },
+      { cookieOptions: LtiService.cookieOptions },
       undefined,
       this.ltiService,
     );
@@ -174,7 +174,7 @@ export class LtiAuthController {
         restrictPaths,
         redirect: '/lti',
         cookieOptions: LtiService.cookieOptions,
-        expiresIn: 60 * 10,
+        expiresIn: LTI_APP_SESSION_SECONDS,
       },
     );
   }
@@ -201,7 +201,7 @@ export class LtiAuthController {
         restrictPaths,
         redirect: '/lti?force_close=true',
         cookieOptions: LtiService.cookieOptions,
-        expiresIn: 60 * 10,
+        expiresIn: LTI_APP_SESSION_SECONDS,
       },
       'lti',
     );

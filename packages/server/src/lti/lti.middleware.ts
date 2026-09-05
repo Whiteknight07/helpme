@@ -75,6 +75,7 @@ export default class LtiMiddleware {
   private baseRoute(): string {
     return `${this.configService.get<string>('DOMAIN')}${this.prefix}`;
   }
+
   private constructor(
     private app: INestApplication,
     baseUrl: string,
@@ -281,10 +282,6 @@ export default class LtiMiddleware {
         route: /^\/embeddable-question(?:\/|$)/,
         method: 'ALL',
       },
-      {
-        route: /^\/embeddable-resource(?:\/|$)/,
-        method: 'ALL',
-      },
       `/static`,
     ];
 
@@ -340,10 +337,9 @@ export default class LtiMiddleware {
     try {
       this.ltiService.assertTrustedCanvasPlatform(token);
 
-      if (LtiService.hasQuestionLaunch(token)) {
-        return next();
-      }
-
+      // Question launches now use the same HelpMe identity/course resolution as
+      // every other LTI launch. The controller separately validates the signed
+      // question ID against the mapped course before issuing the app session.
       const { userId, courseId } =
         await LtiService.findMatchingUserAndCourse(token);
       response.locals.userId = userId;
