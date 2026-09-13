@@ -91,8 +91,9 @@ export default function DeepLinkPage() {
       <div className="flex w-full justify-center px-2 py-4">
         <Card title="Insert HelpMe question" className="w-full max-w-2xl">
           <Paragraph>
-            Select a question to insert into Canvas. Students will open it
-            without a HelpMe login.
+            Select a question to insert into Canvas. Students may need to sign
+            in to HelpMe or create an account, then reopen the question in
+            Canvas.
           </Paragraph>
           {/* Native POST so the signed response document auto-submits to Canvas */}
           <form method="POST" action={API.lti.deepLink.selectAction(ltik)}>
