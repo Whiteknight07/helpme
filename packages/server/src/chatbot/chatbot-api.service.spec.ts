@@ -99,9 +99,8 @@ describe('ChatbotApiService', () => {
     });
     const service = new ChatbotApiService(configService);
 
-    // Fake the clock: the service requests a 65s deadline (transport grace
-    // above the chatbot's 60s retry budget), which we substitute with a 10ms
-    // deadline so the real abort path runs quickly.
+    // Substitute the two-minute production timeout with 10ms so the real
+    // abort path runs quickly.
     const realTimeout = AbortSignal.timeout.bind(AbortSignal);
     const timeoutSpy = jest
       .spyOn(AbortSignal, 'timeout')
@@ -125,7 +124,7 @@ describe('ChatbotApiService', () => {
       service.queryFeedback('user prompt', 42, 'system prompt'),
     ).rejects.toThrow('Failed to connect to chatbot service');
 
-    expect(timeoutSpy).toHaveBeenCalledWith(65000);
+    expect(timeoutSpy).toHaveBeenCalledWith(120000);
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

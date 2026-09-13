@@ -21,8 +21,8 @@ const feedbackResponseSchema = z.object({
   model: z.string().optional(),
 });
 
-// One non-retrying call: 65s covers the chatbot's 60s retry budget plus a 5s grace window.
-const FEEDBACK_TIMEOUT_MS = 65000;
+// One non-retrying call bounds the complete chatbot grading operation.
+const FEEDBACK_TIMEOUT_MS = 120000;
 
 export type FeedbackQueryResult = z.infer<typeof feedbackResponseSchema>;
 
