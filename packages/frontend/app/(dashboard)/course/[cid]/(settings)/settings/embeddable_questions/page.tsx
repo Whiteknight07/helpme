@@ -57,7 +57,7 @@ export default function EmbeddableQuestionsPage(
     {
       onError: (err) =>
         message.error(
-          `Failed to load feedback questions: ${getErrorMessage(err)}`,
+          `Failed to load embeddable questions: ${getErrorMessage(err)}`,
         ),
     },
   )
@@ -183,7 +183,7 @@ export default function EmbeddableQuestionsPage(
 
   return (
     <Card
-      title="Feedback Questions"
+      title="Embeddable Questions"
       classNames={{ body: 'p-1 md:p-6' }}
       extra={
         <Button
@@ -196,9 +196,18 @@ export default function EmbeddableQuestionsPage(
       }
     >
       <p className="mb-4 text-gray-600">
-        Each question has its own main grading prompt, feedback instructions,
-        score scale, and optional answer requirements.
+        Embeddable questions let students submit answers and receive provisional
+        AI feedback inside Canvas. Each question has its own grading prompt,
+        feedback instructions, score scale, and optional answer requirements.
       </p>
+      <ol className="mb-4 list-decimal pl-5 text-gray-600">
+        <li>Create a question here and configure its grading settings.</li>
+        <li>
+          Open the Canvas content editor and use the HelpMe editor button to
+          select and insert the question.
+        </li>
+        <li>Save the Canvas content so students can open the question.</li>
+      </ol>
 
       <Table
         dataSource={questions}
