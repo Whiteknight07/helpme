@@ -13,7 +13,7 @@ export type ValidatedGradePayload = {
   needsHumanReview: boolean;
 };
 
-/** The model output failed validation; the message is actionable for a retry. */
+/** HelpMe rejects invalid grades without saving or retrying the chatbot call. */
 export class GradingConstraintError extends Error {}
 
 // Structural shape of the model's grading answer. All four fields are

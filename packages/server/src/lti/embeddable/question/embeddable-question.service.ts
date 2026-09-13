@@ -47,7 +47,7 @@ export class EmbeddableQuestionService {
       });
     } catch {
       throw new InternalServerErrorException(
-        'Failed to generate feedback for this answer.',
+        'We could not generate valid feedback. Your answer was not saved. Please try again.',
       );
     }
 
