@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import {
   Button,
   Checkbox,
@@ -309,22 +309,20 @@ export default function EmbeddableQuestionForm({
   const [form] = Form.useForm<UpsertEmbeddableQuestionParams>()
   const [isLoading, setIsLoading] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
-    form.setFieldsValue(
-      editingQuestion
-        ? {
-            title: editingQuestion.title,
-            questionText: editingQuestion.questionText,
-            gradingSettings: editingQuestion.gradingSettings,
-          }
-        : {
-            title: '',
-            questionText: '',
-            gradingSettings: structuredClone(defaultGradingSettings),
-          },
-    )
-  }, [editingQuestion, form, open])
+  // destroyOnHidden remounts the Form on each open and clearOnDestroy clears the
+  // retained form instance, so initialValues are reapplied. If the modal stops
+  // destroying its contents, this seeding has to move to the opening boundary.
+  const initialValues: UpsertEmbeddableQuestionParams = editingQuestion
+    ? {
+        title: editingQuestion.title,
+        questionText: editingQuestion.questionText,
+        gradingSettings: editingQuestion.gradingSettings,
+      }
+    : {
+        title: '',
+        questionText: '',
+        gradingSettings: structuredClone(defaultGradingSettings),
+      }
 
   const handleSave = async (values: UpsertEmbeddableQuestionParams) => {
     if (isLoading) return
@@ -354,13 +352,18 @@ export default function EmbeddableQuestionForm({
       title={editingQuestion ? 'Edit Question' : 'Create Question'}
       open={open}
       width={850}
-      okButtonProps={{ htmlType: 'submit', loading: isLoading }}
+      okButtonProps={{
+        autoFocus: true,
+        htmlType: 'submit',
+        loading: isLoading,
+      }}
       onCancel={() => setOpen(false)}
       okText={editingQuestion ? 'Save' : 'Create'}
-      destroyOnClose
+      destroyOnHidden
       modalRender={(dom) => (
         <Form
           form={form}
+          initialValues={initialValues}
           onFinish={handleSave}
           layout="vertical"
           clearOnDestroy
