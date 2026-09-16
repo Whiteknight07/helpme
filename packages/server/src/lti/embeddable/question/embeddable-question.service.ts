@@ -2,6 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  HttpException,
+  HttpStatus,
+  Logger,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -20,6 +23,7 @@ import { QuestionGradingService } from './question-grading.service';
 
 @Injectable()
 export class EmbeddableQuestionService {
+  private readonly logger = new Logger(EmbeddableQuestionService.name);
   constructor(
     private readonly questionGradingService: QuestionGradingService,
   ) {}
@@ -45,7 +49,39 @@ export class EmbeddableQuestionService {
         gradingSettings: question.gradingSettings,
         submission,
       });
-    } catch {
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `Grading failed for question ${questionId}: ${error instanceof HttpException ? error.getStatus() : 'invalid evaluation'}`,
+      );
+      if (error instanceof HttpException) {
+        const status = error.getStatus();
+        if (
+          status === HttpStatus.PAYLOAD_TOO_LARGE ||
+          (status === HttpStatus.BAD_REQUEST &&
+            /context.{0,40}(size|length|window)|too many tokens/i.test(detail))
+        ) {
+          throw new BadRequestException(
+            'The question and your answer are too long for the feedback model. Shorten your answer or ask your instructor to shorten the question or rubric. Your answer was not saved.',
+          );
+        }
+        if (
+          status === HttpStatus.BAD_REQUEST ||
+          status === HttpStatus.UNAUTHORIZED ||
+          status === HttpStatus.FORBIDDEN
+        ) {
+          throw new HttpException(
+            'Feedback is unavailable for this question. Please contact your instructor. Your answer was not saved.',
+            HttpStatus.SERVICE_UNAVAILABLE,
+          );
+        }
+        if (status === HttpStatus.GATEWAY_TIMEOUT) {
+          throw new HttpException(
+            'Feedback took too long to generate. Your answer was not saved. Please try again.',
+            HttpStatus.GATEWAY_TIMEOUT,
+          );
+        }
+      }
       throw new InternalServerErrorException(
         'We could not generate valid feedback. Your answer was not saved. Please try again.',
       );

@@ -56,9 +56,15 @@ export class ChatbotApiService {
     const text = await response.text();
     let message = fallbackMessage;
     try {
-      const parsed = JSON.parse(text) as { error?: string };
-      if (parsed?.error && typeof parsed.error === 'string') {
-        message = parsed.error;
+      const parsed = z
+        .object({
+          message: z.union([z.string(), z.array(z.string())]).optional(),
+          error: z.string().optional(),
+        })
+        .safeParse(JSON.parse(text));
+      if (parsed.success && (parsed.data.message || parsed.data.error)) {
+        const detail = parsed.data.message ?? parsed.data.error;
+        message = Array.isArray(detail) ? detail.join('; ') : detail;
       } else if (text.trim()) {
         message = text.trim().slice(0, 500);
       }
@@ -87,6 +93,7 @@ export class ChatbotApiService {
     params?: any,
     timeoutMs?: number,
   ) {
+    const signal = timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined;
     try {
       const url = new URL(`${this.chatbotApiUrl}/${endpoint}`);
 
@@ -108,7 +115,7 @@ export class ChatbotApiService {
         method,
         headers,
         body: data ? JSON.stringify(data) : undefined,
-        signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined, // abort signal is available as of node 17
+        signal,
       });
 
       if (!response.ok) {
@@ -127,6 +134,12 @@ export class ChatbotApiService {
       this.logger.warn(
         `Chatbot request failed (${method} ${this.chatbotApiUrl}/${endpoint}): ${detail}`,
       );
+      if (signal?.aborted) {
+        throw new HttpException(
+          'The chatbot request timed out.',
+          HttpStatus.GATEWAY_TIMEOUT,
+        );
+      }
       throw new HttpException(
         'Failed to connect to chatbot service',
         HttpStatus.INTERNAL_SERVER_ERROR,
@@ -167,7 +180,7 @@ export class ChatbotApiService {
   }
 
   /**
-   * Feedback uses the course's feedback model and the supplied grading prompt.
+   * Feedback uses the course's selected model and the supplied grading prompt.
    * The chatbot service owns provider retries for this request; the host
    * deadline only bounds the single transport call.
    */

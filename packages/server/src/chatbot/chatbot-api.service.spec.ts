@@ -66,6 +66,41 @@ describe('ChatbotApiService', () => {
     });
   });
 
+  it.each([
+    [
+      { message: 'Request exceeds context size', error: 'Bad Request' },
+      'Request exceeds context size',
+    ],
+    [
+      {
+        message: ['query must be a string', 'courseId must be an integer'],
+        error: 'Bad Request',
+      },
+      'query must be a string; courseId must be an integer',
+    ],
+    [{ error: 'Legacy provider error' }, 'Legacy provider error'],
+    ['Provider unavailable', 'Provider unavailable'],
+  ])(
+    'preserves the useful upstream error: %j',
+    async (body, expectedMessage) => {
+      const service = new ChatbotApiService(
+        new ConfigService({ CHATBOT_API_URL: 'https://chatbot.test' }),
+      );
+      const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValue(
+        new Response(typeof body === 'string' ? body : JSON.stringify(body), {
+          status: 400,
+        }),
+      );
+      await expect(
+        service.queryFeedback('answer', 42, 'rubric'),
+      ).rejects.toMatchObject({
+        status: 400,
+        message: expectedMessage,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('rejects a malformed response envelope at the runtime boundary', async () => {
     const configService = new ConfigService({
       CHATBOT_API_URL: 'https://chatbot.test',
@@ -122,7 +157,10 @@ describe('ChatbotApiService', () => {
 
     await expect(
       service.queryFeedback('user prompt', 42, 'system prompt'),
-    ).rejects.toThrow('Failed to connect to chatbot service');
+    ).rejects.toMatchObject({
+      status: 504,
+      message: 'The chatbot request timed out.',
+    });
 
     expect(timeoutSpy).toHaveBeenCalledWith(120000);
     expect(mockFetch).toHaveBeenCalledTimes(1);

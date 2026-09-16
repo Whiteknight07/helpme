@@ -1,3 +1,4 @@
+import { HttpException } from '@nestjs/common';
 import { setupIntegrationTest } from './util/testUtils';
 import { LtiModule } from '../src/lti/lti.module';
 import {
@@ -230,6 +231,51 @@ describe('Embeddable question grading', () => {
       }),
     ).toBe(0);
   });
+
+  it.each([
+    [
+      400,
+      'request (5418 tokens) exceeds the available context size (4096 tokens)',
+      400,
+      'Shorten your answer',
+    ],
+    [413, 'Request too large', 400, 'Shorten your answer'],
+    [400, 'Invalid response format', 503, 'contact your instructor'],
+    [401, 'Invalid API key: secret-test-key', 503, 'contact your instructor'],
+    [504, 'The chatbot request timed out.', 504, 'took too long'],
+    [
+      502,
+      'The AI did not return a valid structured response.',
+      500,
+      'Please try again',
+    ],
+  ])(
+    'handles upstream %s without saving a grade',
+    async (upstreamStatus, detail, status, message) => {
+      const { user, course } = await setupCourseMember(Role.STUDENT);
+      const question = await EmbeddableQuestionModel.create({
+        courseId: course.id,
+        title: 'Feedback failure',
+        questionText: 'Explain this.',
+        gradingSettings: settings('Grade the answer.'),
+      }).save();
+      mockQuestionGradingService.evaluate.mockRejectedValueOnce(
+        new HttpException(detail, upstreamStatus),
+      );
+      const response = await supertest({ userId: user.id })
+        .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
+        .send({ responseText: 'An answer.' })
+        .expect(status);
+      expect(response.body.message).toContain(message);
+      expect(response.body.message).toContain('Your answer was not saved.');
+      expect(response.body.message).not.toContain(detail);
+      expect(
+        await EmbeddableQuestionFeedbackModel.count({
+          where: { questionId: question.id },
+        }),
+      ).toBe(0);
+    },
+  );
 
   it('rejects invalid feedback bodies and question configurations without grading or persisting', async () => {
     const course = await CourseFactory.create();

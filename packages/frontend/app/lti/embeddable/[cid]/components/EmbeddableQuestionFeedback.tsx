@@ -61,7 +61,6 @@ export default function EmbeddableQuestionFeedback({
 
       const errMsg = getErrorMessage(err)
       setError(typeof errMsg === 'string' ? errMsg : 'Failed to get feedback.')
-      message.error('Something went wrong. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -77,6 +76,8 @@ export default function EmbeddableQuestionFeedback({
         aria-label="Your response"
         placeholder="Type your response here..."
         rows={4}
+        maxLength={15000}
+        showCount
         disabled={isLoading}
         className="resize-none"
       />
