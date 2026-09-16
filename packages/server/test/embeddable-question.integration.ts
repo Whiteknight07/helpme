@@ -133,6 +133,7 @@ describe('Embeddable question grading', () => {
       model: 'grading-model',
       reasons: ['too_short'],
       needsHumanReview: false,
+      humanReviewReason: null,
       gradingSnapshot: {
         questionText: question.questionText,
         gradingSettings: originalSettings,
@@ -152,6 +153,9 @@ describe('Embeddable question grading', () => {
     });
     expect(feedbackResponse.body).not.toHaveProperty('model');
     expect(feedbackResponse.body).not.toHaveProperty('gradingSnapshot');
+    // The review reason is staff-only state and never part of the student DTO.
+    expect(feedbackResponse.body).not.toHaveProperty('needsHumanReview');
+    expect(feedbackResponse.body).not.toHaveProperty('humanReviewReason');
 
     expect(mockQuestionGradingService.evaluate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -173,10 +177,57 @@ describe('Embeddable question grading', () => {
     expect(feedback.aiModel).toBe('grading-model');
     expect(feedback.reasons).toEqual(['too_short']);
     expect(feedback.needsHumanReview).toBe(false);
+    expect(feedback.humanReviewReason).toBeNull();
     expect(feedback.gradingSnapshot).toEqual({
       questionText: question.questionText,
       gradingSettings: originalSettings,
     });
+  });
+
+  it('persists a human review reason for flagged grades without exposing it to students', async () => {
+    const { user, course } = await setupCourseMember(Role.STUDENT);
+    const gradingSettings = settings('Grade the answer.');
+    const question = await EmbeddableQuestionModel.create({
+      courseId: course.id,
+      title: 'Ambiguous question',
+      questionText: 'Explain the ambiguous requirement.',
+      gradingSettings,
+    }).save();
+    const reason =
+      'The rubric can be read as requiring either one or two examples.';
+    mockQuestionGradingService.evaluate.mockResolvedValueOnce({
+      score: 6,
+      comment: 'Hard to judge against the rubric.',
+      appliedRequirements: [],
+      maxScore: 10,
+      model: 'grading-model',
+      reasons: ['ambiguous rubric'],
+      needsHumanReview: true,
+      humanReviewReason: reason,
+      gradingSnapshot: {
+        questionText: question.questionText,
+        gradingSettings,
+      },
+    });
+
+    const feedbackResponse = await supertest({ userId: user.id })
+      .post(`/lti/embeddable-question/${course.id}/${question.id}/feedback`)
+      .send({ responseText: 'One example.' })
+      .expect(201);
+
+    expect(feedbackResponse.body).toEqual({
+      score: 6,
+      comment: 'Hard to judge against the rubric.',
+      appliedRequirements: [],
+      maxScore: 10,
+    });
+    expect(feedbackResponse.body).not.toHaveProperty('humanReviewReason');
+
+    const feedback = await EmbeddableQuestionFeedbackModel.findOneOrFail({
+      where: { questionId: question.id, userId: user.id },
+    });
+    expect(feedback.needsHumanReview).toBe(true);
+    expect(feedback.humanReviewReason).toBe(reason);
   });
 
   it('refuses to delete questions that contain grading history', async () => {

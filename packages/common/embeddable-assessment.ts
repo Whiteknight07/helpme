@@ -203,4 +203,10 @@ export type GradingEvaluation = EmbeddableQuestionFeedback & {
   /** Free-form explanation strings reported by the model, plus host codes like blank. */
   reasons: string[]
   needsHumanReview: boolean
+  /**
+   * Model-authored explanation for a human review flag; null when no review is
+   * needed. Internal only: it is persisted for staff review and is never part
+   * of the student-facing feedback response.
+   */
+  humanReviewReason: string | null
 }

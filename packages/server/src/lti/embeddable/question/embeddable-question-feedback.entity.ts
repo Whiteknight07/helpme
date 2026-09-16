@@ -67,4 +67,9 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
 
   @Column({ type: 'boolean', nullable: false, default: false })
   needsHumanReview: boolean;
+
+  // Nullable by design: rows flagged before this column existed stay null
+  // rather than being backfilled with an invented reason.
+  @Column({ type: 'text', nullable: true })
+  humanReviewReason: string | null;
 }

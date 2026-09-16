@@ -7,6 +7,7 @@ import {
   buildUserPrompt,
   effectiveScoreCap,
   GradingConstraintError,
+  HUMAN_REVIEW_REASON_MAX_LENGTH,
   validateGradePayload,
 } from './grading';
 
@@ -44,6 +45,7 @@ describe('question grading contract', () => {
             'The response did not address the second required step of the rubric, so it lost that credit.',
           ],
           needs_human_review: false,
+          human_review_reason: null,
         },
         makeSettings({ scoreScale, checks: [] }),
         null,
@@ -55,6 +57,7 @@ describe('question grading contract', () => {
         'The response did not address the second required step of the rubric, so it lost that credit.',
       ],
       needsHumanReview: false,
+      humanReviewReason: null,
     });
   });
 
@@ -85,12 +88,14 @@ describe('question grading contract', () => {
       comment: 'Good answer.',
       reasons: ['off topic'],
       needs_human_review: false,
+      human_review_reason: null,
     };
     const atCap = {
       score: 1,
       comment: 'Good answer.',
       reasons: ['mostly complete'],
       needs_human_review: false,
+      human_review_reason: null,
     };
     expect(() => validateGradePayload(aboveCap, capSettings, 1)).toThrow(
       /effective cap of 1/,
@@ -108,6 +113,7 @@ describe('question grading contract', () => {
       comment: 'Good answer.',
       reasons: ['complete'],
       needs_human_review: false,
+      human_review_reason: null,
     };
     expect(() =>
       validateGradePayload({ ...valid, comment: ' ' }, settings, null),
@@ -132,6 +138,145 @@ describe('question grading contract', () => {
     expect(() =>
       validateGradePayload({ ...valid, score: 11 }, settings, null),
     ).toThrow(/not allowed by the score contract/);
+  });
+
+  it('maps a human review reason to camelCase when the flag is set', () => {
+    expect(
+      validateGradePayload(
+        {
+          score: 1,
+          comment: 'The rubric is ambiguous here.',
+          reasons: ['the rubric can be read two ways'],
+          needs_human_review: true,
+          human_review_reason:
+            '  The rubric is ambiguous about whether both examples are required.  ',
+        },
+        makeSettings({ checks: [] }),
+        null,
+      ),
+    ).toEqual({
+      score: 1,
+      comment: 'The rubric is ambiguous here.',
+      reasons: ['the rubric can be read two ways'],
+      needsHumanReview: true,
+      humanReviewReason:
+        'The rubric is ambiguous about whether both examples are required.',
+    });
+  });
+
+  it('accepts a false flag only with a null reason', () => {
+    const settings = makeSettings({ checks: [] });
+    const base = {
+      score: 1,
+      comment: 'Good answer.',
+      reasons: ['complete'],
+      needs_human_review: false,
+    };
+    expect(
+      validateGradePayload(
+        { ...base, human_review_reason: null },
+        settings,
+        null,
+      ).humanReviewReason,
+    ).toBeNull();
+    expect(() => validateGradePayload(base, settings, null)).toThrow(
+      GradingConstraintError,
+    );
+    expect(() =>
+      validateGradePayload(
+        { ...base, human_review_reason: '   ' },
+        settings,
+        null,
+      ),
+    ).toThrow(GradingConstraintError);
+  });
+
+  it('rejects a flag without a reason and a reason without a flag', () => {
+    const settings = makeSettings({ checks: [] });
+    const valid = {
+      score: 1,
+      comment: 'Good answer.',
+      reasons: ['complete'],
+      needs_human_review: false,
+      human_review_reason: null,
+    };
+    // True flag with a missing or blank reason is a mismatch.
+    expect(() =>
+      validateGradePayload(
+        { ...valid, needs_human_review: true },
+        settings,
+        null,
+      ),
+    ).toThrow(/human_review_reason/);
+    expect(() =>
+      validateGradePayload(
+        { ...valid, needs_human_review: true, human_review_reason: '   ' },
+        settings,
+        null,
+      ),
+    ).toThrow(GradingConstraintError);
+    // A reason with a false flag is the other half of the mismatch.
+    expect(() =>
+      validateGradePayload(
+        { ...valid, human_review_reason: 'a reason with no flag' },
+        settings,
+        null,
+      ),
+    ).toThrow(/human_review_reason/);
+  });
+
+  it('bounds the human review reason length', () => {
+    const settings = makeSettings({ checks: [] });
+    const flagged = (human_review_reason: string) => ({
+      score: 1,
+      comment: 'Good answer.',
+      reasons: ['complete'],
+      needs_human_review: true,
+      human_review_reason,
+    });
+    expect(
+      validateGradePayload(
+        flagged('x'.repeat(HUMAN_REVIEW_REASON_MAX_LENGTH)),
+        settings,
+        null,
+      ).humanReviewReason,
+    ).toHaveLength(HUMAN_REVIEW_REASON_MAX_LENGTH);
+    expect(() =>
+      validateGradePayload(
+        flagged('x'.repeat(HUMAN_REVIEW_REASON_MAX_LENGTH + 1)),
+        settings,
+        null,
+      ),
+    ).toThrow(GradingConstraintError);
+  });
+
+  it('guides review flags to material issues and away from reminders and low scores', () => {
+    const prompt = buildSystemPrompt(makeSettings(), 1);
+    expect(prompt).toContain('material interpretive ambiguity');
+    expect(prompt).toContain('genuinely off-topic');
+    expect(prompt).toContain('potentially harmful content');
+    expect(prompt).toContain(
+      'Do not set needs_human_review for grammar, capitalization, or sentence-count reminders, for a low score on its own',
+    );
+    expect(prompt).toContain(
+      'A student’s viewpoint, opinion, or lived experience is not a fault',
+    );
+    expect(prompt).toContain('human_review_reason');
+  });
+
+  it('treats proper names of legislation and tests as names of things, not labels for people', () => {
+    const prompt = buildSystemPrompt(makeSettings(), 1);
+    expect(prompt).toContain('Indian Act');
+    expect(prompt).toContain('Native American Implicit Association Test');
+    expect(prompt).toContain('are names of things, not labels for people');
+    expect(prompt).toContain('do not treat them as harmful content');
+  });
+
+  it('forbids implying that a reminder-only check caused a deduction', () => {
+    const prompt = buildSystemPrompt(makeSettings(), 1);
+    expect(prompt).toContain(
+      'do not describe it as a fault or as a cause of lost credit in the comment or in any reason',
+    );
   });
 
   it('passes caller-supplied data into the prompts', () => {
