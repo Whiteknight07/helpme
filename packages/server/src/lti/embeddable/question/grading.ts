@@ -16,8 +16,6 @@ export type ValidatedGradePayload = {
 /** HelpMe rejects invalid grades without saving or retrying the chatbot call. */
 export class GradingConstraintError extends Error {}
 
-export const HUMAN_REVIEW_REASON_MAX_LENGTH = 2000;
-
 // Structural shape of the model's grading answer. The nullable reason is the
 // review flag: null means no review is needed, and a non-empty string explains
 // why a human should review the grade. Reasons are free-form explanation
@@ -27,12 +25,7 @@ const modelFeedbackSchema = z.object({
   score: z.number().finite(),
   comment: z.string().trim().min(1).max(15000),
   reasons: z.array(z.string().trim().min(1)).min(1),
-  human_review_reason: z
-    .string()
-    .trim()
-    .min(1)
-    .max(HUMAN_REVIEW_REASON_MAX_LENGTH)
-    .nullable(),
+  human_review_reason: z.string().trim().min(1).nullable(),
 });
 
 /** Lowest cap among the triggered checks; null when every cap is reminder-only. */
@@ -92,7 +85,7 @@ export function buildSystemPrompt(
       reasons: ['what earned or lost credit'],
       human_review_reason: null,
     })}`,
-    `The score must be allowed by the score contract and within the effective cap. The comment must be non-empty. Reasons must be a non-empty array of free-form explanations that, like the comment, are grounded in the rubric and the student answer; there is no fixed reason vocabulary. human_review_reason must be null when human review is not needed, otherwise it must be a non-empty explanation of at most ${HUMAN_REVIEW_REASON_MAX_LENGTH} characters.`,
+    'The score must be allowed by the score contract and within the effective cap. The comment must be non-empty. Reasons must be a non-empty array of free-form explanations that, like the comment, are grounded in the rubric and the student answer; there is no fixed reason vocabulary. human_review_reason must be null when human review is not needed, otherwise it must be a non-empty explanation.',
     '## Comment rules',
     'The comment explains, grounded in the rubric and the student answer, what earned and what lost credit. Never state or imply a numerical grade, score, percentage, or cap inside the comment; the host records the numeric score separately.',
     '## Configured automatic checks',
@@ -137,7 +130,7 @@ export function validateGradePayload(
   const parsed = modelFeedbackSchema.safeParse(raw);
   if (!parsed.success) {
     throw new GradingConstraintError(
-      'Model output was not valid grading feedback JSON: it must be an object with a finite numeric "score", a non-empty string "comment" (max 15000 chars), a non-empty "reasons" array of explanation strings, and a "human_review_reason" that is null when no review is needed or a non-empty string (max 2000 chars) when review is needed. Return no other prose.',
+      'Model output was not valid grading feedback JSON: it must be an object with a finite numeric "score", a non-empty string "comment" (max 15000 chars), a non-empty "reasons" array of explanation strings, and a "human_review_reason" that is null when no review is needed or a non-empty string when review is needed. Return no other prose.',
     );
   }
   const score = parsed.data.score;

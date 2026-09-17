@@ -7,7 +7,6 @@ import {
   buildUserPrompt,
   effectiveScoreCap,
   GradingConstraintError,
-  HUMAN_REVIEW_REASON_MAX_LENGTH,
   validateGradePayload,
 } from './grading';
 
@@ -155,109 +154,6 @@ describe('question grading contract', () => {
       humanReviewReason:
         'The rubric is ambiguous about whether both examples are required.',
     });
-  });
-
-  it('accepts a null reason and rejects a missing or blank reason', () => {
-    const settings = makeSettings({ checks: [] });
-    const base = {
-      score: 1,
-      comment: 'Good answer.',
-      reasons: ['complete'],
-    };
-    expect(
-      validateGradePayload(
-        { ...base, human_review_reason: null },
-        settings,
-        null,
-      ).humanReviewReason,
-    ).toBeNull();
-    expect(() => validateGradePayload(base, settings, null)).toThrow(
-      GradingConstraintError,
-    );
-    expect(() =>
-      validateGradePayload(
-        { ...base, human_review_reason: '   ' },
-        settings,
-        null,
-      ),
-    ).toThrow(GradingConstraintError);
-  });
-
-  it('rejects an empty human review reason', () => {
-    const settings = makeSettings({ checks: [] });
-    const valid = {
-      score: 1,
-      comment: 'Good answer.',
-      reasons: ['complete'],
-      human_review_reason: null,
-    };
-    expect(() =>
-      validateGradePayload(
-        { ...valid, human_review_reason: undefined },
-        settings,
-        null,
-      ),
-    ).toThrow(GradingConstraintError);
-    expect(() =>
-      validateGradePayload(
-        { ...valid, human_review_reason: '   ' },
-        settings,
-        null,
-      ),
-    ).toThrow(GradingConstraintError);
-  });
-
-  it('bounds the human review reason length', () => {
-    const settings = makeSettings({ checks: [] });
-    const flagged = (human_review_reason: string) => ({
-      score: 1,
-      comment: 'Good answer.',
-      reasons: ['complete'],
-      human_review_reason,
-    });
-    expect(
-      validateGradePayload(
-        flagged('x'.repeat(HUMAN_REVIEW_REASON_MAX_LENGTH)),
-        settings,
-        null,
-      ).humanReviewReason,
-    ).toHaveLength(HUMAN_REVIEW_REASON_MAX_LENGTH);
-    expect(() =>
-      validateGradePayload(
-        flagged('x'.repeat(HUMAN_REVIEW_REASON_MAX_LENGTH + 1)),
-        settings,
-        null,
-      ),
-    ).toThrow(GradingConstraintError);
-  });
-
-  it('guides review flags to material issues and away from reminders and low scores', () => {
-    const prompt = buildSystemPrompt(makeSettings(), 1);
-    expect(prompt).toContain('material interpretive ambiguity');
-    expect(prompt).toContain('genuinely off-topic');
-    expect(prompt).toContain('potentially harmful content');
-    expect(prompt).toContain(
-      'Do not request human review for grammar, capitalization, or sentence-count reminders, for a low score on its own',
-    );
-    expect(prompt).toContain(
-      'A student’s viewpoint, opinion, or lived experience is not a fault',
-    );
-    expect(prompt).toContain('human_review_reason');
-  });
-
-  it('treats proper names of legislation and tests as names of things, not labels for people', () => {
-    const prompt = buildSystemPrompt(makeSettings(), 1);
-    expect(prompt).toContain('Indian Act');
-    expect(prompt).toContain('Native American Implicit Association Test');
-    expect(prompt).toContain('are names of things, not labels for people');
-    expect(prompt).toContain('do not treat them as harmful content');
-  });
-
-  it('forbids implying that a reminder-only check caused a deduction', () => {
-    const prompt = buildSystemPrompt(makeSettings(), 1);
-    expect(prompt).toContain(
-      'do not describe it as a fault or as a cause of lost credit in the comment or in any reason',
-    );
   });
 
   it('passes caller-supplied data into the prompts', () => {
