@@ -15,7 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 
 // Outer envelope only: the grading boundary (validateGradePayload) validates
-// the whole answer, including reasons and needs_human_review, before persistence.
+// the whole answer, including the human review reason, before persistence.
 const feedbackResponseSchema = z.object({
   answer: z.unknown(),
   model: z.string().optional(),

@@ -58,7 +58,6 @@ export class QuestionGradingService {
         model: null,
         gradingSnapshot: snapshot,
         reasons: ['blank'],
-        needsHumanReview: false,
         humanReviewReason: null,
       };
     }
@@ -79,8 +78,11 @@ export class QuestionGradingService {
       courseId,
       systemPrompt,
     );
-    const { score, comment, reasons, needsHumanReview, humanReviewReason } =
-      validateGradePayload(response.answer, settings, effectiveCap);
+    const { score, comment, reasons, humanReviewReason } = validateGradePayload(
+      response.answer,
+      settings,
+      effectiveCap,
+    );
     return {
       score,
       comment,
@@ -89,7 +91,6 @@ export class QuestionGradingService {
       model: response.model ?? null,
       gradingSnapshot: snapshot,
       reasons,
-      needsHumanReview,
       humanReviewReason,
     };
   }

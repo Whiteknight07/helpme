@@ -21,7 +21,6 @@ const validAnswer = (score = 8, comment = 'Good answer.') => ({
     score,
     comment,
     reasons: ['the rubric’s accuracy criterion was met'],
-    needs_human_review: false,
     human_review_reason: null,
   },
   model: 'test-model',
@@ -76,7 +75,7 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
         score: 11,
         comment: 'Too high.',
         reasons: ['invented reason'],
-        needs_human_review: false,
+        human_review_reason: null,
       },
     });
 
@@ -100,7 +99,6 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
       maxScore: 10,
       model: null,
       reasons: ['blank'],
-      needsHumanReview: false,
       humanReviewReason: null,
       appliedRequirements: [
         'No answer was provided; the blank response scores 0 without an AI call.',
@@ -115,7 +113,6 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
         score: 5,
         comment: 'This is hard to judge.',
         reasons: ['the rubric can be read two ways'],
-        needs_human_review: true,
         human_review_reason:
           'The rubric does not say whether both steps are required.',
       },
@@ -123,27 +120,8 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
 
     const result = await service.evaluate(evaluateArgs);
 
-    expect(result.needsHumanReview).toBe(true);
     expect(result.humanReviewReason).toBe(
       'The rubric does not say whether both steps are required.',
-    );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('errors when the review flag and reason disagree, without retrying', async () => {
-    const { service, fetchMock } = harness();
-    respond(fetchMock, {
-      answer: {
-        score: 5,
-        comment: 'This is hard to judge.',
-        reasons: ['ambiguous rubric'],
-        needs_human_review: true,
-        human_review_reason: null,
-      },
-    });
-
-    await expect(service.evaluate(evaluateArgs)).rejects.toThrow(
-      GradingConstraintError,
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

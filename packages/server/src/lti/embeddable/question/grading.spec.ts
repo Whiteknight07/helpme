@@ -44,7 +44,6 @@ describe('question grading contract', () => {
           reasons: [
             'The response did not address the second required step of the rubric, so it lost that credit.',
           ],
-          needs_human_review: false,
           human_review_reason: null,
         },
         makeSettings({ scoreScale, checks: [] }),
@@ -56,7 +55,6 @@ describe('question grading contract', () => {
       reasons: [
         'The response did not address the second required step of the rubric, so it lost that credit.',
       ],
-      needsHumanReview: false,
       humanReviewReason: null,
     });
   });
@@ -87,14 +85,12 @@ describe('question grading contract', () => {
       score: 2,
       comment: 'Good answer.',
       reasons: ['off topic'],
-      needs_human_review: false,
       human_review_reason: null,
     };
     const atCap = {
       score: 1,
       comment: 'Good answer.',
       reasons: ['mostly complete'],
-      needs_human_review: false,
       human_review_reason: null,
     };
     expect(() => validateGradePayload(aboveCap, capSettings, 1)).toThrow(
@@ -112,7 +108,6 @@ describe('question grading contract', () => {
       score: 1,
       comment: 'Good answer.',
       reasons: ['complete'],
-      needs_human_review: false,
       human_review_reason: null,
     };
     expect(() =>
@@ -130,7 +125,7 @@ describe('question grading contract', () => {
     ).toThrow(GradingConstraintError);
     expect(() =>
       validateGradePayload(
-        { ...valid, needs_human_review: undefined },
+        { ...valid, human_review_reason: undefined },
         settings,
         null,
       ),
@@ -140,14 +135,13 @@ describe('question grading contract', () => {
     ).toThrow(/not allowed by the score contract/);
   });
 
-  it('maps a human review reason to camelCase when the flag is set', () => {
+  it('maps a human review reason to camelCase', () => {
     expect(
       validateGradePayload(
         {
           score: 1,
           comment: 'The rubric is ambiguous here.',
           reasons: ['the rubric can be read two ways'],
-          needs_human_review: true,
           human_review_reason:
             '  The rubric is ambiguous about whether both examples are required.  ',
         },
@@ -158,19 +152,17 @@ describe('question grading contract', () => {
       score: 1,
       comment: 'The rubric is ambiguous here.',
       reasons: ['the rubric can be read two ways'],
-      needsHumanReview: true,
       humanReviewReason:
         'The rubric is ambiguous about whether both examples are required.',
     });
   });
 
-  it('accepts a false flag only with a null reason', () => {
+  it('accepts a null reason and rejects a missing or blank reason', () => {
     const settings = makeSettings({ checks: [] });
     const base = {
       score: 1,
       comment: 'Good answer.',
       reasons: ['complete'],
-      needs_human_review: false,
     };
     expect(
       validateGradePayload(
@@ -191,38 +183,28 @@ describe('question grading contract', () => {
     ).toThrow(GradingConstraintError);
   });
 
-  it('rejects a flag without a reason and a reason without a flag', () => {
+  it('rejects an empty human review reason', () => {
     const settings = makeSettings({ checks: [] });
     const valid = {
       score: 1,
       comment: 'Good answer.',
       reasons: ['complete'],
-      needs_human_review: false,
       human_review_reason: null,
     };
-    // True flag with a missing or blank reason is a mismatch.
     expect(() =>
       validateGradePayload(
-        { ...valid, needs_human_review: true },
-        settings,
-        null,
-      ),
-    ).toThrow(/human_review_reason/);
-    expect(() =>
-      validateGradePayload(
-        { ...valid, needs_human_review: true, human_review_reason: '   ' },
+        { ...valid, human_review_reason: undefined },
         settings,
         null,
       ),
     ).toThrow(GradingConstraintError);
-    // A reason with a false flag is the other half of the mismatch.
     expect(() =>
       validateGradePayload(
-        { ...valid, human_review_reason: 'a reason with no flag' },
+        { ...valid, human_review_reason: '   ' },
         settings,
         null,
       ),
-    ).toThrow(/human_review_reason/);
+    ).toThrow(GradingConstraintError);
   });
 
   it('bounds the human review reason length', () => {
@@ -231,7 +213,6 @@ describe('question grading contract', () => {
       score: 1,
       comment: 'Good answer.',
       reasons: ['complete'],
-      needs_human_review: true,
       human_review_reason,
     });
     expect(
@@ -256,7 +237,7 @@ describe('question grading contract', () => {
     expect(prompt).toContain('genuinely off-topic');
     expect(prompt).toContain('potentially harmful content');
     expect(prompt).toContain(
-      'Do not set needs_human_review for grammar, capitalization, or sentence-count reminders, for a low score on its own',
+      'Do not request human review for grammar, capitalization, or sentence-count reminders, for a low score on its own',
     );
     expect(prompt).toContain(
       'A student’s viewpoint, opinion, or lived experience is not a fault',

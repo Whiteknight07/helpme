@@ -10,7 +10,6 @@ export type ValidatedGradePayload = {
   score: number;
   comment: string;
   reasons: string[];
-  needsHumanReview: boolean;
   humanReviewReason: string | null;
 };
 
@@ -19,44 +18,22 @@ export class GradingConstraintError extends Error {}
 
 export const HUMAN_REVIEW_REASON_MAX_LENGTH = 2000;
 
-// Structural shape of the model's grading answer. Every field is required and
-// validated: score, comment, reasons, needs_human_review, and the paired
-// human_review_reason. Reasons are free-form explanation strings; the question
-// rubric is the only academic policy, so the host adds no reason vocabulary of
-// its own.
-const modelFeedbackSchema = z
-  .object({
-    score: z.number().finite(),
-    comment: z.string().trim().min(1).max(15000),
-    reasons: z.array(z.string().trim().min(1)).min(1),
-    needs_human_review: z.boolean(),
-    human_review_reason: z
-      .string()
-      .trim()
-      .min(1)
-      .max(HUMAN_REVIEW_REASON_MAX_LENGTH)
-      .nullable(),
-  })
-  .superRefine((value, ctx) => {
-    // The flag and its reason are a pair: a flag must be explained, and a
-    // reason without a flag would be an unexplained mismatch.
-    if (value.needs_human_review && value.human_review_reason === null) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['human_review_reason'],
-        message:
-          'human_review_reason is required and must be a non-empty string when needs_human_review is true.',
-      });
-    }
-    if (!value.needs_human_review && value.human_review_reason !== null) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['human_review_reason'],
-        message:
-          'human_review_reason must be null when needs_human_review is false.',
-      });
-    }
-  });
+// Structural shape of the model's grading answer. The nullable reason is the
+// review flag: null means no review is needed, and a non-empty string explains
+// why a human should review the grade. Reasons are free-form explanation
+// strings; the question rubric is the only academic policy, so the host adds
+// no reason vocabulary of its own.
+const modelFeedbackSchema = z.object({
+  score: z.number().finite(),
+  comment: z.string().trim().min(1).max(15000),
+  reasons: z.array(z.string().trim().min(1)).min(1),
+  human_review_reason: z
+    .string()
+    .trim()
+    .min(1)
+    .max(HUMAN_REVIEW_REASON_MAX_LENGTH)
+    .nullable(),
+});
 
 /** Lowest cap among the triggered checks; null when every cap is reminder-only. */
 export function effectiveScoreCap(
@@ -113,20 +90,19 @@ export function buildSystemPrompt(
       score: 0,
       comment: 'student-facing feedback',
       reasons: ['what earned or lost credit'],
-      needs_human_review: false,
       human_review_reason: null,
     })}`,
-    `The score must be allowed by the score contract and within the effective cap. The comment must be non-empty. Reasons must be a non-empty array of free-form explanations that, like the comment, are grounded in the rubric and the student answer; there is no fixed reason vocabulary. human_review_reason must be null unless needs_human_review is true, in which case it must be a non-empty explanation of at most ${HUMAN_REVIEW_REASON_MAX_LENGTH} characters.`,
+    `The score must be allowed by the score contract and within the effective cap. The comment must be non-empty. Reasons must be a non-empty array of free-form explanations that, like the comment, are grounded in the rubric and the student answer; there is no fixed reason vocabulary. human_review_reason must be null when human review is not needed, otherwise it must be a non-empty explanation of at most ${HUMAN_REVIEW_REASON_MAX_LENGTH} characters.`,
     '## Comment rules',
     'The comment explains, grounded in the rubric and the student answer, what earned and what lost credit. Never state or imply a numerical grade, score, percentage, or cap inside the comment; the host records the numeric score separately.',
     '## Configured automatic checks',
     checks,
     'Evaluate the rubric meaning independently of automatic checks. The automatic checks above are mechanical and were already evaluated by the host before this call. Only the checks listed under automatic_checks_triggered in the data were triggered, and their combined effect is the effective cap in the score contract. Select an allowed score within that effective cap; the host validates your score against it and never silently changes an accepted grade. The host supplies its own requirement notes about the triggered checks separately, so do not write them yourself. Do not invent checks or apply an unconfigured or untriggered check. A check marked "reminder only" has no score cap: it must not affect your score at all — do not deduct points for it, and do not describe it as a fault or as a cause of lost credit in the comment or in any reason.',
-    '## Human review flag',
-    'Set needs_human_review true only for one of these reasons: material interpretive ambiguity in the question or rubric that changes how the answer must be graded; a genuinely off-topic response that does not attempt the question; or potentially harmful content that needs a human’s contextual judgment.',
-    'Do not set needs_human_review for grammar, capitalization, or sentence-count reminders, for a low score on its own, or simply because the answer disagrees with the rubric. A student’s viewpoint, opinion, or lived experience is not a fault and is never by itself a reason to flag.',
+    '## Human review reason',
+    'Set human_review_reason to a short explanation only for one of these reasons: material interpretive ambiguity in the question or rubric that changes how the answer must be graded; a genuinely off-topic response that does not attempt the question; or potentially harmful content that needs a human’s contextual judgment. Otherwise set human_review_reason to null.',
+    'Do not request human review for grammar, capitalization, or sentence-count reminders, for a low score on its own, or simply because the answer disagrees with the rubric. A student’s viewpoint, opinion, or lived experience is not a fault and is never by itself a reason to flag.',
     'Proper names of legislation, tests, or instruments — for example "Indian Act" or "Native American Implicit Association Test" — are names of things, not labels for people, so do not treat them as harmful content or as a reason to flag.',
-    'When needs_human_review is true, set human_review_reason to a short non-empty explanation of which reason above applies. When needs_human_review is false, set human_review_reason to null.',
+    'When human_review_reason is not null, it must be a short non-empty explanation of which reason above applies.',
   ].join('\n\n');
 }
 
@@ -161,7 +137,7 @@ export function validateGradePayload(
   const parsed = modelFeedbackSchema.safeParse(raw);
   if (!parsed.success) {
     throw new GradingConstraintError(
-      'Model output was not valid grading feedback JSON: it must be an object with a finite numeric "score", a non-empty string "comment" (max 15000 chars), a non-empty "reasons" array of explanation strings, a boolean "needs_human_review", and a "human_review_reason" that is null when the flag is false and a non-empty string (max 2000 chars) when it is true. Return no other prose.',
+      'Model output was not valid grading feedback JSON: it must be an object with a finite numeric "score", a non-empty string "comment" (max 15000 chars), a non-empty "reasons" array of explanation strings, and a "human_review_reason" that is null when no review is needed or a non-empty string (max 2000 chars) when review is needed. Return no other prose.',
     );
   }
   const score = parsed.data.score;
@@ -179,7 +155,6 @@ export function validateGradePayload(
     score,
     comment: parsed.data.comment,
     reasons: parsed.data.reasons,
-    needsHumanReview: parsed.data.needs_human_review,
     humanReviewReason: parsed.data.human_review_reason,
   };
 }

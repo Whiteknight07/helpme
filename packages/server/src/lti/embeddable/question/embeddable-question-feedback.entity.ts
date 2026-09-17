@@ -65,11 +65,7 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
   @Column({ type: 'text', array: true, nullable: false, default: [] })
   reasons: string[];
 
-  @Column({ type: 'boolean', nullable: false, default: false })
-  needsHumanReview: boolean;
-
-  // Nullable by design: rows flagged before this column existed stay null
-  // rather than being backfilled with an invented reason.
+  // Nullable by design: null means no human review is needed.
   @Column({ type: 'text', nullable: true })
   humanReviewReason: string | null;
 }

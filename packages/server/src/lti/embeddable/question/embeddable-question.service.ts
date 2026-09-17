@@ -99,7 +99,6 @@ export class EmbeddableQuestionService {
       maxScore: evaluation.maxScore,
       gradingSnapshot: evaluation.gradingSnapshot,
       reasons: evaluation.reasons,
-      needsHumanReview: evaluation.needsHumanReview,
       humanReviewReason: evaluation.humanReviewReason,
     }).save();
 

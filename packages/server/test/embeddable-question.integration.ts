@@ -132,7 +132,6 @@ describe('Embeddable question grading', () => {
       maxScore: 10,
       model: 'grading-model',
       reasons: ['too_short'],
-      needsHumanReview: false,
       humanReviewReason: null,
       gradingSnapshot: {
         questionText: question.questionText,
@@ -154,7 +153,6 @@ describe('Embeddable question grading', () => {
     expect(feedbackResponse.body).not.toHaveProperty('model');
     expect(feedbackResponse.body).not.toHaveProperty('gradingSnapshot');
     // The review reason is staff-only state and never part of the student DTO.
-    expect(feedbackResponse.body).not.toHaveProperty('needsHumanReview');
     expect(feedbackResponse.body).not.toHaveProperty('humanReviewReason');
 
     expect(mockQuestionGradingService.evaluate).toHaveBeenCalledWith(
@@ -176,7 +174,6 @@ describe('Embeddable question grading', () => {
     expect(feedback.maxScore).toBe(10);
     expect(feedback.aiModel).toBe('grading-model');
     expect(feedback.reasons).toEqual(['too_short']);
-    expect(feedback.needsHumanReview).toBe(false);
     expect(feedback.humanReviewReason).toBeNull();
     expect(feedback.gradingSnapshot).toEqual({
       questionText: question.questionText,
@@ -202,7 +199,6 @@ describe('Embeddable question grading', () => {
       maxScore: 10,
       model: 'grading-model',
       reasons: ['ambiguous rubric'],
-      needsHumanReview: true,
       humanReviewReason: reason,
       gradingSnapshot: {
         questionText: question.questionText,
@@ -226,7 +222,6 @@ describe('Embeddable question grading', () => {
     const feedback = await EmbeddableQuestionFeedbackModel.findOneOrFail({
       where: { questionId: question.id, userId: user.id },
     });
-    expect(feedback.needsHumanReview).toBe(true);
     expect(feedback.humanReviewReason).toBe(reason);
   });
 

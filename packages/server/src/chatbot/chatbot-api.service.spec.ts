@@ -21,7 +21,7 @@ describe('ChatbotApiService', () => {
       score: 2,
       comment: 'Thoughtful reflection meeting the criteria.',
       reasons: ['both required examples were included'],
-      needs_human_review: false,
+      human_review_reason: null,
     };
 
     const mockFetch = jest.fn<
