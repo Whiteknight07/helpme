@@ -616,11 +616,6 @@ export class LtiService {
       );
     }
 
-    const platform = await this.provider.getPlatform(token.iss, token.clientId);
-    if (!platform || !platform.active) {
-      throw new ForbiddenException('Canvas platform is not active');
-    }
-
     const courseId = await this.findMappedCourseId(token);
     const userId = await this.authorizeLinkedStaff(token, courseId);
     return { userId, courseId };

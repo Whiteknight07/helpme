@@ -300,31 +300,29 @@ export default class LtiMiddleware {
     )) {
       try {
         const platform = await provider.getPlatformById(platformModel.kid);
+        if (!platform) continue;
         const hasReadScope =
-          platform.scopesSupported.includes(dynRegScopes[0]) ||
-          platform.scopesSupported.includes(dynRegScopes[1]);
-        const hasWriteScope = platform.scopesSupported.includes(
+          platform.scopesSupported?.includes(dynRegScopes[0]) ||
+          platform.scopesSupported?.includes(dynRegScopes[1]);
+        const hasWriteScope = platform.scopesSupported?.includes(
           dynRegScopes[0],
         );
-        if (platform && hasReadScope) {
-          try {
-            const registration =
-              await provider.DynamicRegistration.getRegistration(platform);
-            if (hasWriteScope && registration != undefined) {
-              await provider.DynamicRegistration.updateRegistration(
-                platform,
-                secondaryOptions,
-              );
-            }
-          } catch (err) {
-            // Delete platforms with 'not found' registrations
-            if ((err as Error).message.includes('404:')) {
-              await provider.deletePlatformById(platform.kid);
-            }
+        if (hasReadScope) {
+          const registration =
+            await provider.DynamicRegistration.getRegistration(platform);
+          if (hasWriteScope && registration != undefined) {
+            await provider.DynamicRegistration.updateRegistration(
+              platform,
+              secondaryOptions,
+            );
           }
         }
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (_err) {}
+      } catch {
+        // A failed remote lookup must not erase local signing keys or mappings.
+        console.warn(
+          `Could not refresh LTI registration ${platformModel.kid}; keeping the saved registration.`,
+        );
+      }
     }
 
     return provider;
