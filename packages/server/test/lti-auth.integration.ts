@@ -99,10 +99,14 @@ describe('LTI Auth Integration', () => {
       const parts = secondPart.split(';').map((v) => v.trim());
       const flags = parts.slice(1);
 
-      expect(flags).toHaveLength(2);
       expect(flags).toContain('HttpOnly');
-      expect(flags).not.toContain('Secure');
-      expect(flags).toContain('SameSite=Lax');
+      if (process.env.DOMAIN?.startsWith('https://')) {
+        expect(flags).toContain('Secure');
+        expect(flags).toContain('SameSite=None');
+      } else {
+        expect(flags).not.toContain('Secure');
+        expect(flags).toContain('SameSite=Lax');
+      }
     });
 
     it('rejects an invalid temporary login token', async () => {

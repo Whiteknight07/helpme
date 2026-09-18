@@ -21,7 +21,7 @@ import {
   UserFactory,
 } from '../../test/util/factories';
 import { LoginService } from './login.service';
-import { EmbeddableQuestionService } from '../lti/embeddable/question/embeddable-question.service';
+import { EmbeddableQuestionService } from '../lti/embeddable-question/embeddable-question.service';
 import { ERROR_MESSAGES, QUERY_PARAMS } from '@koh/common';
 import { Request } from 'express';
 import { UserModel } from '../profile/user.entity';
@@ -360,7 +360,6 @@ describe('LoginService', () => {
         const ltiService = new LtiService(
           jwtService,
           embeddableQuestionService,
-          configService,
         );
 
         const cookies: string[] = [];

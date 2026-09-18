@@ -11,7 +11,7 @@ import { LoginService } from '../login/login.service';
 import { AuthModule } from '../auth/auth.module';
 import { AuthService } from '../auth/auth.service';
 import { OrganizationModule } from '../organization/organization.module';
-import { EmbeddableModule } from './embeddable/embeddable.module';
+import { EmbeddableQuestionModule } from './embeddable-question/embeddable-question.module';
 
 @Module({
   controllers: [LtiController, LtiAuthController],
@@ -20,7 +20,7 @@ import { EmbeddableModule } from './embeddable/embeddable.module';
     AuthModule,
     OrganizationModule,
     LoginModule,
-    EmbeddableModule,
+    EmbeddableQuestionModule,
     JwtModule.registerAsync({
       imports: [ConfigModule, RedisProfileModule, MailModule],
       inject: [ConfigService],

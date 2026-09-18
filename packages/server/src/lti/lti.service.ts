@@ -1,12 +1,10 @@
 import {
   BadRequestException,
   ForbiddenException,
-  InternalServerErrorException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { UserCourseModel } from '../profile/user-course.entity';
 import { UserModel } from '../profile/user.entity';
 import {
@@ -15,7 +13,7 @@ import {
   Provider,
 } from '@bhunt02/lti-typescript';
 import { LMSCourseIntegrationModel } from '../lmsIntegration/lmsCourseIntegration.entity';
-import { ERROR_MESSAGES, Role } from '@koh/common';
+import { ERROR_MESSAGES, Role, LMSIntegrationPlatform } from '@koh/common';
 import { JwtService } from '@nestjs/jwt';
 import { CookieOptions } from 'express';
 import { LtiCourseInviteModel } from './lti-course-invite.entity';
@@ -26,8 +24,10 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { LMSAuthStateModel } from '../lmsIntegration/lms-auth-state.entity';
 import { pick } from 'lodash';
 import { Not } from 'typeorm';
-import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
-import { EmbeddableQuestionService } from './embeddable/question/embeddable-question.service';
+import { LMSOrganizationIntegrationModel } from '../lmsIntegration/lmsOrgIntegration.entity';
+import { OrganizationUserModel } from '../organization/organization-user.entity';
+import { EmbeddableQuestionModel } from './embeddable-question/embeddable-question.entity';
+import { EmbeddableQuestionService } from './embeddable-question/embeddable-question.service';
 
 export const HELPME_QUESTION_ID_PARAM = 'helpme_question_id';
 export const LTI_MEMBERSHIP_LEARNER_ROLE =
@@ -49,7 +49,6 @@ export class LtiService {
   constructor(
     private jwtService: JwtService,
     private embeddableQuestionService: EmbeddableQuestionService,
-    private readonly configService: ConfigService,
   ) {}
 
   private _provider: Provider | undefined;
@@ -83,6 +82,7 @@ export class LtiService {
     issuer: string,
     ltiUserId: string,
     ltiEmail?: string,
+    organizationId?: number,
   ): Promise<string> {
     let code: string;
     do {
@@ -99,6 +99,7 @@ export class LtiService {
       issuer,
       ltiUserId,
       ltiEmail,
+      organizationId,
     }).save();
 
     const token = this.jwtService.sign({
@@ -145,6 +146,19 @@ export class LtiService {
     ) {
       await matchingToken.remove();
       return false;
+    }
+
+    if (
+      matchingToken.organizationId !== null &&
+      matchingToken.organizationId !== undefined &&
+      !(await OrganizationUserModel.existsBy({
+        userId,
+        organizationId: matchingToken.organizationId,
+      }))
+    ) {
+      throw new ForbiddenException(
+        'Sign in with a HelpMe account in the organization connected to this Canvas registration.',
+      );
     }
 
     // If user has logged in with a different account prior, remove the identity entry for that account for
@@ -288,6 +302,7 @@ export class LtiService {
 
   static async findMatchingUserAndCourse(
     token: IdToken,
+    organizationId: number,
   ): Promise<{ userId?: number; courseId?: number }> {
     let userId: number | undefined;
     let courseId: number | undefined = undefined;
@@ -306,10 +321,15 @@ export class LtiService {
         )
         .addSelect('lti_user.issuer', 'ltiIssuer')
         .addSelect('lti_user."ltiUserId"', 'ltiUserId')
-        .where('email = :email', {
+        .innerJoin(
+          OrganizationUserModel,
+          'organization_user',
+          'organization_user."userId" = user_model.id AND organization_user."organizationId" = :organizationId',
+          { organizationId },
+        )
+        .where('(email = :email OR lti_user."userId" IS NOT NULL)', {
           email: token.userInfo.email,
         })
-        .orWhere('lti_user."userId" IS NOT NULL')
         .orderBy('lti_user."userId"', 'ASC', 'NULLS LAST')
         .getRawMany<{ userId: number }>()
     ).map(({ userId }) => userId);
@@ -322,6 +342,10 @@ export class LtiService {
       lmsCourseIntegration = await LMSCourseIntegrationModel.findOne({
         where: {
           apiCourseId: platformCourseId,
+          orgIntegration: {
+            organizationId,
+            apiPlatform: LMSIntegrationPlatform.Canvas,
+          },
         },
       });
       courseId = lmsCourseIntegration?.courseId;
@@ -398,22 +422,39 @@ export class LtiService {
     );
   }
 
-  assertTrustedCanvasPlatform(token: IdToken): void {
-    const clientId = this.configService.get<string>('LTI_CANVAS_CLIENT_ID');
-    if (typeof clientId !== 'string' || clientId.length === 0) {
-      throw new InternalServerErrorException(
-        'LTI Canvas trust configuration is incomplete; set LTI_CANVAS_CLIENT_ID.',
-      );
-    }
-    if (token.clientId !== clientId) {
+  async getLaunchIntegration(
+    token: IdToken,
+  ): Promise<LMSOrganizationIntegrationModel> {
+    if (token.platformInfo?.product_family_code !== 'canvas') {
       throw new ForbiddenException(
-        'LTI launch is not from the trusted Canvas platform',
+        'This LTI launch requires a Canvas platform.',
       );
     }
+    if (!token.iss || !token.clientId) {
+      throw new ForbiddenException(
+        'Canvas launch is missing its issuer or client ID.',
+      );
+    }
+    const platform = await this.provider.getPlatform(token.iss, token.clientId);
+    if (!platform?.active) {
+      throw new ForbiddenException(
+        'The Canvas LTI registration is not active. Ask your HelpMe administrator to check it.',
+      );
+    }
+    const integration = await LMSOrganizationIntegrationModel.findOneBy({
+      ltiPlatformId: platform.kid,
+      apiPlatform: LMSIntegrationPlatform.Canvas,
+    });
+    if (!integration) {
+      throw new ForbiddenException(
+        'This Canvas LTI registration is not assigned to a HelpMe organization. Ask your HelpMe administrator to assign it in LTI Platforms.',
+      );
+    }
+    return integration;
   }
 
   private async findMappedCourseId(token: IdToken): Promise<number> {
-    this.assertTrustedCanvasPlatform(token);
+    const integration = await this.getLaunchIntegration(token);
     const platformCourseId = LtiService.extractCourseId(token);
     if (typeof platformCourseId !== 'string' || platformCourseId.length === 0) {
       throw new BadRequestException(
@@ -422,11 +463,17 @@ export class LtiService {
     }
 
     const lmsIntegration = await LMSCourseIntegrationModel.findOne({
-      where: { apiCourseId: platformCourseId },
+      where: {
+        apiCourseId: platformCourseId,
+        orgIntegration: {
+          organizationId: integration.organizationId,
+          apiPlatform: integration.apiPlatform,
+        },
+      },
     });
     if (!lmsIntegration) {
       throw new NotFoundException(
-        'Canvas course is not mapped to a HelpMe course',
+        'This Canvas course is not connected to HelpMe. Ask your HelpMe administrator to connect it, then reopen the tool.',
       );
     }
     return lmsIntegration.courseId;
@@ -509,11 +556,20 @@ export class LtiService {
     courseId: number,
   ): Promise<number> {
     const identity = await UserLtiIdentityModel.findOne({
-      where: { issuer: token.iss, ltiUserId: token.user },
+      where: {
+        issuer: token.iss,
+        ltiUserId: token.user,
+        user: {
+          organizationUser: {
+            organizationId: (await this.getLaunchIntegration(token))
+              .organizationId,
+          },
+        },
+      },
     });
     if (!identity) {
       throw new ForbiddenException(
-        'No HelpMe account is linked to this Canvas user',
+        'Open HelpMe from the Canvas course navigation and sign in to link your account, then reopen the editor button.',
       );
     }
 

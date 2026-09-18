@@ -42,8 +42,8 @@ import { QueueChatsModel } from 'queueChats/queue-chats.entity';
 import { DataSource } from 'typeorm';
 import { FactoryService } from 'factory/factory.service';
 import { SuperCourseModel } from '../course/super-course.entity';
-import { EmbeddableQuestionFeedbackModel } from '../lti/embeddable/question/embeddable-question-feedback.entity';
-import { EmbeddableQuestionModel } from '../lti/embeddable/question/embeddable-question.entity';
+import { EmbeddableQuestionFeedbackModel } from '../lti/embeddable-question/embeddable-question-feedback.entity';
+import { EmbeddableQuestionModel } from '../lti/embeddable-question/embeddable-question.entity';
 
 const exampleConfig = {
   fifo_queue_view_enabled: true,

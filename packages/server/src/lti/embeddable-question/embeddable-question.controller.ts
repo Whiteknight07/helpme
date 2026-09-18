@@ -17,12 +17,12 @@ import {
   Role,
   UpsertEmbeddableQuestionParams,
 } from '@koh/common';
-import { JwtAuthGuard } from '../../../guards/jwt-auth.guard';
-import { CourseRolesGuard } from '../../../guards/course-roles.guard';
-import { Roles } from '../../../decorators/roles.decorator';
+import { JwtAuthGuard } from '../../guards/jwt-auth.guard';
+import { CourseRolesGuard } from '../../guards/course-roles.guard';
+import { Roles } from '../../decorators/roles.decorator';
 import { EmbeddableQuestionService } from './embeddable-question.service';
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
-import { UserId } from '../../../decorators/user.decorator';
+import { UserId } from '../../decorators/user.decorator';
 
 @Controller('lti/embeddable-question')
 @UseGuards(JwtAuthGuard, CourseRolesGuard)

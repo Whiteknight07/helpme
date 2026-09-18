@@ -18,7 +18,7 @@ import {
   EditOutlined,
   PlusOutlined,
 } from '@ant-design/icons'
-import useSWR from 'swr'
+import useSWRImmutable from 'swr/immutable'
 import type { EmbeddableQuestion } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
@@ -51,7 +51,7 @@ export default function EmbeddableQuestionsPage(
     data,
     isLoading,
     mutate: refetch,
-  } = useSWR(
+  } = useSWRImmutable(
     `lti/embeddable-questions/${courseId}`,
     () => API.lti.embeddableQuestion.getAll(courseId),
     {
@@ -61,6 +61,13 @@ export default function EmbeddableQuestionsPage(
         ),
     },
   )
+  const { data: integration } = useSWRImmutable(`lms/course/${courseId}`, () =>
+    API.lmsIntegration.getCourseIntegration(courseId),
+  )
+  const platformName =
+    integration?.apiPlatform && integration.apiPlatform !== 'None'
+      ? integration.apiPlatform
+      : 'your LMS'
   const questions = data ?? []
 
   const deleteQuestion = async (question: EmbeddableQuestion) => {
@@ -164,7 +171,7 @@ export default function EmbeddableQuestionsPage(
           />
           <Popconfirm
             title="Delete this question?"
-            description="This action cannot be undone."
+            description="This permanently deletes the question, all student responses, and all feedback. Existing links in your LMS will stop working."
             onConfirm={() => deleteQuestion(question)}
             okText="Delete"
             okButtonProps={{ danger: true }}
@@ -184,7 +191,12 @@ export default function EmbeddableQuestionsPage(
   return (
     <Card
       title="Embeddable Questions"
-      classNames={{ body: 'p-1 md:p-6' }}
+      className="min-w-0"
+      classNames={{
+        body: 'p-3 md:p-6',
+        header: 'px-3 py-3 md:px-6',
+        title: 'whitespace-normal',
+      }}
       extra={
         <Button
           type="primary"
@@ -195,19 +207,26 @@ export default function EmbeddableQuestionsPage(
         </Button>
       }
     >
-      <p className="mb-4 text-gray-600">
+      <p className="mb-2 text-gray-600">
         Embeddable questions let students submit answers and receive provisional
-        AI feedback inside Canvas. Each question has its own grading prompt,
-        feedback instructions, score scale, and optional answer requirements.
+        AI feedback inside {platformName}, helping them improve their answers.
       </p>
-      <ol className="mb-4 list-decimal pl-5 text-gray-600">
-        <li>Create a question here and configure its grading settings.</li>
-        <li>
-          Open the Canvas content editor and use the HelpMe editor button to
-          select and insert the question.
-        </li>
-        <li>Save the Canvas content so students can open the question.</li>
-      </ol>
+      <p className="mb-4 text-gray-600">
+        Each question has its own grading prompt, feedback instructions, score
+        scale, and optional answer requirements.
+      </p>
+      <p className="mb-4 text-gray-600">
+        After creating a question here, use the HelpMe app in the {platformName}{' '}
+        content editor to insert it. In Canvas, open Apps, choose View All, then
+        HelpMe. Select a question and choose Insert into Canvas.{' '}
+        <a
+          href="/guides/canvas-insert-question.png"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          See where to find HelpMe in Canvas (opens in a new tab).
+        </a>
+      </p>
 
       <Table
         dataSource={questions}
@@ -215,6 +234,7 @@ export default function EmbeddableQuestionsPage(
         rowKey="id"
         loading={isLoading}
         pagination={false}
+        scroll={{ x: 850 }}
         locale={{
           emptyText:
             'No questions yet. Create a question to start collecting feedback.',

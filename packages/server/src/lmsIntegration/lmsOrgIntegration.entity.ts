@@ -33,6 +33,11 @@ export class LMSOrganizationIntegrationModel extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   clientId?: string;
 
+  // References the LTI library's registration in its separate database.
+  // Only site administrators may assign this through the LTI admin endpoint.
+  @Column({ type: 'text', nullable: true, unique: true })
+  ltiPlatformId: string | null;
+
   @Exclude()
   @Column({ type: 'text', nullable: true })
   clientSecret?: string;

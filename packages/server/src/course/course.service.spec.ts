@@ -38,7 +38,7 @@ import { ChatbotDocPdfModel } from 'chatbot/chatbot-doc-pdf.entity';
 import { QuestionTypeModel } from 'questionType/question-type.entity';
 import { CourseSettingsModel } from './course_settings.entity';
 import { SuperCourseModel } from './super-course.entity';
-import { EmbeddableQuestionModel } from 'lti/embeddable/question/embeddable-question.entity';
+import { EmbeddableQuestionModel } from 'lti/embeddable-question/embeddable-question.entity';
 
 describe('CourseService', () => {
   let service: CourseService;

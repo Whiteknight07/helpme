@@ -5,15 +5,15 @@ import {
   type GradingSnapshot,
   type QuestionGradingSettings,
 } from '@koh/common';
-import { ChatbotApiService } from '../../../chatbot/chatbot-api.service';
-import { computeMechanicalFacts } from './deterministic-checks';
+import { ChatbotApiService } from '../../chatbot/chatbot-api.service';
+import { computeMechanicalFacts } from './deterministic-check-utils';
 import {
   buildAppliedRequirements,
   buildSystemPrompt,
   buildUserPrompt,
   effectiveScoreCap,
   validateGradePayload,
-} from './grading';
+} from './grading-utils';
 
 @Injectable()
 export class QuestionGradingService {

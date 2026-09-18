@@ -1,5 +1,5 @@
 import type { QuestionGradingSettings, ScoreScale } from '@koh/common';
-import { computeMechanicalFacts } from './deterministic-checks';
+import { computeMechanicalFacts } from './deterministic-check-utils';
 import {
   BLANK_REQUIREMENT,
   buildAppliedRequirements,
@@ -8,7 +8,7 @@ import {
   effectiveScoreCap,
   GradingConstraintError,
   validateGradePayload,
-} from './grading';
+} from './grading-utils';
 
 function makeSettings(
   overrides: Partial<QuestionGradingSettings> = {},

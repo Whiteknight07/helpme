@@ -18,39 +18,36 @@ const ThirdPartyCookiesWarning: React.FC = () => {
         title="Third-Party Cookies Disabled"
         extra={[
           <div className="mt-12 flex flex-col gap-2 text-center" key="error">
-            {isQuestion ? (
-              <>
-                <p>
-                  This Canvas question needs third-party site data so HelpMe can
-                  keep the ordinary HelpMe LTI session secure.
-                </p>
-                <p>
-                  Allow third-party site data for HelpMe, then reopen this quiz
-                  in Canvas.
-                </p>
-              </>
-            ) : (
-              <>
-                <p>
-                  Third-Party Cookies are required to use the HelpMe LTI tool.
-                </p>
-                <p>
-                  To use HelpMe, visit it in a dedicated tab or window by
-                  clicking the button below:
-                </p>
-                <div>
-                  <Link href={launchUrl} target={'_blank'} prefetch={false}>
-                    <Button
-                      variant={'solid'}
-                      color={'primary'}
-                      icon={<ExpandOutlined />}
-                    >
-                      Open HelpMe In New Window
-                    </Button>
-                  </Link>
-                </div>
-              </>
-            )}
+            <p>
+              {isQuestion ? 'This question' : 'HelpMe'} needs third-party
+              cookies to keep you signed in inside your learning platform.
+            </p>
+            <p>
+              Allow third-party cookies for HelpMe in your browser settings,
+              then refresh this page.
+            </p>
+            <div>
+              <Button onClick={() => window.location.reload()}>
+                Refresh page
+              </Button>
+            </div>
+            <p>
+              You can also open HelpMe in a separate window to sign in. You may
+              still need to allow cookies and reopen the question in your
+              learning platform.
+            </p>
+            <div>
+              <Link
+                href={launchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                prefetch={false}
+              >
+                <Button type="primary" icon={<ExpandOutlined />}>
+                  Open HelpMe in a new window
+                </Button>
+              </Link>
+            </div>
           </div>,
         ]}
       />

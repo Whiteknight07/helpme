@@ -7,10 +7,10 @@ import {
   UserFactory,
 } from './util/factories';
 import { QuestionGradingSettings, Role } from '@koh/common';
-import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
-import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
-import { QuestionGradingService } from '../src/lti/embeddable/question/question-grading.service';
-import { GradingConstraintError } from '../src/lti/embeddable/question/grading';
+import { EmbeddableQuestionModel } from '../src/lti/embeddable-question/embeddable-question.entity';
+import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable-question/embeddable-question-feedback.entity';
+import { QuestionGradingService } from '../src/lti/embeddable-question/question-grading.service';
+import { GradingConstraintError } from '../src/lti/embeddable-question/grading-utils';
 
 describe('Embeddable question grading', () => {
   const mockQuestionGradingService = { evaluate: jest.fn() };
@@ -225,7 +225,7 @@ describe('Embeddable question grading', () => {
     expect(feedback.humanReviewReason).toBe(reason);
   });
 
-  it('refuses to delete questions that contain grading history', async () => {
+  it('deletes a question and its grading history', async () => {
     const { user, course } = await setupCourseMember(Role.PROFESSOR);
     const question = await EmbeddableQuestionModel.create({
       courseId: course.id,
@@ -251,7 +251,15 @@ describe('Embeddable question grading', () => {
 
     await supertest({ userId: user.id })
       .delete(`/lti/embeddable-question/${course.id}/${question.id}`)
-      .expect(409);
+      .expect(200);
+    expect(
+      await EmbeddableQuestionModel.findOneBy({ id: question.id }),
+    ).toBeNull();
+    expect(
+      await EmbeddableQuestionFeedbackModel.countBy({
+        questionId: question.id,
+      }),
+    ).toBe(0);
   });
 
   it('persists nothing when grading fails', async () => {

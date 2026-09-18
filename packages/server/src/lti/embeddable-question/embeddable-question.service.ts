@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   HttpException,
   HttpStatus,
@@ -159,14 +158,6 @@ export class EmbeddableQuestionService {
 
   async delete(courseId: number, questionId: number): Promise<void> {
     await this.findOne(courseId, questionId);
-    const feedbackCount = await EmbeddableQuestionFeedbackModel.count({
-      where: { courseId, questionId },
-    });
-    if (feedbackCount > 0) {
-      throw new ConflictException(
-        'Cannot delete a question that has feedback history.',
-      );
-    }
     await EmbeddableQuestionModel.delete({ id: questionId, courseId });
   }
 

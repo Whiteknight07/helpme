@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Alert, Button, Input, message } from 'antd'
-import axios from 'axios'
 import type { EmbeddableQuestionFeedback } from '@koh/common'
 import { API } from '@/app/api'
 import { getErrorMessage } from '@/app/utils/generalUtils'
@@ -46,19 +45,6 @@ export default function EmbeddableQuestionFeedback({
       )
       setFeedback(response)
     } catch (err) {
-      const statusMessages: Record<number, string> = {
-        401: 'Your HelpMe session has expired. Reopen this quiz in Canvas to continue.',
-        429: 'Too many attempts. Please wait a few minutes before requesting more feedback.',
-      }
-      const status = axios.isAxiosError(err) ? err.response?.status : undefined
-      const statusMessage =
-        status !== undefined ? statusMessages[status] : undefined
-      if (statusMessage) {
-        setError(statusMessage)
-        message.warning(statusMessage)
-        return
-      }
-
       const errMsg = getErrorMessage(err)
       setError(typeof errMsg === 'string' ? errMsg : 'Failed to get feedback.')
     } finally {
@@ -73,7 +59,7 @@ export default function EmbeddableQuestionFeedback({
       <TextArea
         value={inputText}
         onChange={(e) => setInputText(e.target.value)}
-        aria-label="Your response"
+        aria-label="Your response draft for AI feedback"
         placeholder="Type your response here..."
         rows={4}
         maxLength={15000}
@@ -102,31 +88,47 @@ export default function EmbeddableQuestionFeedback({
         />
       )}
 
-      {feedback && (
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-zinc-700">
-            {`Provisional score: ${feedback.score}/${feedback.maxScore}`}
-          </p>
-          <div className="w-full whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
-            {feedback.comment}
-          </div>
-          {feedback.appliedRequirements.length > 0 && (
-            <div>
-              <p className="text-sm font-medium text-zinc-700">
-                Applied requirements
-              </p>
-              <ul className="mb-0 list-disc pl-5 text-xs text-zinc-600">
-                {feedback.appliedRequirements.map((requirement, index) => (
-                  <li key={`${requirement}-${index}`}>{requirement}</li>
-                ))}
-              </ul>
+      <p
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {isLoading
+          ? 'Generating feedback.'
+          : feedback
+            ? 'Your feedback is ready.'
+            : error
+              ? 'Feedback could not be generated.'
+              : ''}
+      </p>
+      <section aria-label="AI feedback" aria-busy={isLoading}>
+        {feedback && (
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium text-zinc-700">
+              {`Provisional score: ${feedback.score}/${feedback.maxScore}`}
+            </p>
+            <div className="w-full whitespace-pre-wrap rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800">
+              {feedback.comment}
             </div>
-          )}
-          <p className="text-xs text-zinc-500">
-            This is provisional feedback only; it is not your final grade.
-          </p>
-        </div>
-      )}
+            {feedback.appliedRequirements.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-zinc-700">
+                  Applied requirements
+                </p>
+                <ul className="mb-0 list-disc pl-5 text-xs text-zinc-600">
+                  {feedback.appliedRequirements.map((requirement, index) => (
+                    <li key={`${requirement}-${index}`}>{requirement}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="text-xs text-zinc-500">
+              This is provisional feedback only; it is not your final grade.
+            </p>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

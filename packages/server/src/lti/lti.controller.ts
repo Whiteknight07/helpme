@@ -1,7 +1,10 @@
+import { LMSOrganizationIntegrationModel } from '../lmsIntegration/lmsOrgIntegration.entity';
 import { LtiService } from './lti.service';
 import {
   All,
   BadRequestException,
+  ConflictException,
+  NotFoundException,
   Body,
   Controller,
   Delete,
@@ -35,6 +38,7 @@ import {
   LMSIntegrationPlatform,
   LtiPlatform,
   UpdateLtiPlatform,
+  SetLtiOrganizationParams,
 } from '@koh/common';
 import { plainToClass } from 'class-transformer';
 import { UserModel } from '../profile/user.entity';
@@ -46,7 +50,7 @@ import { EmailVerifiedGuard } from '../guards/email-verified.guard';
 import { CourseModel } from '../course/course.entity';
 import { LTI_APP_SESSION_SECONDS, restrictPaths } from './lti-auth.controller';
 import { LoginService } from '../login/login.service';
-import { EmbeddableQuestionModel } from './embeddable/question/embeddable-question.entity';
+import { EmbeddableQuestionModel } from './embeddable-question/embeddable-question.entity';
 
 @Controller('lti')
 @UseInterceptors(IgnoreableClassSerializerInterceptor)
@@ -97,6 +101,7 @@ export class LtiController {
         token.iss,
         token.user,
         token.userInfo.email,
+        (await this.ltiService.getLaunchIntegration(token)).organizationId,
       );
       res.cookie('__LTI_IDENTITY', identity, LtiService.cookieOptions);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -192,7 +197,65 @@ export class LtiController {
         ERROR_MESSAGES.ltiController.ltiDataSourceUninitialized,
       );
     }
-    return (await Database.find(PlatformModel)).map(mapToLocalPlatform);
+    const integrations = await LMSOrganizationIntegrationModel.find();
+    return (await Database.find(PlatformModel)).map((platform) => ({
+      ...mapToLocalPlatform(platform),
+      organizationId: integrations.find(
+        (integration) => integration.ltiPlatformId === platform.kid,
+      )?.organizationId,
+    }));
+  }
+
+  @Patch('/platform/:kid/organization')
+  @UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminRoleGuard)
+  async assignOrganization(
+    @Param('kid') kid: string,
+    @Body() body: SetLtiOrganizationParams,
+  ): Promise<void> {
+    const platform = await this.ltiService.provider.getPlatformById(kid);
+    if (!platform) throw new NotFoundException('LTI registration not found.');
+    await LMSOrganizationIntegrationModel.getRepository().manager.transaction(
+      async (manager) => {
+        if (body.organizationId !== null) {
+          const integration = await manager.findOne(
+            LMSOrganizationIntegrationModel,
+            {
+              where: {
+                organizationId: body.organizationId,
+                apiPlatform: LMSIntegrationPlatform.Canvas,
+              },
+              lock: { mode: 'pessimistic_write' },
+            },
+          );
+          if (!integration)
+            throw new BadRequestException(
+              'Configure the organization’s Canvas LMS integration first.',
+            );
+          if (integration.ltiPlatformId && integration.ltiPlatformId !== kid) {
+            throw new ConflictException(
+              'This organization already has an LTI registration. Unassign it before choosing another.',
+            );
+          }
+          const existing = await manager.findOneBy(
+            LMSOrganizationIntegrationModel,
+            { ltiPlatformId: kid },
+          );
+          if (existing && existing.organizationId !== body.organizationId) {
+            throw new ConflictException(
+              'This registration already belongs to another organization. Unassign it first.',
+            );
+          }
+          integration.ltiPlatformId = kid;
+          await manager.save(integration);
+        } else {
+          await manager.update(
+            LMSOrganizationIntegrationModel,
+            { ltiPlatformId: kid },
+            { ltiPlatformId: null },
+          );
+        }
+      },
+    );
   }
 
   @Get('/platform/:kid')
@@ -240,6 +303,10 @@ export class LtiController {
   @UseGuards(JwtAuthGuard, EmailVerifiedGuard, AdminRoleGuard)
   async deletePlatform(@Param('kid') kid: string): Promise<void> {
     await this.ltiService.provider.deletePlatformById(kid);
+    await LMSOrganizationIntegrationModel.update(
+      { ltiPlatformId: kid },
+      { ltiPlatformId: null },
+    );
   }
 
   @Patch('/platform/:kid/toggle')

@@ -215,7 +215,7 @@ export default class LtiMiddleware {
     // authorize via authorizeDeepLinking.
     provider.onDeepLinking(async (token, _, res, next) => {
       try {
-        this.ltiService.assertTrustedCanvasPlatform(token);
+        await this.ltiService.getLaunchIntegration(token);
         return await provider.redirect(res, '/lti/deep-link');
       } catch (err) {
         if (err instanceof HttpException) {
@@ -337,13 +337,15 @@ export default class LtiMiddleware {
     next: NextFunction,
   ) {
     try {
-      this.ltiService.assertTrustedCanvasPlatform(token);
+      const integration = await this.ltiService.getLaunchIntegration(token);
 
       // Question launches now use the same HelpMe identity/course resolution as
       // every other LTI launch. The controller separately validates the signed
       // question ID against the mapped course before issuing the app session.
-      const { userId, courseId } =
-        await LtiService.findMatchingUserAndCourse(token);
+      const { userId, courseId } = await LtiService.findMatchingUserAndCourse(
+        token,
+        integration.organizationId,
+      );
       response.locals.userId = userId;
       response.locals.courseId = courseId;
 

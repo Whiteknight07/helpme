@@ -1,5 +1,10 @@
 import express from 'express';
-import { ConfigService } from '@nestjs/config';
+import {
+  AuthTokenMethodEnum,
+  Database,
+  Provider,
+  register,
+} from '@bhunt02/lti-typescript';
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '@koh/common';
 import { setupIntegrationTest } from './util/testUtils';
@@ -8,11 +13,17 @@ import {
   CourseFactory,
   lmsCourseIntFactory,
   UserFactory,
+  lmsOrgIntFactory,
+  OrganizationUserFactory,
+  OrganizationFactory,
 } from './util/factories';
-import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
+import { EmbeddableQuestionModel } from '../src/lti/embeddable-question/embeddable-question.entity';
 import { UserCourseModel } from '../src/profile/user-course.entity';
 import { LTI_APP_SESSION_SECONDS } from '../src/lti/lti-auth.controller';
-import { LTI_MEMBERSHIP_LEARNER_ROLE } from '../src/lti/lti.service';
+import {
+  LtiService,
+  LTI_MEMBERSHIP_LEARNER_ROLE,
+} from '../src/lti/lti.service';
 import { getAuthPayload } from '../src/login/auth-token';
 
 const gradingSettings = (rubric: string) => ({
@@ -75,19 +86,61 @@ describe('LTI question launch', () => {
     [mockLtiMiddleware],
   );
 
-  beforeEach(() => {
+  const ltiDbOptions = {
+    type: 'postgres' as const,
+    host: 'localhost',
+    port: 5432,
+    username: process.env.POSTGRES_NONROOT_USER,
+    password: process.env.POSTGRES_NONROOT_PASSWORD,
+    database: 'lti_test',
+  };
+  let provider: Provider;
+  let platformId: string;
+  beforeAll(async () => {
+    await Database.initializeDatabase(ltiDbOptions, 'test-key', true);
+    provider = await register('test-key', ltiDbOptions, {});
+  });
+  afterAll(async () => {
+    await provider.close();
+  });
+  afterEach(async () => {
+    await Database.dataSource.synchronize(true);
+  });
+
+  beforeEach(async () => {
     userId = undefined;
     courseId = undefined;
     token = undefined;
-    getTestModule()
-      .get<ConfigService>(ConfigService)
-      .set('LTI_CANVAS_CLIENT_ID', 'canvas-client-id');
+    getTestModule().get<LtiService>(LtiService).provider = provider;
+    const platform = await provider.registerPlatform({
+      name: 'Canvas',
+      platformUrl: 'https://canvas.example.edu',
+      clientId: 'canvas-client-id',
+      active: true,
+      authenticationEndpoint: 'https://canvas.example.edu/auth',
+      accessTokenEndpoint: 'https://canvas.example.edu/token',
+      authToken: {
+        method: AuthTokenMethodEnum.JWK_SET,
+        key: 'https://canvas.example.edu/keys',
+      },
+    });
+    platformId = platform.kid;
   });
 
   const setupMappedQuestion = async () => {
     const user = await UserFactory.create({ email: 'student@example.com' });
     const course = await CourseFactory.create();
+    const organization = await OrganizationFactory.create();
+    const orgIntegration = await lmsOrgIntFactory.create({
+      organization,
+      ltiPlatformId: platformId,
+    });
+    await OrganizationUserFactory.create({
+      organizationUser: user,
+      organization,
+    });
     await lmsCourseIntFactory.create({
+      orgIntegration,
       course,
       apiCourseId: 'canvas-course-123',
     });

@@ -21,9 +21,6 @@ const feedbackResponseSchema = z.object({
   model: z.string().optional(),
 });
 
-// One non-retrying call bounds the complete chatbot grading operation.
-const FEEDBACK_TIMEOUT_MS = 120000;
-
 export type FeedbackQueryResult = z.infer<typeof feedbackResponseSchema>;
 
 @Injectable()
@@ -181,25 +178,28 @@ export class ChatbotApiService {
 
   /**
    * Feedback uses the course's selected model and the supplied grading prompt.
-   * The chatbot service owns provider retries for this request; the host
-   * deadline only bounds the single transport call.
+   * The chatbot service owns provider retries for this request.
    */
   async queryFeedback(
     query: string,
     courseId: number,
     systemPrompt: string,
   ): Promise<FeedbackQueryResult> {
-    const resp: unknown = await this.request(
-      'POST',
-      `chatbot/query`,
-      '',
-      { query, type: 'feedback', courseId, params: { systemPrompt } },
-      undefined,
-      FEEDBACK_TIMEOUT_MS,
-    );
+    const resp: unknown = await this.request('POST', `chatbot/query`, '', {
+      query,
+      type: 'feedback',
+      courseId,
+      params: { systemPrompt },
+    });
     return feedbackResponseSchema.parse(resp);
   }
 
+  /**
+   * Adam: Default and abstract /query calls use the organization's default
+   * model, even when a courseId is supplied. Abstract generation does not
+   * need the larger model an instructor may select for the course.
+   * Feedback now has its own query type; queryFeedback uses the course model.
+   */
   async queryChatbotForCourse(
     query: string,
     courseId: number,

@@ -7,8 +7,8 @@ import {
   ManyToOne,
   PrimaryGeneratedColumn,
 } from 'typeorm';
-import { CourseModel } from '../../../course/course.entity';
-import { UserModel } from '../../../profile/user.entity';
+import { CourseModel } from '../../course/course.entity';
+import { UserModel } from '../../profile/user.entity';
 import { EmbeddableQuestionModel } from './embeddable-question.entity';
 import { GradingSnapshot } from '@koh/common';
 
@@ -30,7 +30,7 @@ export class EmbeddableQuestionFeedbackModel extends BaseEntity {
   @Column({ type: 'integer', nullable: false })
   questionId: number;
 
-  @ManyToOne(() => EmbeddableQuestionModel, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => EmbeddableQuestionModel, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'questionId' })
   embeddableQuestion: EmbeddableQuestionModel;
 

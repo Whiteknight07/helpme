@@ -1,5 +1,5 @@
 import type { GradingCheck } from '@koh/common';
-import { computeMechanicalFacts } from './deterministic-checks';
+import { computeMechanicalFacts } from './deterministic-check-utils';
 
 describe('computeMechanicalFacts', () => {
   describe('sentenceCount', () => {

@@ -50,7 +50,7 @@ import { ChatbotDocPdfModel } from 'chatbot/chatbot-doc-pdf.entity';
 import { URLSearchParams } from 'node:url';
 import { QueueStaffModel } from 'queue/queue-staff/queue-staff.entity';
 import * as crypto from 'crypto';
-import { EmbeddableQuestionModel } from 'lti/embeddable/question/embeddable-question.entity';
+import { EmbeddableQuestionModel } from 'lti/embeddable-question/embeddable-question.entity';
 
 @Injectable()
 export class CourseService {

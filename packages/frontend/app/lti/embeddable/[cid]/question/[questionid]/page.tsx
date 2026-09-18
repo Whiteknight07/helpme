@@ -3,18 +3,18 @@
 import { useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { Card } from 'antd'
-import axios from 'axios'
+import { getErrorMessage } from '@/app/utils/generalUtils'
 import useSWR from 'swr'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
 import { API } from '@/app/api'
 import EmbeddableQuestionFeedback from '@/app/lti/embeddable/[cid]/components/EmbeddableQuestionFeedback'
 
 export default function EmbeddableQuestionPage() {
-  const routeParams = useParams<{ cid: string; qid: string }>()
+  const routeParams = useParams<{ cid: string; questionid: string }>()
   const contentRef = useRef<HTMLDivElement>(null)
 
   const courseId = Number(routeParams.cid)
-  const questionId = Number(routeParams.qid)
+  const questionId = Number(routeParams.questionid)
   const hasInvalidRoute = !questionId || !courseId
 
   const { data: question, error } = useSWR(
@@ -47,12 +47,13 @@ export default function EmbeddableQuestionPage() {
     return () => observer.disconnect()
   }, [question])
 
+  const backendMessage: unknown = error ? getErrorMessage(error) : undefined
   const errorMessage = hasInvalidRoute
     ? 'Invalid course or question ID. Please let your professor know.'
     : error
-      ? axios.isAxiosError(error) && error.response?.status === 401
-        ? 'Your HelpMe session has expired. Reopen this quiz in Canvas to continue.'
-        : 'Could not load question. It may have been deleted. Please let your professor know.'
+      ? typeof backendMessage === 'string' && backendMessage.trim()
+        ? backendMessage
+        : 'Could not load question. Please let your professor know.'
       : undefined
 
   if (errorMessage) {

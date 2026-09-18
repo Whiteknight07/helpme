@@ -7,6 +7,7 @@ import {
   IsHexColor,
   IsIn,
   IsInt,
+  Min,
   IsNotEmpty,
   IsNumber,
   IsObject,
@@ -4556,7 +4557,16 @@ export class UpdateLtiAuthConfig {
   key?: string
 }
 
+export class SetLtiOrganizationParams {
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  organizationId!: number | null
+}
+
 export class LtiPlatform {
+  organizationId?: number
+
   @IsString()
   kid!: string
 

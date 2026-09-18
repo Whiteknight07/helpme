@@ -7,6 +7,7 @@ import {
   OneToMany,
   OneToOne,
   PrimaryColumn,
+  Unique,
 } from 'typeorm';
 import { LMSOrganizationIntegrationModel } from './lmsOrgIntegration.entity';
 import { CourseModel } from '../course/course.entity';
@@ -19,11 +20,12 @@ import { LMSResourceType } from '@koh/common';
 import { LMSAccessTokenModel } from './lms-access-token.entity';
 
 @Entity('lms_course_integration_model')
+@Unique(['orgIntegration', 'apiCourseId'])
 export class LMSCourseIntegrationModel extends BaseEntity {
   @PrimaryColumn()
   courseId: number;
 
-  @Column({ type: 'text', unique: true })
+  @Column({ type: 'text' })
   apiCourseId: string;
 
   @Column({ type: 'integer', nullable: true })

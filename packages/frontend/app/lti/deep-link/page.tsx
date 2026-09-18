@@ -3,56 +3,31 @@
 import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Alert, Button, Card, Radio, Typography } from 'antd'
-import axios from 'axios'
-import useSWR from 'swr'
+import useSWRImmutable from 'swr/immutable'
 import { API } from '@/app/api'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
 import { getErrorMessage } from '@/app/utils/generalUtils'
 
 const { Paragraph, Text } = Typography
 
-function getDeepLinkErrorMessage(err: unknown): string {
-  if (axios.isAxiosError<unknown>(err)) {
-    if (err.response?.status === 404) {
-      return 'This Canvas course is not connected to HelpMe. Ask your HelpMe admin to connect it, then reopen the tool.'
-    }
-    if (err.response?.status === 403) {
-      const data = err.response.data
-      if (
-        typeof data === 'object' &&
-        data !== null &&
-        'message' in data &&
-        data.message === 'No HelpMe account is linked to this Canvas user'
-      ) {
-        return 'Open HelpMe from the Canvas course navigation and sign in to link your Canvas identity, then reopen the editor button.'
-      }
-      return 'The question picker requires an Instructor or Teaching Assistant role in this Canvas course. If you have that role, ask your HelpMe admin to check the Canvas connection.'
-    }
-    if (err.response?.status === 400) {
-      return 'This tool was opened incorrectly. Reopen it from the Canvas editor HelpMe button. If it keeps happening, ask your HelpMe admin to check the placement.'
-    }
-  }
-  const fallback = getErrorMessage(err)
-  return typeof fallback === 'string'
-    ? fallback
-    : 'Could not load questions. Please reopen the tool and try again.'
-}
-
 export default function DeepLinkPage() {
   const searchParams = useSearchParams()
   const ltik = searchParams.get('ltik') ?? ''
   const [selectedId, setSelectedId] = useState<number>()
 
-  const { data: questions, error } = useSWR(
+  const { data: questions, error } = useSWRImmutable(
     ltik ? `lti/deep-link/questions/${ltik}` : null,
     () => API.lti.deepLink.getQuestions(ltik),
     { shouldRetryOnError: false, revalidateOnFocus: false },
   )
 
+  const backendMessage: unknown = error ? getErrorMessage(error) : undefined
   const errorMessage = !ltik
     ? 'This page must be opened from Canvas.'
     : error
-      ? getDeepLinkErrorMessage(error)
+      ? typeof backendMessage === 'string' && backendMessage.trim()
+        ? backendMessage
+        : 'Could not load questions. Please reopen the tool and try again.'
       : undefined
 
   if (errorMessage) {

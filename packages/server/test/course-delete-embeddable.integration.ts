@@ -11,8 +11,8 @@ import { OrganizationUserModel } from 'organization/organization-user.entity';
 import { OrganizationCourseModel } from 'organization/organization-course.entity';
 import { CourseModel } from 'course/course.entity';
 import { OrganizationRole, Role } from '@koh/common';
-import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
-import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable/question/embeddable-question-feedback.entity';
+import { EmbeddableQuestionModel } from '../src/lti/embeddable-question/embeddable-question.entity';
+import { EmbeddableQuestionFeedbackModel } from '../src/lti/embeddable-question/embeddable-question-feedback.entity';
 
 describe('Organization course deletion with embeddable content', () => {
   const { supertest } = setupIntegrationTest(OrganizationModule, undefined, [
@@ -29,7 +29,7 @@ describe('Organization course deletion with embeddable content', () => {
     ],
   };
 
-  it('deletes a course with its questions and feedback, but keeps direct deletion protection', async () => {
+  it('deletes a course with its questions and feedback', async () => {
     const user = await UserFactory.create();
     const organization = await OrganizationFactory.create();
     const course = await CourseFactory.create();
@@ -67,10 +67,6 @@ describe('Organization course deletion with embeddable content', () => {
       ...feedbackBase,
       appliedRequirements: [],
     }).save();
-
-    await supertest({ userId: user.id })
-      .delete(`/lti/embeddable-question/${course.id}/${question.id}`)
-      .expect(409);
 
     await supertest({ userId: user.id })
       .delete(`/organization/${organization.id}/delete_course/${course.id}`)

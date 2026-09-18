@@ -1815,6 +1815,16 @@ export class APIClient {
         `/api/v1/lti/auth/entry${params.size > 0 ? '?' + params.toString() : ''}`,
     },
     admin: {
+      assignOrganization: async (
+        id: string,
+        organizationId: number | null,
+      ): Promise<void> =>
+        this.req(
+          'PATCH',
+          `/api/v1/lti/platform/${id}/organization`,
+          undefined,
+          { organizationId },
+        ),
       getPlatforms: async (): Promise<LtiPlatform[]> =>
         this.req('GET', '/api/v1/lti/platform'),
       getPlatform: async (id: string): Promise<LtiPlatform> =>

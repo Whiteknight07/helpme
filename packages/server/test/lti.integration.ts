@@ -11,6 +11,9 @@ import { CourseModel } from '../src/course/course.entity';
 import {
   CourseFactory,
   lmsCourseIntFactory,
+  lmsOrgIntFactory,
+  OrganizationUserFactory,
+  OrganizationFactory,
   UserCourseFactory,
   UserFactory,
   UserLtiIdentityFactory,
@@ -27,8 +30,8 @@ import {
 } from '@koh/common';
 import { mapToLocalPlatform } from '../src/lti/lti.controller';
 import { LtiService } from '../src/lti/lti.service';
-import { EmbeddableQuestionModel } from '../src/lti/embeddable/question/embeddable-question.entity';
-import { ConfigService } from '@nestjs/config';
+import { EmbeddableQuestionModel } from '../src/lti/embeddable-question/embeddable-question.entity';
+import { LMSOrganizationIntegrationModel } from '../src/lmsIntegration/lmsOrgIntegration.entity';
 import * as jwt from 'jsonwebtoken';
 import { UserCourseModel } from '../src/profile/user-course.entity';
 import { UserLtiIdentityModel } from '../src/lti/user_lti_identity.entity';
@@ -59,11 +62,11 @@ describe('LtiController', () => {
   let user: UserModel;
   let course: CourseModel;
   let customToken: Record<string, unknown> | undefined;
-  let configService: ConfigService;
-  let originalCanvasClientId: string | undefined;
+  let orgIntegration: LMSOrganizationIntegrationModel;
 
   const defaultToken = {
-    iss: 'fake-issuer',
+    iss: 'http://platform.com',
+    clientId: '1',
     user: '0',
     userInfo: { email: 'fake_email@example.com' },
     platformInfo: { product_family_code: 'canvas' },
@@ -100,10 +103,6 @@ describe('LtiController', () => {
   beforeEach(async () => {
     customToken = undefined;
     ltiService = getTestModule().get<LtiService>(LtiService);
-    configService = getTestModule().get<ConfigService>(ConfigService);
-    originalCanvasClientId ??= configService.get<string>(
-      'LTI_CANVAS_CLIENT_ID',
-    );
 
     provider = await register(testEncryptionKey, testLtiDbOptions, {});
     ltiService.provider = provider;
@@ -126,10 +125,18 @@ describe('LtiController', () => {
       });
       platforms.push(mapToLocalPlatform(platform['platformModel']));
     }
+    const organization = await OrganizationFactory.create();
+    orgIntegration = await lmsOrgIntFactory.create({
+      organization,
+      ltiPlatformId: platforms[0].kid,
+    });
+    await OrganizationUserFactory.create({
+      organizationUser: user,
+      organization,
+    });
   });
 
   afterEach(async () => {
-    configService.set('LTI_CANVAS_CLIENT_ID', originalCanvasClientId);
     await Database.dataSource.synchronize(true);
   });
 
@@ -201,8 +208,8 @@ describe('LtiController', () => {
       helpMeRole?: Role,
       canvasRole = instructorRole,
     ) => {
-      configService.set('LTI_CANVAS_CLIENT_ID', '1');
       await lmsCourseIntFactory.create({
+        orgIntegration,
         course,
         apiCourseId: canvasCourseId,
       });
@@ -305,7 +312,8 @@ describe('LtiController', () => {
       async (kind) => {
         await setupDeepLinkLaunch(Role.STUDENT);
         if (kind === 'untrusted') {
-          configService.set('LTI_CANVAS_CLIENT_ID', 'other-client');
+          orgIntegration.ltiPlatformId = null;
+          await orgIntegration.save();
         } else {
           const platform = await provider.getPlatform(
             'http://platform.com',
@@ -460,8 +468,85 @@ describe('LtiController', () => {
         .get(url)
         .expect(200)
         .then((response) => {
-          expect(response.body).toEqual(expect.arrayContaining(platforms));
+          expect(response.body).toEqual(
+            expect.arrayContaining([
+              {
+                ...platforms[0],
+                organizationId: orgIntegration.organizationId,
+              },
+              ...platforms.slice(1),
+            ]),
+          );
         });
+    });
+  });
+
+  describe('PATCH lti/platform/:kid/organization', () => {
+    it('requires a site administrator and validates the organization ID', async () => {
+      const url = `/lti/platform/${platforms[1].kid}/organization`;
+      await supertest({ userId: user.id })
+        .patch(url)
+        .send({ organizationId: orgIntegration.organizationId })
+        .expect(403);
+      const admin = await UserFactory.create({ userRole: UserRole.ADMIN });
+      for (const organizationId of [undefined, '1', 0, -1, 1.5]) {
+        await supertest({ userId: admin.id })
+          .patch(url)
+          .send({ organizationId })
+          .expect(400);
+      }
+    });
+
+    it('assigns, lists, and unassigns an existing registration without replacing it', async () => {
+      const admin = await UserFactory.create({ userRole: UserRole.ADMIN });
+      const integration = await lmsOrgIntFactory.create();
+      const kid = platforms[1].kid;
+      const url = `/lti/platform/${kid}/organization`;
+      await supertest({ userId: admin.id })
+        .patch(url)
+        .send({ organizationId: integration.organizationId })
+        .expect(200);
+      const list = await supertest({ userId: admin.id })
+        .get('/lti/platform')
+        .expect(200);
+      expect(list.body).toContainEqual({
+        ...platforms[1],
+        organizationId: integration.organizationId,
+      });
+      await supertest({ userId: admin.id })
+        .patch(url)
+        .send({ organizationId: null })
+        .expect(200);
+      expect(
+        (
+          await LMSOrganizationIntegrationModel.findOneByOrFail({
+            organizationId: integration.organizationId,
+          })
+        ).ltiPlatformId,
+      ).toBeNull();
+      expect((await provider.getPlatformById(kid)).clientId).toBe(
+        platforms[1].clientId,
+      );
+    });
+
+    it('does not let a registration or organization be reassigned implicitly', async () => {
+      const admin = await UserFactory.create({ userRole: UserRole.ADMIN });
+      const integration = await lmsOrgIntFactory.create();
+      await supertest({ userId: admin.id })
+        .patch(`/lti/platform/${platforms[0].kid}/organization`)
+        .send({ organizationId: integration.organizationId })
+        .expect(409);
+      await supertest({ userId: admin.id })
+        .patch(`/lti/platform/${platforms[1].kid}/organization`)
+        .send({ organizationId: orgIntegration.organizationId })
+        .expect(409);
+      expect(
+        (
+          await LMSOrganizationIntegrationModel.findOneByOrFail({
+            organizationId: orgIntegration.organizationId,
+          })
+        ).ltiPlatformId,
+      ).toBe(platforms[0].kid);
     });
   });
 

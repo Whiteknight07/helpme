@@ -126,43 +126,4 @@ describe('ChatbotApiService', () => {
       service.queryFeedback('user prompt', 42, 'system prompt'),
     ).rejects.toThrow();
   });
-
-  it('aborts a hung feedback request at the host deadline and fails without retrying', async () => {
-    const configService = new ConfigService({
-      CHATBOT_API_URL: 'https://chatbot.test',
-      CHATBOT_API_KEY: 'test-chatbot-api-key',
-    });
-    const service = new ChatbotApiService(configService);
-
-    // Substitute the two-minute production timeout with 10ms so the real
-    // abort path runs quickly.
-    const realTimeout = AbortSignal.timeout.bind(AbortSignal);
-    const timeoutSpy = jest
-      .spyOn(AbortSignal, 'timeout')
-      .mockImplementation(() => realTimeout(10));
-
-    const mockFetch = jest.fn<
-      ReturnType<typeof fetch>,
-      Parameters<typeof fetch>
-    >();
-    mockFetch.mockImplementation(
-      (_url: URL | RequestInfo, init?: RequestInit) =>
-        new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () =>
-            reject(init.signal?.reason),
-          );
-        }),
-    );
-    global.fetch = mockFetch;
-
-    await expect(
-      service.queryFeedback('user prompt', 42, 'system prompt'),
-    ).rejects.toMatchObject({
-      status: 504,
-      message: 'The chatbot request timed out.',
-    });
-
-    expect(timeoutSpy).toHaveBeenCalledWith(120000);
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-  });
 });

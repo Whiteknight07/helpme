@@ -4,7 +4,7 @@ import {
   type QuestionGradingSettings,
 } from '@koh/common';
 import { z } from 'zod';
-import type { MechanicalFacts } from './deterministic-checks';
+import type { MechanicalFacts } from './deterministic-check-utils';
 
 export type ValidatedGradePayload = {
   score: number;

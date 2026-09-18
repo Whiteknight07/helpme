@@ -165,20 +165,21 @@ If dynamic registration is unavailable in your Canvas version, stop here and ask
 
 ## 3. Configure which Canvas HelpMe trusts
 
-Use your own local identifier. Do not copy another developer's value or a production value.
+Sign in to HelpMe as a **site administrator**, open **LTI Platforms**, and assign the existing Canvas registration to the organization whose LMS integration points at your Canvas installation. Configure that organization's Canvas LMS integration first.
 
-Use the client ID from the Canvas registration screen. It is the LTI client ID, not the developer key's internal database row ID.
+Match the registration's issuer and client ID to Canvas's installed HelpMe app. The LTI client ID is separate from the LMS integration's API OAuth client ID; leave the API credentials unchanged. The issuer may be `https://canvas.instructure.com` even when Canvas runs at a local hostname.
 
-Add the value to `packages/server/.env`:
+An active registration without an organization assignment cannot launch HelpMe. Assignment does not change Canvas's existing registration, signing keys, deployment, or saved links. You do not need `LTI_CANVAS_CLIENT_ID` or an application restart after assigning it.
 
-```dotenv
-LTI_CANVAS_CLIENT_ID=<client ID from the registration screen>
-```
+### Upgrading an existing installation
 
-Replace the entire placeholder, including angle brackets.
+Before serving the new application version, apply the generated migration and explicitly populate the existing Canvas integration's `ltiPlatformId` with the verified registration's `kid` from the separate LTI database. Verify the organization, issuer, and client ID against the installed Canvas app; do not infer the association from a hostname or the first registration in the table. Coordinate this step with deployment because the old admin UI cannot assign it, and the new version refuses unassigned launches.
 
-Stop and restart `yarn cross-env PORT=3001 yarn dev`. Keep the forwarding process running.
-A missing client ID blocks launches. A mismatched client ID returns `403`.
+Keep the existing LTI database and `LTI_SECRET_KEY`. No Canvas registration changes are required for this association. Before reopening traffic, check a course-navigation launch, instructor question selection, and a student question launch. If rolling back the application, retain the previous environment configuration until the rollback window has closed.
+
+### LTI application sessions
+
+HelpMe's LTI application sessions last five hours so students can finish a long quiz without the previous short session interrupting them. This applies to existing LTI pages as well as embedded questions. A stolen session token also remains usable longer, so retain secure, HTTP-only cookies over HTTPS in production. The Canvas launch validation and temporary login/identity tokens keep their separate lifetimes.
 
 ## Test the embedded question
 
@@ -207,7 +208,7 @@ You do not need to register the app again unless you replace its databases or ch
 - **Connection refused from Canvas:** Confirm that the forwarder is running on `3100` and HelpMe is running on `3000`.
 - **Timeout from Canvas:** Check the Docker host mapping and local firewall. Docker distributions can route the host differently; verify the address with the connectivity command above.
 - **Port already in use:** Stop the old forwarder before starting another copy. Do not change ports without updating the configured URLs.
-- **Launch returns 403:** Check the client ID and restart HelpMe. Staff also need a linked identity and course access.
+- **Launch returns 403:** Check that the active LTI registration is assigned to the correct organization in HelpMe's LTI Platforms page. Staff also need a linked identity and course access.
 - **Launch works but feedback fails:** Check the chatbot backend and the question's grading settings.
 - **Old hostname appears after a redirect:** Update the existing app registration and HelpMe environment settings consistently. Reinsert saved Canvas links that contain the old hostname.
 

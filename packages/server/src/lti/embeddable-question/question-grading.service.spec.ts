@@ -1,7 +1,7 @@
-import { ChatbotApiService } from '../../../chatbot/chatbot-api.service';
+import { ChatbotApiService } from '../../chatbot/chatbot-api.service';
 import { ConfigService } from '@nestjs/config';
 import type { QuestionGradingSettings } from '@koh/common';
-import { GradingConstraintError } from './grading';
+import { GradingConstraintError } from './grading-utils';
 import { QuestionGradingService } from './question-grading.service';
 
 function settings(
