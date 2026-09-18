@@ -9,12 +9,24 @@ import {
   UserFactory,
 } from './util/factories';
 import { setupIntegrationTest } from './util/testUtils';
+import { getAuthTokenString } from '../../frontend/app/api/cookie-utils';
+
+const mockRequestCookies = new Map<string, string>();
+jest.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => {
+      const value = mockRequestCookies.get(name);
+      return value === undefined ? undefined : { name, value };
+    },
+  }),
+}));
 
 describe('App and LTI session cookie coexistence', () => {
   const { supertest, getTestModule } = setupIntegrationTest(LtiModule);
 
   let jwtService: JwtService;
   beforeEach(() => {
+    mockRequestCookies.clear();
     jwtService = getTestModule().get<JwtService>(JwtService);
   });
 
@@ -148,10 +160,25 @@ describe('App and LTI session cookie coexistence', () => {
     // proves the ordinary app session took precedence.
     const studentLtiSession = signLtiSession(student.id);
 
-    await expectLtiQuestionList(
-      [`auth_token=${appSession}`, `lti_auth_token=${studentLtiSession}`],
-      course,
-      200,
+    mockRequestCookies.set('auth_token', appSession);
+    mockRequestCookies.set('lti_auth_token', studentLtiSession);
+    await expectLtiQuestionList([await getAuthTokenString()], course, 200);
+  });
+
+  it('keeps the ordinary app session signed in when the frontend also has an expired LTI cookie', async () => {
+    const { professor, course } = await setupProfessor();
+    mockRequestCookies.set(
+      'auth_token',
+      jwtService.sign({ userId: professor.id }),
     );
+    mockRequestCookies.set(
+      'lti_auth_token',
+      jwtService.sign(
+        { userId: professor.id, restrictPaths },
+        { expiresIn: -60 },
+      ),
+    );
+
+    await expectLtiQuestionList([await getAuthTokenString()], course, 200);
   });
 });

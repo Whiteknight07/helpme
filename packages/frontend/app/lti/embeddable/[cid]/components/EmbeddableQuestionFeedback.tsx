@@ -54,7 +54,9 @@ export default function EmbeddableQuestionFeedback({
 
   return (
     <div className="flex w-full flex-col gap-2">
-      <p className="text-sm font-medium text-zinc-700">{questionText}</p>
+      <p className="whitespace-pre-wrap break-words text-sm font-medium text-zinc-700">
+        {questionText}
+      </p>
 
       <TextArea
         value={inputText}
