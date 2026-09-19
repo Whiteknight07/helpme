@@ -156,8 +156,6 @@ export default function CourseLMSIntegrationPage(props: {
       message.error(error_msg, 3).then(() => {
         router.push(pathname)
       })
-    } else {
-      router.push(pathname)
     }
   }, [pathname, router, searchParams])
 

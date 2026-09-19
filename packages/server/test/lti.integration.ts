@@ -148,6 +148,8 @@ describe('LtiController', () => {
   });
 
   it('preserves the registration, signing key, and organization mapping when its remote registration returns 404', async () => {
+    const ltiSecret = process.env.LTI_SECRET_KEY;
+    process.env.LTI_SECRET_KEY = testEncryptionKey;
     const kid = platforms[0].kid;
     await Database.dataSource.getRepository(PlatformModel).update(kid, {
       dynamicallyRegistered: true,
@@ -179,6 +181,8 @@ describe('LtiController', () => {
         ).ltiPlatformId,
       ).toBe(kid);
     } finally {
+      if (ltiSecret === undefined) delete process.env.LTI_SECRET_KEY;
+      else process.env.LTI_SECRET_KEY = ltiSecret;
       remoteRegistration.mockRestore();
     }
   });
