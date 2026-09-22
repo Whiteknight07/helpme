@@ -200,10 +200,29 @@ function asId(value: unknown): number | null {
  * entities. A submission that is only whitespace (including `&nbsp;`)
  * normalises to the empty string so callers can tell a blank answer apart from
  * unreadable data.
+ *
+ * Headings and table headers keep the student's casing (the library upper-cases
+ * them by default, which would trip capitalization checks), and table cells
+ * stay separated instead of running together.
  */
+const ESSAY_TEXT_OPTIONS = {
+  wordwrap: false as const,
+  selectors: [
+    ...['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map((selector) => ({
+      selector,
+      options: { uppercase: false },
+    })),
+    {
+      selector: 'table',
+      format: 'dataTable',
+      options: { uppercaseHeaderCells: false },
+    },
+  ],
+};
+
 export function htmlToEssayText(html: unknown): string {
   if (typeof html !== 'string') return '';
-  const text = convert(html, { wordwrap: false }).replace(/\u00a0/g, ' ');
+  const text = convert(html, ESSAY_TEXT_OPTIONS).replace(/\u00a0/g, ' ');
   return text.trim().length === 0 ? '' : text;
 }
 

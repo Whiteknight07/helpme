@@ -1,6 +1,6 @@
 import { LMSApiResponseStatus } from '@koh/common';
 import { LMSCourseIntegrationModel } from './lmsCourseIntegration.entity';
-import { CanvasLMSAdapter } from './lmsIntegration.adapter';
+import { CanvasLMSAdapter, htmlToEssayText } from './lmsIntegration.adapter';
 
 const COURSE_ID = 42;
 const BASE_URL = 'https://canvas.example.test';
@@ -249,5 +249,18 @@ describe('CanvasLMSAdapter Classic quiz grading', () => {
         },
       ],
     });
+  });
+});
+
+describe('htmlToEssayText', () => {
+  it('keeps heading casing and separates table cells', () => {
+    expect(
+      htmlToEssayText('<h2>My Indigenous goals</h2><p>I did it.</p>'),
+    ).toBe('My Indigenous goals\n\nI did it.');
+    expect(
+      htmlToEssayText(
+        '<table><tr><th>strength</th></tr><tr><td>listening</td></tr></table>',
+      ),
+    ).toBe('strength\nlistening');
   });
 });
