@@ -532,6 +532,17 @@ export abstract class AbstractLMSAdapter {
     };
   }
 
+  async putSubmissionComment(params: {
+    assignmentId: number;
+    userId: number;
+    text: string;
+  }): Promise<LMSWriteResult> {
+    return {
+      outcome: 'unsupported',
+      message: 'Submission comments are not supported by this LMS platform.',
+    };
+  }
+
   getDocumentLink(documentId: number, documentType: LMSUpload): string {
     switch (documentType) {
       default:
@@ -570,6 +581,7 @@ export const CANVAS_OAUTH_SCOPES: readonly string[] = [
   'url:GET|/api/v1/courses/:course_id/assignments/:assignment_id/submissions',
   'url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions',
   'url:PUT|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions/:id',
+  'url:PUT|/api/v1/courses/:course_id/assignments/:assignment_id/submissions/:user_id',
 ];
 
 export class CanvasLMSAdapter extends ImplementedLMSAdapter {
@@ -1389,6 +1401,18 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
           },
         ],
       },
+    );
+  }
+
+  /** Adds a submission comment. It does not post a manually posted grade. */
+  async putSubmissionComment(params: {
+    assignmentId: number;
+    userId: number;
+    text: string;
+  }): Promise<LMSWriteResult> {
+    return this.sendCanvasWrite(
+      `courses/${this.integration.apiCourseId}/assignments/${params.assignmentId}/submissions/${params.userId}`,
+      { comment: { text_comment: params.text } },
     );
   }
 

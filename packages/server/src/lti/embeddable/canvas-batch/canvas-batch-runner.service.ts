@@ -37,6 +37,25 @@ function outcomeMessage(result: LMSWriteResult): string {
     : `Canvas rejected the write${result.httpStatus ? ` (${result.httpStatus})` : ''}. ${result.message ?? ''}`;
 }
 
+/** SpeedGrader note for staff; null when no question was flagged. */
+export function reviewComment(
+  questions: CanvasBatchQuestionWork[],
+): string | null {
+  const reasons = questions
+    .filter((question) => question.humanReviewReason)
+    .map(
+      (question) =>
+        `Question ${question.position} review reason: ${question.humanReviewReason}`,
+    );
+  return reasons.length
+    ? [
+        'REVIEW REQUIRED (HelpMe AI)',
+        ...reasons,
+        'Delete this comment before posting grades; students can see it once grades are posted.',
+      ].join('\n\n')
+    : null;
+}
+
 /**
  * The single batch worker. It discovers every eligible completed attempt,
  * grades each mapped question, persists the validated result, and prefills the
@@ -386,6 +405,17 @@ export class CanvasBatchRunnerService {
     });
     if (result.outcome === 'success') {
       this.markPosted(attempt.questions);
+      const text = reviewComment(attempt.questions);
+      if (text) {
+        const commented = await adapter.putSubmissionComment({
+          assignmentId: run.assignmentId,
+          userId: attempt.canvasUserId,
+          text,
+        });
+        if (commented.outcome !== 'success') {
+          attempt.error = `Grades were prefilled, but the review comment was not added. ${outcomeMessage(commented)}`;
+        }
+      }
     } else {
       this.markWriteError(attempt.questions, outcomeMessage(result));
     }
