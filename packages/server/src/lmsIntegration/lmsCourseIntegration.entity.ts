@@ -20,6 +20,7 @@ import { LMSResourceType } from '@koh/common';
 import { LMSAccessTokenModel } from './lms-access-token.entity';
 
 @Entity('lms_course_integration_model')
+// Different organization integrations may contain the same Canvas course ID.
 @Unique(['orgIntegration', 'apiCourseId'])
 export class LMSCourseIntegrationModel extends BaseEntity {
   @PrimaryColumn()

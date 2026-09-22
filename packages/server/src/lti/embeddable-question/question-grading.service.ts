@@ -63,12 +63,13 @@ export class QuestionGradingService {
     }
 
     const effectiveCap = effectiveScoreCap(facts.triggeredChecks);
-    const systemPrompt = buildSystemPrompt(settings, effectiveCap);
-    const userPrompt = buildUserPrompt(
+    const systemPrompt = buildSystemPrompt(
+      settings,
+      effectiveCap,
       snapshot.questionText,
-      submission,
       facts,
     );
+    const userPrompt = buildUserPrompt(submission);
 
     // The chatbot service owns provider retries; HelpMe makes exactly one
     // call and validates the answer once. An invalid grade errors out and

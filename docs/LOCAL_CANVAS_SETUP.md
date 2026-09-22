@@ -12,6 +12,8 @@ If port `80` is already occupied, stop the conflicting service before following 
 
 Keep `NODE_ENV=development`. You do not need Portless or HTTPS certificates for this workflow.
 
+For background on the LMS integration and authentication setup, see [the original LTI PR (#351)](https://github.com/ubco-db/helpme/pull/351).
+
 ## Prepare the applications
 
 1. Follow [the HelpMe development guide](DEVELOPING.md#installation-to-run-locally) to install dependencies and create the environment files.
@@ -165,27 +167,20 @@ If dynamic registration is unavailable in your Canvas version, stop here and ask
 
 ## 3. Configure which Canvas HelpMe trusts
 
-Sign in to HelpMe as a **site administrator**, open **LTI Platforms**, and assign the existing Canvas registration to the organization whose LMS integration points at your Canvas installation. Configure that organization's Canvas LMS integration first.
+1. Sign in to HelpMe as a **site administrator** (`UserRole.ADMIN`, not an organization administrator). Open **Admin Panel → LTI Platforms** and confirm that the Canvas registration from the previous step appears. Match its issuer and client ID to Canvas's installed HelpMe app. The issuer may be `https://canvas.instructure.com` even for local Canvas.
+2. In Canvas, create an **API/OAuth developer key** and copy its client ID and client secret. This key is separate from the LTI registration; the two client IDs are not interchangeable. If you already have an API/OAuth key for this integration, reuse it.
+3. In HelpMe, open **Organization Settings → LMS Integrations → Add New Integration**. Select Canvas, set **LMS Domain** to `helpme.test` without `http://`, turn **HTTPS** off for this local setup, and enter the **Developer Key Client ID** and **Developer Key Client Secret** from step 2. If the organization already has this integration, check its settings instead of creating another.
+4. Return to **Admin Panel → LTI Platforms** and assign the Canvas registration to that organization's LMS integration.
 
-Match the registration's issuer and client ID to Canvas's installed HelpMe app. The LTI client ID is separate from the LMS integration's API OAuth client ID; leave the API credentials unchanged. The issuer may be `https://canvas.instructure.com` even when Canvas runs at a local hostname.
+The organization integration stores the Canvas API configuration. The association tells HelpMe which organization an incoming LTI launch belongs to. Deep linking itself does not use the API/OAuth credentials.
 
-An active registration without an organization assignment cannot launch HelpMe. Assignment does not change Canvas's existing registration, signing keys, deployment, or saved links. You do not need `LTI_CANVAS_CLIENT_ID` or an application restart after assigning it.
-
-### Upgrading an existing installation
-
-Before serving the new application version, apply the generated migration and explicitly populate the existing Canvas integration's `ltiPlatformId` with the verified registration's `kid` from the separate LTI database. Verify the organization, issuer, and client ID against the installed Canvas app; do not infer the association from a hostname or the first registration in the table. Coordinate this step with deployment because the old admin UI cannot assign it, and the new version refuses unassigned launches.
-
-Keep the existing LTI database and `LTI_SECRET_KEY`. No Canvas registration changes are required for this association. Before reopening traffic, check a course-navigation launch, instructor question selection, and a student question launch. If rolling back the application, retain the previous environment configuration until the rollback window has closed.
-
-### LTI application sessions
-
-HelpMe's LTI application sessions last five hours so students can finish a long quiz without the previous short session interrupting them. This applies to existing LTI pages as well as embedded questions. A stolen session token also remains usable longer, so retain secure, HTTP-only cookies over HTTPS in production. The Canvas launch validation and temporary login/identity tokens keep their separate lifetimes.
+An active registration without an organization assignment cannot launch HelpMe. Assignment does not change Canvas's existing registration, signing keys, deployment, or saved links, and does not require an application restart.
 
 ## Test the embedded question
 
 1. Map the local Canvas course to a HelpMe course through HelpMe's LMS integration settings.
 2. Link the Canvas instructor identity to a HelpMe account with staff access to that course through the normal Canvas app launch.
-3. Configure the chatbot connection for the course. Create an embeddable question in HelpMe and set its grading settings (rubric, score scale, automatic checks).
+3. Configure the chatbot connection for the course. Create an embeddable question in HelpMe and set its grading settings (rubric, score scale, automatic checks). To flag answers for human review, describe when review is needed in the **Main grading prompt** or **Feedback instructions**. The model explains which criteria the answer meets, or returns no review reason if none apply.
 4. Open the Canvas content editor. Use the HelpMe editor button to select and insert the question.
 5. Save the content. Open it with a local student account and submit a response.
 
