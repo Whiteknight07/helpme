@@ -186,6 +186,80 @@ An active registration without an organization assignment cannot launch HelpMe. 
 
 Expect feedback inside Canvas. An instructor preview exercises staff authorization, so use a student account to check the learner flow.
 
+## Configure Classic quiz batch grading
+
+Batch grading uses Canvas OAuth in addition to the LTI launch. Configure the
+HelpMe Canvas developer key with **Require Scopes** enabled and only these URL
+scopes:
+
+```text
+url:GET|/api/v1/users/:user_id/courses
+url:GET|/api/v1/courses/:id
+url:GET|/api/v1/courses/:course_id/assignments
+url:GET|/api/v1/courses/:course_id/users
+url:GET|/api/v1/courses/:course_id/enrollments
+url:GET|/api/v1/courses/:course_id/discussion_topics
+url:GET|/api/v1/courses/:course_id/pages
+url:GET|/api/v1/courses/:course_id/pages/:url_or_id
+url:GET|/api/v1/courses/:course_id/files
+url:GET|/api/v1/courses/:course_id/quizzes
+url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/questions
+url:GET|/api/v1/courses/:course_id/lti_resource_links/:id
+url:GET|/api/v1/courses/:course_id/assignments/:assignment_id/submissions
+url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions
+url:PUT|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions/:id
+```
+
+Enable the developer key's **Allow Include Parameters** setting. Canvas
+otherwise returns successful submission responses but silently omits the
+`submission_history` needed for safe grading. After changing scopes or that
+setting, reconnect the HelpMe course so
+the instructor grants the new scopes; an old access token does not gain them
+automatically. The Canvas user who connects the course must also have normal
+teacher grading permission.
+
+For a local run:
+
+1. Start Redis, HelpMe, and the chatbot backend. Configure the HelpMe course's
+   feedback model through its existing chatbot course/provider settings.
+2. In Canvas, create a published **Classic Quiz** with essay questions. Set
+   each question's points to the matching HelpMe question maximum.
+3. Set the assignment's grade posting policy to **Manually** before students
+   submit. HelpMe refuses auto-post assignments and attempts Canvas has already
+   posted.
+4. In HelpMe, open **Course Settings**, **Canvas Batch Grading**, and select the
+   quiz. HelpMe detects each embedded HelpMe question from its Canvas LTI
+   resource link.
+5. Choose **Grade and prefill SpeedGrader**. Do not edit the quiz, grade it in
+   Canvas, or post grades while the run is active.
+6. When the run completes, review its flags/errors and the prefilled values in
+   SpeedGrader. Post grades manually in Canvas only after review; HelpMe has no
+   grade-release action.
+
+Production use needs Canvas administrator approval for these exact scopes and
+the include setting. Do not replace them with an account-wide wildcard.
+
+### Feedback deployment and failures
+
+Deploy chatbot's structured feedback support first; it continues accepting the
+existing LTI caller's `params.systemPrompt`. Then apply the HelpMe migrations
+(including `CanvasBatchRunError1790080000000`) and deploy HelpMe. Roll back HelpMe
+before rolling back chatbot. Remove the legacy contract only after every caller
+has migrated. See [the grading evaluation handoff](CANVAS_GRADING_HANDOFF.md) for
+the request contract and evaluation entry point.
+
+A failed run shows its error in Canvas Batch Grading and stops polling. Resolve
+the error, check SpeedGrader, and start a new run. The failed run remains available
+for review; a new run freezes the current settings. A 401 requires reconnecting
+the integration; a 403 requires checking the connected account's permissions and
+developer key scopes before reconnecting. These messages also apply when Canvas
+returns an HTML error page.
+
+Rejected writes and unknown write outcomes appear separately in the report.
+HelpMe does not retry either write. For an unknown outcome, inspect SpeedGrader
+before starting another run; an interrupted request may have reached Canvas.
+Existing grades are checked again before any subsequent write.
+
 ## Start another development session
 
 1. Start the Canvas Docker services.

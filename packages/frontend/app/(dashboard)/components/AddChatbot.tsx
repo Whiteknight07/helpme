@@ -1,6 +1,7 @@
 'use client'
 import React, { useEffect } from 'react'
 import { useChatbotContext } from '../course/[cid]/components/chatbot/ChatbotProvider'
+import { usePathname } from 'next/navigation'
 
 type AddChatbotProps = {
   courseId: number
@@ -12,15 +13,15 @@ type AddChatbotProps = {
  * This is kinda a workaround to get this on layout.tsx (which is a server component)
  */
 const AddChatbot: React.FC<AddChatbotProps> = ({ courseId, children }) => {
-  // chatbot
+  const pathname = usePathname()
   const { setCid, setRenderSmallChatbot } = useChatbotContext()
   useEffect(() => {
     setCid(courseId)
   }, [courseId, setCid])
   useEffect(() => {
-    setRenderSmallChatbot(true)
+    setRenderSmallChatbot(!pathname.endsWith('/canvas_batch_grading'))
     return () => setRenderSmallChatbot(false) // make the chatbot inactive when the user leaves the page
-  }, [setRenderSmallChatbot])
+  }, [pathname, setRenderSmallChatbot])
   return children
 }
 export default AddChatbot

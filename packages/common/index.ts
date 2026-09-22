@@ -497,6 +497,7 @@ export interface ChatbotAskSuggestedParams {
 }
 
 export * from './embeddable-assessment'
+export * from './canvas-batch-grading'
 
 export interface ChatbotAgentCourse {
   courseId: number
@@ -2320,6 +2321,8 @@ export enum LMSApiResponseStatus {
   None = '',
   InvalidPlatform = 'The specified LMS platform is not registered with the HelpMe system.',
   InvalidKey = 'The specified API key was not valid.',
+  Unauthorized = 'Canvas authentication failed (401). Reconnect the Canvas integration and try again.',
+  Forbidden = 'Canvas denied access (403). Check the connected account permissions and developer key scopes, then reconnect the integration.',
   InvalidCourseId = 'The specified LMS API course identifier was not valid.',
   InvalidConfiguration = 'The specified LMS configuration was not valid.',
   Error = 'An error occurred, operation with or connection to the LMS API failed.',

@@ -65,11 +65,7 @@ export enum LMSUpload {
 }
 
 type ExtendedLMSItem = (
-  | LMSAnnouncement
-  | LMSAssignment
-  | LMSPage
-  | LMSFile
-  | LMSQuiz
+  LMSAnnouncement | LMSAssignment | LMSPage | LMSFile | LMSQuiz
 ) & {
   chatbotDocumentId: string;
 };
@@ -114,6 +110,9 @@ export class LMSIntegrationService {
 
   lmsStatusToHttpStatus(status: LMSApiResponseStatus): HttpStatus {
     switch (status) {
+      case LMSApiResponseStatus.Forbidden:
+        return HttpStatus.FORBIDDEN;
+      case LMSApiResponseStatus.Unauthorized:
       case LMSApiResponseStatus.InvalidKey:
         return HttpStatus.UNAUTHORIZED;
       case LMSApiResponseStatus.InvalidPlatform:
@@ -1352,12 +1351,10 @@ export class LMSIntegrationService {
     }
     return await this.chatbotApiService
       .deleteDocument(item.chatbotDocumentId, courseId, token.token)
-      .then(
-        (): LMSFileUploadResponse => ({
-          id: item.id,
-          success: true,
-        }),
-      )
+      .then((): LMSFileUploadResponse => ({
+        id: item.id,
+        success: true,
+      }))
       .catch((error): LMSFileUploadResponse => {
         console.error(error);
         // 404 = Already deleted/didn't exist

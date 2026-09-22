@@ -8,6 +8,10 @@ import {
   AsyncQuestionCommentParams,
   BatchCourseCloneAttributes,
   Calendar,
+  CanvasBatchQuizOption,
+  CanvasBatchRunReport,
+  CanvasBatchRunSummary,
+  StartCanvasBatchRunParams,
   ChatbotAskParams,
   ChatbotAskResponse,
   ChatbotAskSuggestedParams,
@@ -1904,6 +1908,33 @@ export class APIClient {
         this.req(
           'DELETE',
           `/api/v1/lti/embeddable-question/${courseId}/${questionId}`,
+        ),
+    },
+    canvasBatch: {
+      getQuizzes: async (courseId: number): Promise<CanvasBatchQuizOption[]> =>
+        this.req(
+          'GET',
+          `/api/v1/lti/embeddable/canvas-batch/${courseId}/quizzes`,
+        ),
+      getRuns: async (courseId: number): Promise<CanvasBatchRunSummary[]> =>
+        this.req('GET', `/api/v1/lti/embeddable/canvas-batch/${courseId}/runs`),
+      startRun: async (
+        courseId: number,
+        params: StartCanvasBatchRunParams,
+      ): Promise<CanvasBatchRunSummary> =>
+        this.req(
+          'POST',
+          `/api/v1/lti/embeddable/canvas-batch/${courseId}/runs`,
+          undefined,
+          params,
+        ),
+      getReport: async (
+        courseId: number,
+        runId: number,
+      ): Promise<CanvasBatchRunReport> =>
+        this.req(
+          'GET',
+          `/api/v1/lti/embeddable/canvas-batch/${courseId}/runs/${runId}/report`,
         ),
     },
   }

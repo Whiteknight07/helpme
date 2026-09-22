@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   questionGradingSettingsSchema,
+  FINAL_GRADING_INSTRUCTION,
   type GradingEvaluation,
   type GradingSnapshot,
   type QuestionGradingSettings,
@@ -9,8 +10,6 @@ import { ChatbotApiService } from '../../chatbot/chatbot-api.service';
 import { computeMechanicalFacts } from './deterministic-check-utils';
 import {
   buildAppliedRequirements,
-  buildSystemPrompt,
-  buildUserPrompt,
   effectiveScoreCap,
   validateGradePayload,
 } from './grading-utils';
@@ -24,11 +23,20 @@ export class QuestionGradingService {
     questionText,
     gradingSettings,
     submission,
+    gradingMode,
+    finalInstruction,
   }: {
     courseId: number;
     questionText: string;
     gradingSettings: QuestionGradingSettings;
     submission: string;
+    /**
+     * Internal batch-only mode. Omitted (or 'practice') is the unchanged
+     * practice path; 'final' appends the fixed final-mode suffix.
+     */
+    gradingMode?: 'final';
+    /** Frozen batch instruction; omitted for practice grading. */
+    finalInstruction?: string;
   }): Promise<GradingEvaluation> {
     // The one grading-path validation of the settings, before anything is
     // built or called; invalid settings fail before any chatbot call and
@@ -37,9 +45,19 @@ export class QuestionGradingService {
     if (!parsed.success) {
       throw new Error('Question grading settings are invalid.');
     }
+    const instruction =
+      gradingMode === 'final'
+        ? (finalInstruction ?? FINAL_GRADING_INSTRUCTION)
+        : undefined;
     const snapshot: GradingSnapshot = structuredClone({
       questionText,
       gradingSettings: parsed.data,
+      ...(gradingMode === 'final'
+        ? {
+            gradingMode: 'final' as const,
+            instruction,
+          }
+        : {}),
     });
     const settings = snapshot.gradingSettings;
     const facts = computeMechanicalFacts(submission, settings.checks);
@@ -63,27 +81,31 @@ export class QuestionGradingService {
     }
 
     const effectiveCap = effectiveScoreCap(facts.triggeredChecks);
-    const systemPrompt = buildSystemPrompt(
-      settings,
-      effectiveCap,
-      snapshot.questionText,
-      facts,
-    );
-    const userPrompt = buildUserPrompt(submission);
 
     // The chatbot service owns provider retries; HelpMe makes exactly one
     // call and validates the answer once. An invalid grade errors out and
     // the caller persists nothing.
     const response = await this.chatbotApiService.queryFeedback(
-      userPrompt,
+      submission,
       courseId,
-      systemPrompt,
+      {
+        questionText: snapshot.questionText,
+        rubric: settings.rubric,
+        feedbackInstructions: settings.feedbackInstructions,
+        scoreScale: settings.scoreScale,
+        ...(instruction ? { finalInstruction: instruction } : {}),
+      },
     );
-    const { score, comment, reasons, humanReviewReason } = validateGradePayload(
-      response.answer,
-      settings,
-      effectiveCap,
-    );
+    const {
+      score: rubricScore,
+      comment,
+      reasons,
+      humanReviewReason,
+    } = validateGradePayload(response.answer, settings);
+    // Keep mechanical checks out of model feedback, then apply their validated
+    // score cap deterministically and report it through appliedRequirements.
+    const score =
+      effectiveCap === null ? rubricScore : Math.min(rubricScore, effectiveCap);
     return {
       score,
       comment,

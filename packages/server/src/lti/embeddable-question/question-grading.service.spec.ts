@@ -1,6 +1,9 @@
 import { ChatbotApiService } from '../../chatbot/chatbot-api.service';
 import { ConfigService } from '@nestjs/config';
-import type { QuestionGradingSettings } from '@koh/common';
+import {
+  FINAL_GRADING_INSTRUCTION,
+  type QuestionGradingSettings,
+} from '@koh/common';
 import { GradingConstraintError } from './grading-utils';
 import { QuestionGradingService } from './question-grading.service';
 
@@ -105,6 +108,70 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
       ],
     });
   });
+
+  it('applies automatic caps after the model grades only the rubric', async () => {
+    const { service, fetchMock } = harness();
+    respond(fetchMock, validAnswer(2));
+
+    const result = await service.evaluate({
+      ...evaluateArgs,
+      gradingSettings: settings({
+        scoreScale: { max: 2, step: 0.5 },
+        checks: [{ kind: 'minimum_sentences', minimum: 2, scoreCap: 1 }],
+      }),
+      submission: 'One sentence.',
+    });
+    const request = JSON.parse(
+      (fetchMock.mock.calls[0][1] as RequestInit).body as string,
+    );
+
+    expect(result).toMatchObject({
+      score: 1,
+      appliedRequirements: [
+        'Score capped at 1: the answer is below the 2-sentence minimum.',
+      ],
+    });
+    expect(request.query).not.toContain('automatic_checks_triggered');
+    expect(request.params.grading).toEqual({
+      questionText: evaluateArgs.questionText,
+      rubric: evaluateArgs.gradingSettings.rubric,
+      feedbackInstructions: evaluateArgs.gradingSettings.feedbackInstructions,
+      scoreScale: { max: 2, step: 0.5 },
+    });
+    expect(request.query).toBe('One sentence.');
+  });
+
+  it.each([
+    {
+      gradingMode: 'final' as const,
+      finalInstruction: 'Frozen final instruction.',
+      expected: 'Frozen final instruction.',
+    },
+    {
+      gradingMode: 'final' as const,
+      finalInstruction: undefined,
+      expected: FINAL_GRADING_INSTRUCTION,
+    },
+    {
+      gradingMode: undefined,
+      finalInstruction: undefined,
+      expected: undefined,
+    },
+  ])(
+    'sends the final instruction for the grading mode: %j',
+    async ({ gradingMode, finalInstruction, expected }) => {
+      const { service, fetchMock } = harness();
+      respond(fetchMock, validAnswer());
+      const result = await service.evaluate({
+        ...evaluateArgs,
+        gradingMode,
+        finalInstruction,
+      });
+      const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+      expect(request.params.grading.finalInstruction).toBe(expected);
+      expect(result.gradingSnapshot.instruction).toBe(expected);
+    },
+  );
 
   it('propagates a human review reason from the model', async () => {
     const { service, fetchMock } = harness();

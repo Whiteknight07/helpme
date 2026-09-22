@@ -1,5 +1,6 @@
 import {
   AddChatbotQuestionParams,
+  QuestionGradingSettings,
   AddDocumentAggregateParams,
   AddDocumentChunkParams,
   ChatbotQuestionResponseChatbotDB,
@@ -20,6 +21,11 @@ const feedbackResponseSchema = z.object({
   answer: z.unknown(),
   model: z.string().optional(),
 });
+
+export type FeedbackGradingInput = Pick<
+  QuestionGradingSettings,
+  'rubric' | 'feedbackInstructions' | 'scoreScale'
+> & { questionText: string; finalInstruction?: string };
 
 export type FeedbackQueryResult = z.infer<typeof feedbackResponseSchema>;
 
@@ -177,19 +183,19 @@ export class ChatbotApiService {
   }
 
   /**
-   * Feedback uses the course's selected model and the supplied grading prompt.
+   * Feedback uses the course's selected model; chatbot builds the grading prompt.
    * The chatbot service owns provider retries for this request.
    */
   async queryFeedback(
     query: string,
     courseId: number,
-    systemPrompt: string,
+    grading: FeedbackGradingInput,
   ): Promise<FeedbackQueryResult> {
     const resp: unknown = await this.request('POST', `chatbot/query`, '', {
       query,
       type: 'feedback',
       courseId,
-      params: { systemPrompt },
+      params: { grading },
     });
     return feedbackResponseSchema.parse(resp);
   }
