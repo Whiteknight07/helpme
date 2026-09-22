@@ -197,6 +197,12 @@ export interface EmbeddableQuestionFeedback {
 export interface GradingSnapshot {
   questionText: string
   gradingSettings: QuestionGradingSettings
+  /**
+   * Batch/final grading only. Practice snapshots omit both fields, so their
+   * stored shape is unchanged.
+   */
+  gradingMode?: 'final'
+  instruction?: string
 }
 
 export type GradingEvaluation = EmbeddableQuestionFeedback & {

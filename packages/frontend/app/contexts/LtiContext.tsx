@@ -274,7 +274,11 @@ function useLtiMessenger(
 
   const listeningFunction = useCallback(
     (event: MessageEvent) => {
-      const data = JSON.parse(JSON.stringify(event.data))
+      const parentOrigin = getParentOrigin(window)
+      if (parentOrigin && event.origin !== parentOrigin) return
+
+      const data = event.data
+      if (typeof data !== 'object' || data === null) return
       if (data.error) {
         console.error(
           `Error returned from postMessage: ${event.data.error.code}: ${event.data.error.message}`,
@@ -282,7 +286,8 @@ function useLtiMessenger(
         return
       }
 
-      const subject = data.subject as string
+      if (typeof data.subject !== 'string') return
+      const subject = data.subject
       const original = subject.substring(
         0,
         subject.indexOf('.response'),
@@ -326,7 +331,7 @@ function useLtiMessenger(
           break
       }
     },
-    [keyMap, onGetDataResponse, onPutDataResponse],
+    [keyMap, onGetDataResponse, onPutDataResponse, window],
   )
 
   useEffect(() => {

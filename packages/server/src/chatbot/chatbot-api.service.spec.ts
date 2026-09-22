@@ -1,6 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import { ChatbotApiService } from './chatbot-api.service';
 
+const grading = {
+  questionText: 'Explain.',
+  rubric: 'Award points for accuracy.',
+  feedbackInstructions: '',
+  scoreScale: { max: 2, step: 0.5 },
+};
+
 describe('ChatbotApiService', () => {
   const originalFetch = global.fetch;
 
@@ -44,11 +51,7 @@ describe('ChatbotApiService', () => {
     );
     global.fetch = mockFetch;
 
-    const result = await service.queryFeedback(
-      'user prompt',
-      42,
-      'system prompt',
-    );
+    const result = await service.queryFeedback('user prompt', 42, grading);
 
     expect(result).toEqual({
       answer: expectedAnswer,
@@ -62,7 +65,7 @@ describe('ChatbotApiService', () => {
       query: 'user prompt',
       type: 'feedback',
       courseId: 42,
-      params: { systemPrompt: 'system prompt' },
+      params: { grading },
     });
   });
 
@@ -92,7 +95,7 @@ describe('ChatbotApiService', () => {
         }),
       );
       await expect(
-        service.queryFeedback('answer', 42, 'rubric'),
+        service.queryFeedback('answer', 42, grading),
       ).rejects.toMatchObject({
         status: 400,
         message: expectedMessage,
@@ -123,7 +126,7 @@ describe('ChatbotApiService', () => {
     global.fetch = mockFetch;
 
     await expect(
-      service.queryFeedback('user prompt', 42, 'system prompt'),
+      service.queryFeedback('user prompt', 42, grading),
     ).rejects.toThrow();
   });
 });
