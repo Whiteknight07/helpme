@@ -208,7 +208,12 @@ url:GET|/api/v1/courses/:course_id/lti_resource_links/:id
 url:GET|/api/v1/courses/:course_id/assignments/:assignment_id/submissions
 url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions
 url:PUT|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions/:id
+url:PUT|/api/v1/courses/:course_id/assignments/:assignment_id/submissions/:user_id
 ```
+
+The last scope adds one "REVIEW REQUIRED" submission comment when the AI flags
+any question in an attempt. With manual posting, the comment stays hidden until
+grades are posted, so staff should delete it after reviewing.
 
 Enable the developer key's **Allow Include Parameters** setting. Canvas
 otherwise returns successful submission responses but silently omits the

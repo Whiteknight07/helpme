@@ -165,6 +165,7 @@ function harness(
     putClassicAttemptGrades: jest
       .fn()
       .mockResolvedValue({ outcome: 'success' }),
+    putSubmissionComment: jest.fn().mockResolvedValue({ outcome: 'success' }),
   };
   const getAdapter = jest.fn().mockResolvedValue(adapter);
   const runner = new CanvasBatchRunnerService(
@@ -248,6 +249,48 @@ describe('CanvasBatchRunnerService', () => {
     },
   );
 
+  it('adds one review comment for flagged questions after prefilling', async () => {
+    const evaluate = jest
+      .fn()
+      .mockResolvedValueOnce(evaluation(4))
+      .mockResolvedValueOnce({
+        ...evaluation(3),
+        humanReviewReason: 'Potentially harmful content.',
+      });
+    const { runner, attempts, adapter } = harness(evaluate);
+
+    await runner.run(7);
+
+    expect(adapter.putSubmissionComment).toHaveBeenCalledTimes(1);
+    expect(adapter.putSubmissionComment).toHaveBeenCalledWith({
+      assignmentId: 900,
+      userId: 42,
+      text: expect.stringContaining(
+        'REVIEW REQUIRED (HelpMe AI)\n\nQuestion 2 review reason: Potentially harmful content.',
+      ),
+    });
+    expect(attempts[0].status).toBe(CanvasBatchAttemptStatus.Prefilled);
+  });
+
+  it('reports a failed review comment without undoing the prefill', async () => {
+    const { runner, attempts, adapter } = harness(
+      jest
+        .fn()
+        .mockResolvedValue({ ...evaluation(4), humanReviewReason: 'Unclear.' }),
+    );
+    adapter.putSubmissionComment.mockResolvedValue({
+      outcome: 'rejected',
+      httpStatus: 401,
+    });
+
+    await runner.run(7);
+
+    expect(attempts[0].questions[0].status).toBe(
+      CanvasBatchQuestionStatus.Posted,
+    );
+    expect(attempts[0].error).toContain('review comment was not added');
+  });
+
   it('grades a student and sends every question in one Canvas request', async () => {
     const evaluate = jest
       .fn()
@@ -257,6 +300,7 @@ describe('CanvasBatchRunnerService', () => {
 
     await runner.run(7);
 
+    expect(adapter.putSubmissionComment).not.toHaveBeenCalled();
     expect(adapter.putClassicAttemptGrades).toHaveBeenCalledTimes(1);
     expect(adapter.putClassicAttemptGrades).toHaveBeenCalledWith({
       quizId: 55,
