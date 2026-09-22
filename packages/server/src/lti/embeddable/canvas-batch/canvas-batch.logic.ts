@@ -1,26 +1,16 @@
-import * as crypto from 'crypto';
 import {
   BLANK_ANSWER_COMMENT,
   CanvasBatchQuestionSnapshot,
   CanvasBatchQuestionStatus,
-  CanvasBatchQuestionWrite,
   GradingSnapshot,
 } from '@koh/common';
-import {
-  LMSClassicAttemptAnswer,
-  LMSClassicQuiz,
-} from '../../../lmsIntegration/lmsIntegration.adapter';
+import { LMSClassicAttemptAnswer } from '../../../lmsIntegration/lmsIntegration.adapter';
 
 /**
  * Pure decision logic for the Classic Canvas batch backend. Everything here is
  * deterministic and side-effect free so the run's behaviour can be tested
  * without a database or a Canvas connection.
  */
-
-/** Stable answer hash used for the preflight compare immediately before a write. */
-export function hashAnswer(answer: string): string {
-  return crypto.createHash('sha256').update(answer, 'utf8').digest('hex');
-}
 
 /** Staff-visible error for an attempt Canvas could not hand us history for. */
 export const UNREADABLE_ATTEMPT_ERROR =
@@ -108,62 +98,4 @@ export function classifyDiscoveredAnswer(
     reasons: [],
     error: null,
   };
-}
-
-/**
- * True when the live quiz catalog no longer matches the frozen mapping: a
- * mapped question is gone, or its content, points, or embed changed. Returns an error string,
- * or null when nothing changed.
- */
-export function mappingChangedError(
-  quiz: LMSClassicQuiz,
-  questions: CanvasBatchQuestionSnapshot[],
-): string | null {
-  if (quiz.essayQuestions.length !== questions.length) {
-    return 'The Canvas quiz questions changed after this run started; nothing was written.';
-  }
-  for (const question of questions) {
-    const catalogQuestion = quiz.essayQuestions.find(
-      (candidate) => candidate.id === question.canvasQuestionId,
-    );
-    if (!catalogQuestion) {
-      return `Canvas question ${question.canvasQuestionId} is no longer an essay question of this quiz; nothing was written.`;
-    }
-    if (
-      catalogQuestion.text !== question.text ||
-      catalogQuestion.points !== question.canvasPoints ||
-      catalogQuestion.mapping.status !== 'detected' ||
-      catalogQuestion.mapping.lookupUuid !== question.lookupUuid ||
-      catalogQuestion.mapping.embeddableQuestionId !==
-        question.embeddableQuestionId
-    ) {
-      return `Canvas question ${question.canvasQuestionId} changed after this run started; nothing was written.`;
-    }
-  }
-  return null;
-}
-
-/** How an existing Canvas grade relates to the write this run is about to make. */
-export type ExistingGradeState = 'absent' | 'own' | 'foreign';
-
-/**
- * `own` means the existing score and comment are exactly this run's expected
- * write, so a resume is a no-op. `foreign` means someone else's grade or comment
- * is present and must be left untouched.
- */
-export function existingGradeState(
-  answer: LMSClassicAttemptAnswer | undefined,
-  expected: CanvasBatchQuestionWrite,
-): ExistingGradeState {
-  if (!answer) {
-    return 'foreign';
-  }
-  const score = answer.points;
-  const existingComment = (answer.comment ?? '').trim();
-  if (score == null && existingComment === '') {
-    return 'absent';
-  }
-  const scoreMatches = score != null && Math.abs(score - expected.score) < 1e-9;
-  const commentMatches = existingComment === expected.comment.trim();
-  return scoreMatches && commentMatches ? 'own' : 'foreign';
 }

@@ -41,12 +41,6 @@ export interface LMSClassicQuizRef {
   assignmentId: number;
 }
 
-/** Identifies one Classic quiz attempt belonging to a single student. */
-export interface LMSClassicAttemptRef extends LMSClassicQuizRef {
-  userId: number;
-  attempt?: number;
-}
-
 /** An essay question of a Classic quiz. */
 export type LMSClassicQuestionMapping =
   | {
@@ -528,16 +522,6 @@ export abstract class AbstractLMSAdapter {
    */
   async getClassicAttemptSnapshots(
     params: LMSClassicQuizRef,
-  ): Promise<LMSClassicAttemptSnapshotResult> {
-    return { status: LMSApiResponseStatus.InvalidPlatform };
-  }
-
-  /**
-   * A fresh, uncached snapshot of one student's attempt, used for preflight
-   * checks.
-   */
-  async getClassicAttemptSnapshot(
-    params: LMSClassicAttemptRef,
   ): Promise<LMSClassicAttemptSnapshotResult> {
     return { status: LMSApiResponseStatus.InvalidPlatform };
   }
@@ -1380,15 +1364,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     return this.collectClassicAttempts(params);
   }
 
-  async getClassicAttemptSnapshot(
-    params: LMSClassicAttemptRef,
-  ): Promise<LMSClassicAttemptSnapshotResult> {
-    return this.collectClassicAttempts(params, {
-      userId: params.userId,
-      attempt: params.attempt,
-    });
-  }
-
   async putClassicAttemptGrades(
     params: LMSClassicAttemptGradesUpdate,
   ): Promise<LMSWriteResult> {
@@ -1442,7 +1417,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
 
   private async collectClassicAttempts(
     ref: LMSClassicQuizRef,
-    filter?: { userId: number; attempt?: number },
   ): Promise<LMSClassicAttemptSnapshotResult> {
     const courseId = this.integration.apiCourseId;
 
@@ -1452,9 +1426,7 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       'quiz_submissions',
     );
     const assignmentSubmissions = await this.GetPaginatedUncached(
-      `courses/${courseId}/assignments/${ref.assignmentId}/submissions` +
-        `?include[]=submission_history` +
-        (filter ? `&student_ids[]=${filter.userId}` : ''),
+      `courses/${courseId}/assignments/${ref.assignmentId}/submissions?include[]=submission_history`,
     );
 
     if (quizSubmissions.status !== LMSApiResponseStatus.Success) {
@@ -1494,7 +1466,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       if (quizSubmissionId === null || userId === null || attempt === null) {
         continue;
       }
-      if (filter && userId !== filter.userId) continue;
       const workflowState = asString(quizSubmission.workflow_state);
       const completed =
         workflowState === 'complete' || workflowState === 'pending_review';
@@ -1558,10 +1529,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     }
 
     const attempts = [...trustedAttempts.values()]
-      .filter(
-        (candidate) =>
-          filter?.attempt === undefined || candidate.attempt === filter.attempt,
-      )
       .sort((left, right) =>
         left.userId === right.userId
           ? left.attempt - right.attempt

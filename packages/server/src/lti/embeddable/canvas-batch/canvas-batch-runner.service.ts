@@ -3,7 +3,6 @@ import {
   CanvasBatchAttemptStatus,
   CanvasBatchQuestionStatus,
   CanvasBatchQuestionWork,
-  CanvasBatchQuestionWrite,
   CanvasBatchRunStatus,
   ERROR_MESSAGES,
   LMSApiResponseStatus,
@@ -21,9 +20,6 @@ import {
 import {
   buildGradingSnapshot,
   classifyDiscoveredAnswer,
-  existingGradeState,
-  hashAnswer,
-  mappingChangedError,
   UNREADABLE_ATTEMPT_ERROR,
 } from './canvas-batch.logic';
 
@@ -61,8 +57,9 @@ export function reviewComment(
  * grades each mapped question, persists the validated result, and prefills the
  * per-question scores and comments. It never posts or releases grades.
  *
- * Each student is processed as one unit: every question must grade and pass a
- * fresh Canvas preflight before one complete grade request is sent.
+ * Each student is processed as one unit: every question must grade before one
+ * complete grade request is sent. Existing grades and posted grades are
+ * checked once, when attempts are discovered.
  */
 @Injectable()
 export class CanvasBatchRunnerService {
@@ -110,8 +107,9 @@ export class CanvasBatchRunnerService {
   /**
    * Records every eligible completed attempt that is not already known to this
    * run. Attempts already recorded are left alone, so a resume discovers only
-   * later attempts. Attempts that Canvas reported as unreadable are retained so
-   * the run can record a staff error.
+   * later attempts. Excused attempts and attempts whose grade is already posted
+   * are not recorded. Attempts that Canvas reported as unreadable are retained
+   * so the run can record a staff error.
    */
   private async discoverAttempts(
     run: CanvasBatchRunModel,
@@ -126,7 +124,7 @@ export class CanvasBatchRunnerService {
     }
 
     for (const attempt of result.snapshot.attempts) {
-      if (attempt.excused) {
+      if (attempt.excused || attempt.postedAt != null) {
         continue;
       }
       const existing = await this.store.findAttempt(
@@ -168,7 +166,6 @@ export class CanvasBatchRunnerService {
         embeddableQuestionId: question.embeddableQuestionId,
         maxScore: question.helpMeMax,
         answer: answer ? answer.text : null,
-        answerHash: hashAnswer(answer ? answer.text : ''),
         gradingSnapshot: buildGradingSnapshot(run.instruction, question),
         status: discovered.status,
         score: discovered.score,
@@ -262,11 +259,7 @@ export class CanvasBatchRunnerService {
     }
   }
 
-  /**
-   * Prefills one attempt's safe question scores and comments in a single Canvas
-   * request. The catalog and the attempt are re-read uncached immediately
-   * before the write; anything that changed since grading blocks the write.
-   */
+  /** Prefills one attempt's scores and comments in a single Canvas request. */
   private async prefillAttempt(
     run: CanvasBatchRunModel,
     adapter: AbstractLMSAdapter,
@@ -279,60 +272,12 @@ export class CanvasBatchRunnerService {
     ) {
       return;
     }
-
-    const catalogError = await this.preflightCatalog(run, adapter);
-    if (catalogError) {
-      this.markWriteError(attempt.questions, catalogError);
-      return;
-    }
-
-    const live = await this.safeReadAttempt(adapter, run, attempt);
-    if (!live) {
-      this.markWriteError(
-        attempt.questions,
-        'Could not re-read the attempt from Canvas before writing; nothing was written.',
-      );
-      return;
-    }
-    if (!live.readable) {
-      this.markWriteError(
-        attempt.questions,
-        'Canvas did not return usable submission history when the attempt was re-read; nothing was written.',
-      );
-      return;
-    }
-    if (live.excused) {
-      this.markWriteSkipped(attempt.questions);
-      return;
-    }
-    if (live.postedAt != null) {
-      this.markWriteSkipped(attempt.questions);
-      return;
-    }
-
     const writes: {
       canvasQuestionId: number;
       score: number;
       comment: string;
     }[] = [];
     for (const question of attempt.questions) {
-      const answer = live.answers.find(
-        (candidate) => candidate.questionId === question.canvasQuestionId,
-      );
-      if (!answer) {
-        this.markWriteError(
-          attempt.questions,
-          'Canvas did not return this question when the attempt was re-read; nothing was written.',
-        );
-        return;
-      }
-      if (hashAnswer(answer.text) !== question.answerHash) {
-        this.markWriteError(
-          attempt.questions,
-          'The student answer changed after grading, so this question was not written.',
-        );
-        return;
-      }
       if (question.score === null || question.comment === null) {
         this.markWriteError(
           attempt.questions,
@@ -340,50 +285,13 @@ export class CanvasBatchRunnerService {
         );
         return;
       }
-      const expected: CanvasBatchQuestionWrite = {
+      writes.push({
+        canvasQuestionId: question.canvasQuestionId,
         score: question.score,
         comment: question.comment,
-      };
-      const state = existingGradeState(answer, expected);
-      if (state === 'foreign') {
-        this.markWriteSkipped(attempt.questions);
-        return;
-      }
-      if (state === 'absent') {
-        writes.push({
-          canvasQuestionId: question.canvasQuestionId,
-          score: expected.score,
-          comment: expected.comment,
-        });
-      }
-    }
-
-    if (writes.length === 0) {
-      this.markPosted(attempt.questions);
-      return;
+      });
     }
     await this.sendWrites(run, adapter, attempt, writes);
-  }
-
-  /** Returns a block reason when the live catalog no longer matches the run. */
-  private async preflightCatalog(
-    run: CanvasBatchRunModel,
-    adapter: AbstractLMSAdapter,
-  ): Promise<string | null> {
-    const result = await adapter.getClassicQuizCatalog(run.canvasQuizId);
-    if (result.status !== LMSApiResponseStatus.Success) {
-      return `Could not re-read the Canvas quiz catalog: ${result.status} Nothing was written.`;
-    }
-    const quiz = result.quizzes.find(
-      (candidate) => candidate.quizId === run.canvasQuizId,
-    );
-    if (!quiz) {
-      return 'The Canvas quiz is no longer available; nothing was written.';
-    }
-    if (!quiz.postManually) {
-      return 'Canvas manual posting was turned off; nothing was written.';
-    }
-    return mappingChangedError(quiz, run.questions);
   }
 
   /** Sends every question score and comment for the attempt in one PUT. */
@@ -447,45 +355,12 @@ export class CanvasBatchRunnerService {
     }
   }
 
-  private markWriteSkipped(questions: CanvasBatchQuestionWork[]): void {
-    for (const question of questions) {
-      question.status = CanvasBatchQuestionStatus.Skipped;
-      question.error = null;
-    }
-  }
-
   private markPendingSkipped(questions: CanvasBatchQuestionWork[]): void {
     for (const question of questions) {
       if (question.status === CanvasBatchQuestionStatus.Pending) {
         question.status = CanvasBatchQuestionStatus.Skipped;
       }
     }
-  }
-
-  private async safeReadAttempt(
-    adapter: AbstractLMSAdapter,
-    run: CanvasBatchRunModel,
-    attempt: CanvasBatchAttemptModel,
-  ): Promise<LMSClassicAttempt | null> {
-    const result = await adapter.getClassicAttemptSnapshot({
-      quizId: run.canvasQuizId,
-      assignmentId: run.assignmentId,
-      userId: attempt.canvasUserId,
-      attempt: attempt.attemptNumber,
-    });
-    if (result.status !== LMSApiResponseStatus.Success) {
-      throw new Error(
-        `Could not re-read the Canvas attempt: ${result.status} Nothing was written.`,
-      );
-    }
-    if (!result.snapshot) return null;
-    return (
-      result.snapshot.attempts.find(
-        (candidate) =>
-          candidate.quizSubmissionId === attempt.quizSubmissionId &&
-          candidate.attempt === attempt.attemptNumber,
-      ) ?? null
-    );
   }
 
   private async completeRun(run: CanvasBatchRunModel): Promise<void> {
