@@ -7,10 +7,7 @@ import {
   type CanvasBatchQuestionSnapshot,
   type QuestionGradingSettings,
 } from '@koh/common';
-import type {
-  LMSClassicAttempt,
-  LMSClassicQuiz,
-} from '../../../lmsIntegration/lmsIntegration.adapter';
+import type { LMSClassicAttempt } from '../../../lmsIntegration/lmsIntegration.adapter';
 import { CanvasBatchAttemptModel } from './canvas-batch-attempt.entity';
 import { CanvasBatchService } from './canvas-batch.service';
 import { CanvasBatchRunnerService } from './canvas-batch-runner.service';
@@ -73,27 +70,6 @@ function canvasAttempt(): LMSClassicAttempt {
   };
 }
 
-function quiz(): LMSClassicQuiz {
-  return {
-    quizId: 55,
-    title: 'Essay Quiz',
-    assignmentId: 900,
-    postManually: true,
-    speedGraderUrl: 'https://canvas.test/speed_grader?assignment_id=900',
-    essayQuestions: questions.map((item) => ({
-      id: item.canvasQuestionId,
-      position: item.position,
-      text: item.text,
-      points: item.canvasPoints,
-      mapping: {
-        status: 'detected',
-        lookupUuid: item.lookupUuid,
-        embeddableQuestionId: item.embeddableQuestionId,
-      },
-    })),
-  };
-}
-
 function evaluation(score: number) {
   return {
     score,
@@ -115,21 +91,17 @@ function evaluation(score: number) {
 function harness(
   evaluate: jest.Mock,
   options: {
-    postManually?: boolean;
-    liveGrade?: { score: number; comment: string };
+    postedAt?: string;
+    existingGrade?: { score: number; comment: string };
   } = {},
 ) {
   const batchRun = run();
   const discoveredAttempt = canvasAttempt();
-  const liveAttempt = canvasAttempt();
-  if (options.liveGrade) {
-    for (const answer of liveAttempt.answers) {
-      answer.points = options.liveGrade.score;
-      answer.comment = options.liveGrade.comment;
-    }
+  discoveredAttempt.postedAt = options.postedAt ?? null;
+  if (options.existingGrade) {
+    discoveredAttempt.answers[0].points = options.existingGrade.score;
+    discoveredAttempt.answers[0].comment = options.existingGrade.comment;
   }
-  const liveQuiz = quiz();
-  liveQuiz.postManually = options.postManually ?? true;
   const attempts: CanvasBatchAttemptModel[] = [];
   const store = {
     findRun: jest.fn(async () => structuredClone(batchRun)),
@@ -153,14 +125,6 @@ function harness(
     getClassicAttemptSnapshots: jest.fn().mockResolvedValue({
       status: LMSApiResponseStatus.Success,
       snapshot: { quizId: 55, attempts: [discoveredAttempt] },
-    }),
-    getClassicQuizCatalog: jest.fn().mockResolvedValue({
-      status: LMSApiResponseStatus.Success,
-      quizzes: [liveQuiz],
-    }),
-    getClassicAttemptSnapshot: jest.fn().mockResolvedValue({
-      status: LMSApiResponseStatus.Success,
-      snapshot: { quizId: 55, attempts: [liveAttempt] },
     }),
     putClassicAttemptGrades: jest
       .fn()
@@ -212,25 +176,6 @@ describe('CanvasBatchRunnerService', () => {
     expect(batchRun.status).toBe(CanvasBatchRunStatus.Failed);
     expect(batchRun.error).toContain('Connection unavailable');
   });
-
-  it.each(['catalog', 'attempt'])(
-    'reports a permission failure during %s preflight',
-    async (phase) => {
-      const { runner, adapter, attempts } = harness(
-        jest.fn().mockResolvedValue(evaluation(4)),
-      );
-      (phase === 'catalog'
-        ? adapter.getClassicQuizCatalog
-        : adapter.getClassicAttemptSnapshot
-      ).mockResolvedValue({ status: LMSApiResponseStatus.Forbidden });
-      await runner.run(7);
-      expect(JSON.stringify(attempts)).toContain(
-        LMSApiResponseStatus.Forbidden,
-      );
-      expect(attempts[0].status).toBe(CanvasBatchAttemptStatus.Error);
-      expect(adapter.putClassicAttemptGrades).not.toHaveBeenCalled();
-    },
-  );
 
   it.each(['rejected', 'unknown'])(
     'retains the %s write outcome without retrying',
@@ -333,30 +278,18 @@ describe('CanvasBatchRunnerService', () => {
   });
 
   it.each([
-    ['manual posting is disabled', { postManually: false }],
-    ['an instructor grade exists', { liveGrade: { score: 2, comment: '' } }],
-  ])('writes nothing when %s', async (_reason, options) => {
+    [
+      'an instructor grade exists',
+      { existingGrade: { score: 2, comment: '' } },
+    ],
+    ['the grade is already posted', { postedAt: '2026-09-16T00:00:00Z' }],
+  ])('neither grades nor writes when %s', async (_reason, options) => {
     const evaluate = jest.fn().mockResolvedValue(evaluation(4));
     const { runner, adapter } = harness(evaluate, options);
 
     await runner.run(7);
 
+    expect(evaluate).not.toHaveBeenCalled();
     expect(adapter.putClassicAttemptGrades).not.toHaveBeenCalled();
-  });
-
-  it('does not repeat its own existing Canvas write', async () => {
-    const evaluate = jest.fn().mockResolvedValue(evaluation(4));
-    const { runner, attempts, adapter } = harness(evaluate, {
-      liveGrade: { score: 4, comment: 'Good answer.' },
-    });
-
-    await runner.run(7);
-
-    expect(adapter.putClassicAttemptGrades).not.toHaveBeenCalled();
-    expect(
-      attempts[0].questions.every(
-        (item) => item.status === CanvasBatchQuestionStatus.Posted,
-      ),
-    ).toBe(true);
   });
 });

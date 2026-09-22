@@ -263,7 +263,9 @@ returns an HTML error page.
 Rejected writes and unknown write outcomes appear separately in the report.
 HelpMe does not retry either write. For an unknown outcome, inspect SpeedGrader
 before starting another run; an interrupted request may have reached Canvas.
-Existing grades are checked again before any subsequent write.
+A new run skips attempts that already have a Canvas grade or a posted grade.
+HelpMe checks this only when a run starts, so do not grade, post, or edit the
+quiz in Canvas while a run is active.
 
 ## Start another development session
 

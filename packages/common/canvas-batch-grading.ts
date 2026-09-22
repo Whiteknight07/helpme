@@ -96,17 +96,10 @@ export interface CanvasBatchQuestionSnapshot {
   gradingSettings: QuestionGradingSettings
 }
 
-/** The exact per-question write sent to Canvas. */
-export interface CanvasBatchQuestionWrite {
-  score: number
-  comment: string
-}
-
 /**
  * Durable per-question work and result on an attempt.
  *
- * `answer`/`answerHash` capture the Canvas answer as it was read, so a write can
- * be blocked when the answer changes. `gradingSnapshot` is the frozen
+ * `answer` is the Canvas answer as it was read. `gradingSnapshot` is the frozen
  * question/rubric/scale plus the fixed final-mode instruction. The durable
  * score and comment record exactly what is sent to Canvas once every question
  * in the attempt has a complete result.
@@ -118,7 +111,6 @@ export interface CanvasBatchQuestionWork {
   maxScore: number
   /** Answer text read from Canvas; null when the mapped answer is absent. */
   answer: string | null
-  answerHash: string
   gradingSnapshot: GradingSnapshot
   status: CanvasBatchQuestionStatus
   score: number | null
