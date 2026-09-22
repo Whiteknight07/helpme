@@ -1,6 +1,5 @@
 import {
   AddChatbotQuestionParams,
-  QuestionGradingSettings,
   AddDocumentAggregateParams,
   AddDocumentChunkParams,
   ChatbotQuestionResponseChatbotDB,
@@ -22,10 +21,17 @@ const feedbackResponseSchema = z.object({
   model: z.string().optional(),
 });
 
-export type FeedbackGradingInput = Pick<
-  QuestionGradingSettings,
-  'rubric' | 'feedbackInstructions' | 'scoreScale'
-> & { questionText: string; finalInstruction?: string };
+/** Question-specific values chatbot places in its grading system prompt. */
+export type FeedbackGradingInput = {
+  questionText: string;
+  mechanicalFacts: string;
+  rubric: string;
+  feedbackInstructions: string;
+  humanReviewCriteria: string;
+  scoreContract: string;
+  capContract: string;
+  automaticChecks: string;
+};
 
 export type FeedbackQueryResult = z.infer<typeof feedbackResponseSchema>;
 

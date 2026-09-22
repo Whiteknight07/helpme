@@ -1,11 +1,18 @@
 import { ConfigService } from '@nestjs/config';
-import { ChatbotApiService } from './chatbot-api.service';
+import {
+  ChatbotApiService,
+  type FeedbackGradingInput,
+} from './chatbot-api.service';
 
-const grading = {
+const grading: FeedbackGradingInput = {
   questionText: 'Explain.',
+  mechanicalFacts: '{}',
   rubric: 'Award points for accuracy.',
   feedbackInstructions: '',
-  scoreScale: { max: 2, step: 0.5 },
+  humanReviewCriteria: '',
+  scoreContract: 'Any score from 0 through 2 in increments of 0.5.',
+  capContract: 'No triggered automatic check limits the score.',
+  automaticChecks: '- No automatic checks are configured.',
 };
 
 describe('ChatbotApiService', () => {
