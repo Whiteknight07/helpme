@@ -10,6 +10,8 @@ import { ChatbotApiService } from '../../chatbot/chatbot-api.service';
 import { computeMechanicalFacts } from './deterministic-check-utils';
 import {
   buildAppliedRequirements,
+  buildGradingPromptInput,
+  buildUserPrompt,
   effectiveScoreCap,
   validateGradePayload,
 } from './grading-utils';
@@ -31,8 +33,8 @@ export class QuestionGradingService {
     gradingSettings: QuestionGradingSettings;
     submission: string;
     /**
-     * Internal batch-only mode. Omitted (or 'practice') is the unchanged
-     * practice path; 'final' appends the fixed final-mode suffix.
+     * Internal batch-only mode. Omitted is the practice path; 'final' replaces
+     * the question's feedback instructions with the final instruction.
      */
     gradingMode?: 'final';
     /** Frozen batch instruction; omitted for practice grading. */
@@ -86,26 +88,21 @@ export class QuestionGradingService {
     // call and validates the answer once. An invalid grade errors out and
     // the caller persists nothing.
     const response = await this.chatbotApiService.queryFeedback(
-      submission,
+      buildUserPrompt(submission),
       courseId,
-      {
-        questionText: snapshot.questionText,
-        rubric: settings.rubric,
-        feedbackInstructions: settings.feedbackInstructions,
-        scoreScale: settings.scoreScale,
-        ...(instruction ? { finalInstruction: instruction } : {}),
-      },
+      buildGradingPromptInput(
+        settings,
+        effectiveCap,
+        snapshot.questionText,
+        facts,
+        instruction ?? settings.feedbackInstructions,
+      ),
     );
-    const {
-      score: rubricScore,
-      comment,
-      reasons,
-      humanReviewReason,
-    } = validateGradePayload(response.answer, settings);
-    // Keep mechanical checks out of model feedback, then apply their validated
-    // score cap deterministically and report it through appliedRequirements.
-    const score =
-      effectiveCap === null ? rubricScore : Math.min(rubricScore, effectiveCap);
+    const { score, comment, reasons, humanReviewReason } = validateGradePayload(
+      response.answer,
+      settings,
+      effectiveCap,
+    );
     return {
       score,
       comment,

@@ -109,36 +109,35 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
     });
   });
 
-  it('applies automatic caps after the model grades only the rubric', async () => {
+  it('sends the question context separately and rejects a score above the cap', async () => {
     const { service, fetchMock } = harness();
     respond(fetchMock, validAnswer(2));
 
-    const result = await service.evaluate({
-      ...evaluateArgs,
-      gradingSettings: settings({
-        scoreScale: { max: 2, step: 0.5 },
-        checks: [{ kind: 'minimum_sentences', minimum: 2, scoreCap: 1 }],
+    await expect(
+      service.evaluate({
+        ...evaluateArgs,
+        gradingSettings: settings({
+          scoreScale: { max: 2, step: 0.5 },
+          checks: [{ kind: 'minimum_sentences', minimum: 2, scoreCap: 1 }],
+        }),
+        submission: 'One sentence.',
       }),
-      submission: 'One sentence.',
-    });
+    ).rejects.toThrow(/effective cap of 1/);
     const request = JSON.parse(
       (fetchMock.mock.calls[0][1] as RequestInit).body as string,
     );
 
-    expect(result).toMatchObject({
-      score: 1,
-      appliedRequirements: [
-        'Score capped at 1: the answer is below the 2-sentence minimum.',
-      ],
-    });
-    expect(request.query).not.toContain('automatic_checks_triggered');
-    expect(request.params.grading).toEqual({
+    expect(request.query).toContain(JSON.stringify('One sentence.'));
+    expect(request.query).not.toContain(evaluateArgs.questionText);
+    expect(request.params.grading).toMatchObject({
       questionText: evaluateArgs.questionText,
       rubric: evaluateArgs.gradingSettings.rubric,
-      feedbackInstructions: evaluateArgs.gradingSettings.feedbackInstructions,
-      scoreScale: { max: 2, step: 0.5 },
+      scoreContract: 'Any score from 0 through 2 in increments of 0.5.',
+      capContract: expect.stringContaining('effective cap of 1'),
     });
-    expect(request.query).toBe('One sentence.');
+    expect(request.params.grading.mechanicalFacts).toContain(
+      'minimum_sentences',
+    );
   });
 
   it.each([
@@ -158,7 +157,7 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
       expected: undefined,
     },
   ])(
-    'sends the final instruction for the grading mode: %j',
+    'uses the final instruction in place of feedback instructions: %j',
     async ({ gradingMode, finalInstruction, expected }) => {
       const { service, fetchMock } = harness();
       respond(fetchMock, validAnswer());
@@ -168,7 +167,9 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
         finalInstruction,
       });
       const request = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-      expect(request.params.grading.finalInstruction).toBe(expected);
+      expect(request.params.grading.feedbackInstructions).toBe(
+        expected ?? evaluateArgs.gradingSettings.feedbackInstructions,
+      );
       expect(result.gradingSnapshot.instruction).toBe(expected);
     },
   );
