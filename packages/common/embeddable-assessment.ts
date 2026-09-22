@@ -63,6 +63,8 @@ export const questionGradingSettingsSchema = z
   .object({
     rubric: text.min(1, 'A question rubric is required.'),
     feedbackInstructions: text,
+    // Optional so questions saved before this field existed still parse.
+    humanReviewCriteria: text.optional(),
     scoreScale: scoreScaleSchema,
     checks: z.array(gradingCheckSchema).max(20),
   })

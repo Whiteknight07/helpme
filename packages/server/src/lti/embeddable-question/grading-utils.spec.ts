@@ -163,9 +163,9 @@ describe('question grading contract', () => {
     'keeps student text separate from trusted grading context: %s',
     (submission) => {
       const settings = makeSettings({
-        rubric:
-          'Award points for accuracy. Request human review if the answer relies on a policy exception.',
+        rubric: 'Award points for accuracy.',
         feedbackInstructions: 'Explain any policy exception that needs review.',
+        humanReviewCriteria: 'Flag answers that rely on a policy exception.',
       });
       const question = 'Explain the effects of this policy.';
       const mechanicalFacts = facts(submission, settings);
@@ -180,6 +180,7 @@ describe('question grading contract', () => {
       expect(systemPrompt).toContain(JSON.stringify(question));
       expect(systemPrompt).toContain(settings.rubric);
       expect(systemPrompt).toContain(settings.feedbackInstructions);
+      expect(systemPrompt).toContain(settings.humanReviewCriteria);
       expect(systemPrompt).toContain(
         JSON.stringify(mechanicalFacts.triggeredChecks),
       );

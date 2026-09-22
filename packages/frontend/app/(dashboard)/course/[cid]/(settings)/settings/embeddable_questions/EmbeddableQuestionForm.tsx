@@ -37,6 +37,8 @@ const defaultGradingSettings: QuestionGradingSettings = {
   rubric: '',
   feedbackInstructions:
     'Give concise, constructive feedback grounded in the rubric.',
+  humanReviewCriteria:
+    'Flag an answer for human review only when the question or rubric is ambiguous in a way that changes how the answer must be graded, the response does not attempt the question, or the response contains potentially harmful content that needs a human’s judgment. Do not flag for grammar, capitalization, or sentence-count reminders, for a low score on its own, or because the answer disagrees with the rubric. A student’s viewpoint, opinion, or lived experience is never by itself a reason to flag.',
   scoreScale: { max: 10, step: 1 },
   checks: [],
 }
@@ -101,6 +103,18 @@ function GradingSettingsEditor(): ReactElement {
           maxLength={15000}
           aria-label="Feedback instructions"
           placeholder="How should the feedback comment be written?"
+        />
+      </Form.Item>
+      <Form.Item
+        name={['gradingSettings', 'humanReviewCriteria']}
+        label="Human review criteria"
+        tooltip="When an answer meets these criteria, the AI flags it for staff review. Leave blank to never flag."
+      >
+        <Input.TextArea
+          rows={4}
+          maxLength={15000}
+          aria-label="Human review criteria"
+          placeholder="When should an answer be flagged for staff review?"
         />
       </Form.Item>
       <div>
