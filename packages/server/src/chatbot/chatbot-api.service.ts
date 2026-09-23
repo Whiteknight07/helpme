@@ -195,10 +195,14 @@ export class ChatbotApiService {
   }
 
   /**
-   * Adam: Default and abstract /query calls use the organization's default
-   * model, even when a courseId is supplied. Abstract generation does not
-   * need the larger model an instructor may select for the course.
-   * Feedback now has its own query type; queryFeedback uses the course model.
+   * Calls the chatbot `POST /chatbot/query` endpoint with a `courseId`, so the
+   * chatbot routes the prompt through the course's generatorLLM (the same LLM
+   * configured in Chatbot Settings for that course). No user token is required
+   * by the chatbot's `/query` route, so this method intentionally omits it.
+   *
+   * Adam: From my testing a while back, it seems `/query` calls always use the org's default model, despite what it might look like in the code.
+   * This might've been fixed though.
+   * Also for the LLED AI Assignment/Essay Feedback feature, it should get its own ChatbotQueryType eventually.
    */
   async queryChatbotForCourse(
     query: string,
