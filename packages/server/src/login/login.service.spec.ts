@@ -103,7 +103,9 @@ describe('LoginService', () => {
 
       await expect(
         service.initLoginEnter({} as any, res, 'invalid_token'),
-      ).rejects.toThrow(new UnauthorizedException());
+      ).rejects.toThrow(
+        new UnauthorizedException('Auth token is not a valid record'),
+      );
       spy.mockRestore();
     });
 
