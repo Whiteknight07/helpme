@@ -132,11 +132,13 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
     expect(request.params.grading).toMatchObject({
       questionText: evaluateArgs.questionText,
       rubric: evaluateArgs.gradingSettings.rubric,
-      scoreContract: 'Any score from 0 through 2 in increments of 0.5.',
-      capContract: expect.stringContaining('effective cap of 1'),
+      scoreContract: expect.stringContaining(
+        'Allowed scores: 0, 0.5, 1. Full rubric credit is 2. If no rubric criterion warrants a deduction, select 1.',
+      ),
+      capContract: 'Triggered automatic checks cap the score at 1.',
     });
-    expect(request.params.grading.mechanicalFacts).toContain(
-      'minimum_sentences',
+    expect(request.params.grading.automaticChecks).toContain(
+      'fewer than 2 sentences',
     );
   });
 
