@@ -183,17 +183,55 @@ describe('question grading contract', () => {
         rubric: settings.rubric,
         feedbackInstructions: settings.feedbackInstructions,
         humanReviewCriteria: settings.humanReviewCriteria,
-        capContract: expect.stringContaining('effective cap of 1'),
+        capContract: 'Triggered automatic checks cap the score at 1.',
       });
-      expect(input.mechanicalFacts).toContain(
-        JSON.stringify(mechanicalFacts.triggeredChecks),
+      expect(input.scoreContract).toContain('Allowed scores: 0, 0.5, 1.');
+      expect(input.scoreContract).toContain(
+        'Full rubric credit is 2. If no rubric criterion warrants a deduction, select 1.',
       );
+      expect(input.automaticChecks).not.toContain('capitalization');
       expect(Object.values(input).join('\n')).not.toContain(submission);
       expect(userPrompt).toContain(JSON.stringify(submission));
       expect(userPrompt).not.toContain(question);
       expect(userPrompt).not.toContain(settings.rubric);
     },
   );
+
+  it('omits untriggered checks and lists the uncapped score scale', () => {
+    const settings = makeSettings({
+      checks: [{ kind: 'capitalization', term: 'Indigenous', scoreCap: null }],
+    });
+    const input = buildGradingPromptInput(
+      settings,
+      null,
+      'Explain.',
+      facts('A clear answer.', settings),
+      settings.feedbackInstructions,
+    );
+    expect(input.automaticChecks).toBe('');
+    expect(input.capContract).toBe('');
+    expect(input.scoreContract).toContain('Allowed scores: 0, 0.5, 1, 1.5, 2.');
+    expect(input.scoreContract).toContain(
+      'Full rubric credit is 2. If no rubric criterion warrants a deduction, select 2.',
+    );
+  });
+
+  it('shows only triggered checks beside the capped score scale', () => {
+    const settings = makeSettings();
+    const input = buildGradingPromptInput(
+      settings,
+      1,
+      'Explain.',
+      facts('Short.', settings),
+      settings.feedbackInstructions,
+    );
+    expect(input.automaticChecks).toContain('fewer than 3 sentences');
+    expect(input.automaticChecks).not.toContain('capitalization');
+    expect(input.scoreContract).toContain('Allowed scores: 0, 0.5, 1.');
+    expect(input.scoreContract).toContain(
+      'Full rubric credit is 2. If no rubric criterion warrants a deduction, select 1.',
+    );
+  });
 
   it('builds deterministic requirement notes separate from the model comment', () => {
     const settings = makeSettings();
