@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { Card } from 'antd'
 import { getErrorMessage } from '@/app/utils/generalUtils'
-import useSWR from 'swr'
+import useSWRImmutable from 'swr/immutable'
 import CenteredSpinner from '@/app/components/CenteredSpinner'
 import { API } from '@/app/api'
 import EmbeddableQuestionFeedback from '@/app/lti/embeddable/[cid]/components/EmbeddableQuestionFeedback'
@@ -17,12 +17,12 @@ export default function EmbeddableQuestionPage() {
   const questionId = Number(routeParams.questionid)
   const hasInvalidRoute = !questionId || !courseId
 
-  const { data: question, error } = useSWR(
+  const { data: question, error } = useSWRImmutable(
     hasInvalidRoute
       ? null
       : `lti/embeddable-question/${courseId}/${questionId}`,
     () => API.lti.embeddableQuestion.getOne(courseId, questionId),
-    { shouldRetryOnError: false, revalidateOnFocus: false },
+    { shouldRetryOnError: false },
   )
 
   useEffect(() => {

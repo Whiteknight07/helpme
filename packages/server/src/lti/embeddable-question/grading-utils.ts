@@ -101,7 +101,7 @@ export function buildSystemPrompt(
     scoreContract,
     ...(capContract ? [capContract] : []),
     'The host already evaluated automatic checks and supplies their notes separately. Do not grade an untriggered check or deduct for a reminder-only check. Do not repeat mechanical notes in your comment or reasons.',
-    '## Output',
+    '## Output Schema',
     `Return JSON only with this shape: ${JSON.stringify({
       score: 0,
       comment: 'student-facing feedback',
