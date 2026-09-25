@@ -181,9 +181,17 @@ describe('question grading contract', () => {
       expect(systemPrompt).toContain(settings.rubric);
       expect(systemPrompt).toContain(settings.feedbackInstructions);
       expect(systemPrompt).toContain(settings.humanReviewCriteria);
+      expect(systemPrompt).toContain('Allowed scores: 0, 0.5, 1.');
       expect(systemPrompt).toContain(
-        JSON.stringify(mechanicalFacts.triggeredChecks),
+        'Full rubric credit is 2. If no rubric criterion warrants a deduction, select 1.',
       );
+      expect(
+        buildSystemPrompt(settings, null, question, mechanicalFacts),
+      ).toContain(
+        'Full rubric credit is 2. If no rubric criterion warrants a deduction, select 2.',
+      );
+      expect(systemPrompt).not.toContain('## Configured automatic checks');
+      expect(systemPrompt).not.toContain('capitalization');
       expect(systemPrompt).not.toContain(submission);
       expect(userPrompt).toContain(JSON.stringify(submission));
       expect(userPrompt).not.toContain(question);
