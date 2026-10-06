@@ -21,21 +21,10 @@ import { ConfigService } from '@nestjs/config';
 import express from 'express';
 import { LMSAccessToken, LMSAccessTokenModel } from './lms-access-token.entity';
 import * as crypto from 'crypto';
-import { getFetchErrorMessage } from 'utils';
 import { convert } from 'html-to-text';
 import { load } from 'cheerio';
 import { validate as isUuid } from 'uuid';
 
-/**
- * Narrow transport types for Canvas Classic batch grading.
- *
- * These describe the only data the batch grading runtime consumes. Canvas JSON
- * is untrusted: every field is validated before it is placed in one of these
- * shapes, and anything that does not validate is reported as unreadable rather
- * than being coerced into a blank value.
- */
-
-/** Identifies a Classic quiz together with the assignment it grades. */
 export interface LMSClassicQuizRef {
   quizId: number;
   assignmentId: number;
@@ -116,11 +105,6 @@ export interface LMSClassicQuestionGrade {
   comment: string;
 }
 
-/**
- * Score and comment writes for every safe question of one completed attempt.
- * Canvas receives them in a single request, and an aggregate total can never
- * be moved.
- */
 export interface LMSClassicAttemptGradesUpdate {
   quizId: number;
   quizSubmissionId: number;
@@ -129,18 +113,7 @@ export interface LMSClassicAttemptGradesUpdate {
   questions: LMSClassicQuestionGrade[];
 }
 
-/**
- * Result of a Canvas write request.
- *
- * - `success`     the write was accepted.
- * - `rejected`    Canvas answered with a non-2xx status, or the request could
- *                 not be attempted (e.g. missing authorization). The write
- *                 definitely did not happen and must not be retried blindly.
- * - `unknown`     the request was sent but the transport failed (timeout,
- *                 socket error, abort). The write may or may not have been
- *                 applied.
- * - `unsupported` the active adapter does not implement the operation.
- */
+/** Unknown writes may have reached Canvas and must not be replayed automatically. */
 export type LMSWriteOutcome =
   'success' | 'rejected' | 'unknown' | 'unsupported';
 
@@ -188,18 +161,7 @@ function asId(value: unknown): number | null {
   return null;
 }
 
-/**
- * Convert submitted essay HTML into plain text.
- *
- * `html-to-text` preserves block level markup as line breaks and decodes HTML
- * entities. A submission that is only whitespace (including `&nbsp;`)
- * normalises to the empty string so callers can tell a blank answer apart from
- * unreadable data.
- *
- * Headings and table headers keep the student's casing (the library upper-cases
- * them by default, which would trip capitalization checks), and table cells
- * stay separated instead of running together.
- */
+// Preserve paragraph breaks, table cells, and student casing when converting HTML.
 const ESSAY_TEXT_OPTIONS = {
   wordwrap: false as const,
   selectors: [
@@ -563,12 +525,7 @@ abstract class ImplementedLMSAdapter extends AbstractLMSAdapter {
 
 export class BaseLMSAdapter extends AbstractLMSAdapter {}
 
-/**
- * OAuth scopes requested when a Canvas integration is created.
- *
- * The scopes at the end support Classic batch grading and automatic embed
- * detection; everything above them is used by document sync.
- */
+/** Document-sync scopes. Batch grading uses an instructor API token instead. */
 export const CANVAS_OAUTH_SCOPES: readonly string[] = [
   'url:GET|/api/v1/users/:user_id/courses',
   'url:GET|/api/v1/courses/:id',
@@ -581,14 +538,17 @@ export const CANVAS_OAUTH_SCOPES: readonly string[] = [
   'url:GET|/api/v1/courses/:course_id/files',
   'url:GET|/api/v1/courses/:course_id/quizzes',
   'url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/questions',
-  'url:GET|/api/v1/courses/:course_id/lti_resource_links/:id',
-  'url:GET|/api/v1/courses/:course_id/assignments/:assignment_id/submissions',
-  'url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions',
-  'url:PUT|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions/:id',
-  'url:PUT|/api/v1/courses/:course_id/assignments/:assignment_id/submissions/:user_id',
 ];
 
 export class CanvasLMSAdapter extends ImplementedLMSAdapter {
+  private requireBatchApiKey(): void {
+    if (!this.integration.apiKey?.trim()) {
+      throw new BadRequestException(
+        'Canvas batch grading requires an instructor API token. Add it in Course Settings → LMS Integrations. The instructor must have permission to grade this Canvas course.',
+      );
+    }
+  }
+
   constructor(
     protected integration: LMSCourseIntegrationModel,
     protected cacheManager?: Cache,
@@ -739,40 +699,36 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     data?: unknown;
     nextLink?: string;
   }> {
-    const url = `${this.canvasBaseUrl()}/api/v1/${path}`;
-
-    return fetch(url, {
-      method: 'GET',
-      signal: AbortSignal.timeout(CANVAS_REQUEST_TIMEOUT_MS),
-      headers: {
-        Authorization: await this.getAuthorization(),
-      },
-    })
-      .then((response) => {
-        const nextLink = this.parseNextLink(response.headers.get('link'));
-        if (!response.ok) {
-          switch (response.status) {
-            case 401:
-              return { status: LMSApiResponseStatus.Unauthorized };
-            case 403:
-              return { status: LMSApiResponseStatus.Forbidden };
-            case 404:
-              return { status: LMSApiResponseStatus.InvalidCourseId };
-            default:
-              throw new Error();
-          }
-        } else {
-          return response.json().then((data: unknown) => {
-            return { status: LMSApiResponseStatus.Success, data, nextLink };
-          });
-        }
-      })
-      .catch((error) => {
-        console.log(
-          `Error contacting ${this.integration.orgIntegration.rootUrl}: ${error}`,
-        );
-        return { status: LMSApiResponseStatus.Error };
+    const authorization = await this.getAuthorization();
+    try {
+      const response = await fetch(`${this.canvasBaseUrl()}/api/v1/${path}`, {
+        signal: AbortSignal.timeout(CANVAS_REQUEST_TIMEOUT_MS),
+        headers: { Authorization: authorization },
       });
+      if (!response.ok) {
+        switch (response.status) {
+          case 401:
+            return { status: LMSApiResponseStatus.Unauthorized };
+          case 403:
+            return { status: LMSApiResponseStatus.Forbidden };
+          case 404:
+            return { status: LMSApiResponseStatus.InvalidCourseId };
+          default:
+            throw new Error(`Canvas returned HTTP ${response.status}`);
+        }
+      }
+      const data: unknown = await response.json();
+      return {
+        status: LMSApiResponseStatus.Success,
+        data,
+        nextLink: this.parseNextLink(response.headers.get('link')),
+      };
+    } catch (error) {
+      console.log(
+        `Error contacting ${this.integration.orgIntegration.rootUrl}: ${error}`,
+      );
+      return { status: LMSApiResponseStatus.Error };
+    }
   }
 
   /** Extract the `next` pagination path from a Canvas `Link` header. */
@@ -793,10 +749,7 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
   /**
    * Paginate a Canvas list endpoint without caching.
    *
-   * Handles both plain array responses and object-wrapped lists such as
-   * `{ quiz_submissions: [...] }`. `malformed` is true when a page answered
-   * successfully with a payload that is neither, so callers can fail closed
-   * instead of treating it as an empty page.
+   * Accept plain arrays and wrapped lists. Malformed pages fail the whole read.
    */
   private async GetPaginatedUncached(
     initialPath: string,
@@ -804,7 +757,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
   ): Promise<{
     status: LMSApiResponseStatus;
     items: unknown[];
-    malformed: boolean;
   }> {
     const items: unknown[] = [];
     let nextLink =
@@ -815,15 +767,16 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     while (nextLink !== undefined) {
       const res = await this.requestGet(nextLink);
       if (res.status != LMSApiResponseStatus.Success) {
-        return { status: res.status, items: [], malformed: false };
+        return { status: res.status, items: [] };
       }
 
-      const page = this.extractList(res.data, wrapKey);
+      const page =
+        asArray(res.data) ??
+        (wrapKey ? asArray(asObject(res.data)?.[wrapKey]) : null);
       if (page === null) {
         return {
-          status: LMSApiResponseStatus.Success,
-          items,
-          malformed: true,
+          status: LMSApiResponseStatus.Error,
+          items: [],
         };
       }
 
@@ -831,20 +784,7 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       nextLink = res.nextLink;
     }
 
-    return { status: LMSApiResponseStatus.Success, items, malformed: false };
-  }
-
-  private extractList(data: unknown, wrapKey?: string): unknown[] | null {
-    const direct = asArray(data);
-    if (direct) return direct;
-    if (wrapKey !== undefined) {
-      const wrapped = asObject(data);
-      if (wrapped) {
-        const list = asArray(wrapped[wrapKey]);
-        if (list) return list;
-      }
-    }
-    return null;
+    return { status: LMSApiResponseStatus.Success, items };
   }
 
   async GetPaginated(
@@ -1208,10 +1148,10 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
   async getClassicQuizCatalog(
     onlyQuizId?: number,
   ): Promise<LMSClassicQuizCatalogResult> {
+    this.requireBatchApiKey();
     const courseId = this.integration.apiCourseId;
 
-    // Keep these sequential so an expired OAuth token is refreshed once.
-    // The assignment carries `post_manually`; `GET quizzes/:id` is never used.
+    // The assignment carries the posting policy.
     const quizList = await this.GetPaginatedUncached(
       `courses/${courseId}/quizzes`,
     );
@@ -1224,9 +1164,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     }
     if (assignmentList.status !== LMSApiResponseStatus.Success) {
       return { status: assignmentList.status, quizzes: [] };
-    }
-    if (quizList.malformed || assignmentList.malformed) {
-      return { status: LMSApiResponseStatus.Error, quizzes: [] };
     }
 
     const assignmentsById = new Map<number, JsonObject>();
@@ -1258,9 +1195,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       );
       if (questionList.status !== LMSApiResponseStatus.Success) {
         return { status: questionList.status, quizzes: [] };
-      }
-      if (questionList.malformed) {
-        return { status: LMSApiResponseStatus.Error, quizzes: [] };
       }
 
       const essayQuestions: LMSClassicQuizQuestion[] = [];
@@ -1314,34 +1248,30 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       };
     }
 
-    const resolved = await Promise.all(
-      lookupUuids.map(async (lookupUuid) => {
-        const response = await this.requestGet(
-          `courses/${this.integration.apiCourseId}/lti_resource_links/lookup_uuid:${lookupUuid}`,
-        );
-        if (response.status !== LMSApiResponseStatus.Success) {
-          return { lookupUuid, failed: true, status: response.status } as const;
-        }
-        const resource = asObject(response.data);
-        const custom = resource ? asObject(resource.custom) : null;
+    const helpMeLinks: Extract<
+      LMSClassicQuestionMapping,
+      { status: 'detected' }
+    >[] = [];
+    for (const lookupUuid of lookupUuids) {
+      const response = await this.requestGet(
+        `courses/${this.integration.apiCourseId}/lti_resource_links/lookup_uuid:${lookupUuid}`,
+      );
+      if (response.status !== LMSApiResponseStatus.Success) {
         return {
+          status: 'error',
+          message: `Question ${position}: Canvas could not resolve an embedded resource link. ${response.status}`,
+        };
+      }
+      const custom = asObject(asObject(response.data)?.custom);
+      const embeddableQuestionId = asId(custom?.helpme_question_id);
+      if (embeddableQuestionId !== null) {
+        helpMeLinks.push({
+          status: 'detected',
           lookupUuid,
-          failed: false,
-          embeddableQuestionId: custom ? asId(custom.helpme_question_id) : null,
-        } as const;
-      }),
-    );
-    const failed = resolved.find((resource) => resource.failed);
-    if (failed?.failed) {
-      return {
-        status: 'error',
-        message: `Question ${position}: Canvas could not resolve an embedded resource link. ${failed.status}`,
-      };
+          embeddableQuestionId,
+        });
+      }
     }
-
-    const helpMeLinks = resolved.filter(
-      (resource) => !resource.failed && resource.embeddableQuestionId !== null,
-    );
     if (helpMeLinks.length !== 1) {
       return {
         status: 'error',
@@ -1351,22 +1281,13 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
             : `Question ${position} contains more than one HelpMe embed.`,
       };
     }
-    return {
-      status: 'detected',
-      lookupUuid: helpMeLinks[0].lookupUuid,
-      embeddableQuestionId: helpMeLinks[0].embeddableQuestionId,
-    };
-  }
-
-  async getClassicAttemptSnapshots(
-    params: LMSClassicQuizRef,
-  ): Promise<LMSClassicAttemptSnapshotResult> {
-    return this.collectClassicAttempts(params);
+    return helpMeLinks[0];
   }
 
   async putClassicAttemptGrades(
     params: LMSClassicAttemptGradesUpdate,
   ): Promise<LMSWriteResult> {
+    this.requireBatchApiKey();
     if (params.questions.length === 0) {
       return {
         outcome: 'rejected',
@@ -1374,10 +1295,7 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       };
     }
 
-    // Every safe question is sent in one request. Only per-question scores and
-    // comments are included; aggregate fields (fudge_points, submission score)
-    // are intentionally omitted so a batch write can never move a student's
-    // total.
+    // Update question scores together, without overriding Canvas's aggregate score.
     const questions = Object.fromEntries(
       params.questions.map(({ questionId, score, comment }) => [
         questionId,
@@ -1405,6 +1323,7 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     userId: number;
     text: string;
   }): Promise<LMSWriteResult> {
+    this.requireBatchApiKey();
     return this.sendCanvasWrite(
       `courses/${this.integration.apiCourseId}/assignments/${params.assignmentId}/submissions/${params.userId}`,
       { comment: { text_comment: params.text } },
@@ -1415,12 +1334,12 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     return `${this.canvasBaseUrl()}/courses/${this.integration.apiCourseId}/gradebook/speed_grader?assignment_id=${assignmentId}`;
   }
 
-  private async collectClassicAttempts(
+  async getClassicAttemptSnapshots(
     ref: LMSClassicQuizRef,
   ): Promise<LMSClassicAttemptSnapshotResult> {
+    this.requireBatchApiKey();
     const courseId = this.integration.apiCourseId;
 
-    // Keep these sequential so an expired OAuth token is refreshed once.
     const quizSubmissions = await this.GetPaginatedUncached(
       `courses/${courseId}/quizzes/${ref.quizId}/submissions`,
       'quiz_submissions',
@@ -1434,9 +1353,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
     }
     if (assignmentSubmissions.status !== LMSApiResponseStatus.Success) {
       return { status: assignmentSubmissions.status };
-    }
-    if (quizSubmissions.malformed || assignmentSubmissions.malformed) {
-      return { status: LMSApiResponseStatus.Error };
     }
 
     const submissionsByUser = new Map<number, JsonObject>();
@@ -1579,9 +1495,9 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
   /**
    * Locate the submission record holding the answers for `attempt`.
    *
-   * Completed answers are read only from `submission_history[].submission_data`;
-   * the quiz question endpoint is never used. Returns null when Canvas did not
-   * provide usable history for the attempt.
+   * Completed answers come from matching submission history or the current
+   * assignment submission's data. The quiz question endpoint is never used.
+   * Returns null when neither source contains usable data for the attempt.
    */
   private findAttemptRecord(
     submission: JsonObject | undefined,
@@ -1589,29 +1505,19 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
   ): JsonObject | null {
     if (!submission) return null;
 
-    const rawHistory = submission.submission_history;
-    if (
-      rawHistory !== undefined &&
-      rawHistory !== null &&
-      asArray(rawHistory) === null
-    ) {
-      // Canvas answered with a history field that is not a list.
-      return null;
-    }
+    const history = submission.submission_history;
+    if (history != null && !Array.isArray(history)) return null;
 
-    const candidates: JsonObject[] = [];
-    for (const rawEntry of asArray(rawHistory) ?? []) {
-      const entry = asObject(rawEntry);
-      if (entry && asNumber(entry.attempt) === attempt) candidates.push(entry);
-    }
-    // When history is omitted the submission itself may be the requested
-    // attempt.
-    if (asNumber(submission.attempt) === attempt) candidates.push(submission);
-
+    // Prefer matching history; Canvas can also return answers on the current submission.
     return (
-      candidates.find(
-        (candidate) => asArray(candidate.submission_data) !== null,
-      ) ?? null
+      [...(asArray(history) ?? []), submission]
+        .map(asObject)
+        .find(
+          (entry) =>
+            entry &&
+            asNumber(entry.attempt) === attempt &&
+            asArray(entry.submission_data),
+        ) ?? null
     );
   }
 
@@ -1653,8 +1559,8 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
   /**
    * Send a Canvas PUT and classify its outcome.
    *
-   * The request is never retried. A non-2xx answer is a definite rejection,
-   * while a timeout, socket error, or abort is reported as an unknown outcome.
+   * The request is never retried. Server/proxy errors and timeouts can happen
+   * after a write was accepted, so their outcome is unknown.
    */
   private async sendCanvasWrite(
     path: string,
@@ -1671,12 +1577,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       };
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      CANVAS_REQUEST_TIMEOUT_MS,
-    );
-
     try {
       const response = await fetch(`${this.canvasBaseUrl()}/api/v1/${path}`, {
         method: 'PUT',
@@ -1685,7 +1585,7 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal: AbortSignal.timeout(CANVAS_REQUEST_TIMEOUT_MS),
       });
 
       if (response.ok) {
@@ -1693,7 +1593,10 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       }
 
       return {
-        outcome: 'rejected',
+        outcome:
+          response.status >= 500 || response.status === 408
+            ? 'unknown'
+            : 'rejected',
         httpStatus: response.status,
         message: await this.readWriteErrorMessage(response),
       };
@@ -1703,8 +1606,6 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
         message:
           error instanceof Error ? error.message : 'Unknown transport error.',
       };
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
@@ -1718,18 +1619,11 @@ export class CanvasLMSAdapter extends ImplementedLMSAdapter {
       if (text.trim() === '') return undefined;
 
       try {
-        const parsed: unknown = JSON.parse(text);
-        const parsedObject = asObject(parsed);
-        if (parsedObject) {
-          const message = asString(parsedObject.message);
-          if (message) return message;
-          const errors = asArray(parsedObject.errors);
-          if (errors) {
-            const first = asObject(errors[0]);
-            const errorMessage = first ? asString(first.message) : null;
-            if (errorMessage) return errorMessage;
-          }
-        }
+        const parsed = asObject(JSON.parse(text));
+        const message =
+          asString(parsed?.message) ||
+          asString(asObject(asArray(parsed?.errors)?.[0])?.message);
+        if (message) return message;
       } catch {
         // The rejection body was not JSON; fall through to the raw text.
       }

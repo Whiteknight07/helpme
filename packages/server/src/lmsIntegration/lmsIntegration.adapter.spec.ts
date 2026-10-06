@@ -1,24 +1,34 @@
+import { LMSOrganizationIntegrationModel } from './lmsOrgIntegration.entity';
 import { LMSApiResponseStatus } from '@koh/common';
 import { LMSCourseIntegrationModel } from './lmsCourseIntegration.entity';
-import { CanvasLMSAdapter, htmlToEssayText } from './lmsIntegration.adapter';
+import { CanvasLMSAdapter } from './lmsIntegration.adapter';
 
 const COURSE_ID = 42;
 const BASE_URL = 'https://canvas.example.test';
 const LOOKUP_UUID = '11111111-1111-4111-8111-111111111111';
-const originalFetch = global.fetch;
+const gradeUpdate = {
+  quizId: 7,
+  quizSubmissionId: 8,
+  attempt: 1,
+  questions: [{ questionId: 11, score: 2, comment: 'Feedback' }],
+};
 
-function adapter(): CanvasLMSAdapter {
-  return new CanvasLMSAdapter({
-    apiCourseId: COURSE_ID,
-    apiKey: 'test-api-key',
-    apiKeyExpiry: null,
-    accessTokenId: null,
-    orgIntegration: {
-      apiPlatform: 'Canvas',
-      rootUrl: 'canvas.example.test',
-      secure: true,
-    },
-  } as unknown as LMSCourseIntegrationModel);
+function adapter(
+  apiKey: string | undefined = 'test-api-key',
+): CanvasLMSAdapter {
+  return new CanvasLMSAdapter(
+    Object.assign(new LMSCourseIntegrationModel(), {
+      apiCourseId: COURSE_ID,
+      apiKey,
+      apiKeyExpiry: null,
+      accessTokenId: null,
+      orgIntegration: Object.assign(new LMSOrganizationIntegrationModel(), {
+        apiPlatform: 'Canvas',
+        rootUrl: 'canvas.example.test',
+        secure: true,
+      }),
+    }),
+  );
 }
 
 function response(body: unknown): Response {
@@ -31,77 +41,91 @@ function response(body: unknown): Response {
 function mockFetch(
   handler: (url: URL, init?: RequestInit) => Response | Promise<Response>,
 ) {
-  const fetchMock = jest.fn(
-    async (input: RequestInfo | URL, init?: RequestInit) =>
+  return jest
+    .spyOn(global, 'fetch')
+    .mockImplementation(async (input, init) =>
       handler(new URL(String(input)), init),
-  );
-  global.fetch = fetchMock as unknown as typeof fetch;
-  return fetchMock;
+    );
 }
 
 describe('CanvasLMSAdapter Classic quiz grading', () => {
-  afterEach(() => {
-    global.fetch = originalFetch;
+  afterEach(() => jest.restoreAllMocks());
+
+  it('requires an instructor API token for batch reads and writes', async () => {
+    const fetchMock = mockFetch(() => response({}));
+    const oauthOnly = adapter('');
+    await expect(oauthOnly.getClassicQuizCatalog()).rejects.toThrow(
+      'instructor API token',
+    );
+    await expect(
+      oauthOnly.getClassicAttemptSnapshots({ quizId: 7, assignmentId: 700 }),
+    ).rejects.toThrow('instructor API token');
+    await expect(
+      oauthOnly.putClassicAttemptGrades(gradeUpdate),
+    ).rejects.toThrow('instructor API token');
+    await expect(
+      oauthOnly.putSubmissionComment({
+        assignmentId: 700,
+        userId: 5,
+        text: 'Review required',
+      }),
+    ).rejects.toThrow('instructor API token');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [401, 'rejected', LMSApiResponseStatus.Unauthorized],
+    [403, 'rejected', LMSApiResponseStatus.Forbidden],
+    [408, 'unknown', 'Upstream failed'],
+    [500, 'unknown', 'Upstream failed'],
+    [null, 'unknown', 'Socket closed'],
+  ])(
+    'classifies failed writes without retrying (%s)',
+    async (status, outcome, message) => {
+      const fetchMock = mockFetch(() => {
+        if (status === null) throw new Error('Socket closed');
+        return new Response('Upstream failed', { status });
+      });
+      expect(
+        await adapter().putClassicAttemptGrades(gradeUpdate),
+      ).toMatchObject({
+        outcome,
+        message,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it.each([
     [401, LMSApiResponseStatus.Unauthorized],
     [403, LMSApiResponseStatus.Forbidden],
+    [200, LMSApiResponseStatus.Error],
   ])(
-    'preserves permission failures for GET and PUT (%s)',
-    async (status, message) => {
-      for (const body of [
-        '<html>Access denied</html>',
-        JSON.stringify({ errors: [{ message: 'Denied' }] }),
-      ]) {
-        mockFetch(() => new Response(body, { status }));
-        expect((await adapter().getClassicQuizCatalog(7)).status).toBe(message);
-        expect(
-          (
-            await adapter().getClassicAttemptSnapshots({
-              quizId: 7,
-              assignmentId: 700,
-            })
-          ).status,
-        ).toBe(message);
-        const fetchMock = mockFetch(() => new Response(body, { status }));
-        expect(
-          await adapter().putClassicAttemptGrades({
-            quizId: 7,
-            quizSubmissionId: 8,
-            attempt: 1,
-            questions: [{ questionId: 11, score: 2, comment: 'Feedback' }],
+    'reports denied or malformed catalog reads (%s)',
+    async (status, expected) => {
+      mockFetch(
+        () =>
+          new Response(JSON.stringify({ error: 'Not a quiz list' }), {
+            status,
           }),
-        ).toEqual({ outcome: 'rejected', httpStatus: status, message });
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-      }
+      );
+      expect((await adapter().getClassicQuizCatalog()).status).toBe(expected);
     },
   );
-
-  it('does not retry a write with an unknown transport outcome', async () => {
-    const fetchMock = mockFetch(() => {
-      throw new Error('Socket closed');
-    });
-    expect(
-      await adapter().putClassicAttemptGrades({
-        quizId: 7,
-        quizSubmissionId: 8,
-        attempt: 1,
-        questions: [{ questionId: 11, score: 2, comment: 'Feedback' }],
-      }),
-    ).toMatchObject({ outcome: 'unknown', message: 'Socket closed' });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
 
   it('maps embedded essay questions from a selected quiz', async () => {
     mockFetch((url) => {
       if (url.pathname.endsWith('/quizzes')) {
         return response([
           { id: 7, title: 'Essay quiz', published: true, assignment_id: 700 },
+          { id: 8, title: 'Another quiz', published: true, assignment_id: 701 },
         ]);
       }
       if (url.pathname.endsWith('/assignments')) {
-        return response([{ id: 700, post_manually: true }]);
+        return response([
+          { id: 700, post_manually: true },
+          { id: 701, post_manually: true },
+        ]);
       }
       if (url.pathname.endsWith('/quizzes/7/questions')) {
         return response([
@@ -125,29 +149,22 @@ describe('CanvasLMSAdapter Classic quiz grading', () => {
 
     const result = await adapter().getClassicQuizCatalog(7);
 
-    expect(result).toEqual({
-      status: LMSApiResponseStatus.Success,
-      quizzes: [
-        {
-          quizId: 7,
-          title: 'Essay quiz',
-          assignmentId: 700,
-          postManually: true,
-          speedGraderUrl: `${BASE_URL}/courses/${COURSE_ID}/gradebook/speed_grader?assignment_id=700`,
-          essayQuestions: [
-            {
-              id: 11,
-              position: 1,
-              text: 'Explain why',
-              points: 5,
-              mapping: {
-                status: 'detected',
-                lookupUuid: LOOKUP_UUID,
-                embeddableQuestionId: 101,
-              },
-            },
-          ],
-        },
+    expect(result.status).toBe(LMSApiResponseStatus.Success);
+    expect(result.quizzes).toHaveLength(1);
+    expect(result.quizzes[0]).toMatchObject({
+      quizId: 7,
+      assignmentId: 700,
+      postManually: true,
+      essayQuestions: [
+        expect.objectContaining({
+          id: 11,
+          text: 'Explain why',
+          mapping: {
+            status: 'detected',
+            lookupUuid: LOOKUP_UUID,
+            embeddableQuestionId: 101,
+          },
+        }),
       ],
     });
   });
@@ -180,7 +197,7 @@ describe('CanvasLMSAdapter Classic quiz grading', () => {
                 submission_data: [
                   {
                     question_id: 11,
-                    text: '<p>Student answer</p>',
+                    text: '<h2>My Indigenous goals</h2><table><tr><th>strength</th></tr><tr><td>listening</td></tr></table>',
                     points: 0,
                     correct: 'undefined',
                     comment: null,
@@ -210,7 +227,7 @@ describe('CanvasLMSAdapter Classic quiz grading', () => {
         answers: [
           {
             questionId: 11,
-            text: 'Student answer',
+            text: 'My Indigenous goals\n\nstrength\nlistening',
             points: null,
             comment: null,
           },
@@ -249,18 +266,5 @@ describe('CanvasLMSAdapter Classic quiz grading', () => {
         },
       ],
     });
-  });
-});
-
-describe('htmlToEssayText', () => {
-  it('keeps heading casing and separates table cells', () => {
-    expect(
-      htmlToEssayText('<h2>My Indigenous goals</h2><p>I did it.</p>'),
-    ).toBe('My Indigenous goals\n\nI did it.');
-    expect(
-      htmlToEssayText(
-        '<table><tr><th>strength</th></tr><tr><td>listening</td></tr></table>',
-      ),
-    ).toBe('strength\nlistening');
   });
 });

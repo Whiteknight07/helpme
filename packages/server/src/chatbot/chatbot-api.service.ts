@@ -197,12 +197,14 @@ export class ChatbotApiService {
     courseId: number,
     grading: FeedbackGradingInput,
   ): Promise<FeedbackQueryResult> {
-    const resp: unknown = await this.request('POST', `chatbot/query`, '', {
-      query,
-      type: 'feedback',
-      courseId,
-      params: { grading },
-    });
+    const resp: unknown = await this.request(
+      'POST',
+      'chatbot/query',
+      '',
+      { query, type: 'feedback', courseId, params: { grading } },
+      undefined,
+      180_000, // Bound the whole grading request, including chatbot's provider retries.
+    );
     return feedbackResponseSchema.parse(resp);
   }
 

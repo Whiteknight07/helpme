@@ -188,20 +188,20 @@ Expect feedback inside Canvas. An instructor preview exercises staff authorizati
 
 ## Configure Classic quiz batch grading
 
-Batch grading uses Canvas OAuth in addition to the LTI launch. Configure the
-HelpMe Canvas developer key with **Require Scopes** enabled and only these URL
-scopes:
+Batch grading requires an **instructor Canvas API token** saved in the course's
+**LMS Integrations** settings. OAuth-only connections cannot run batch grading.
+Use the existing API-key connection form; the token's owner must be allowed to
+read submissions and grade the Canvas course. An expired or revoked token must
+be replaced in those settings. The shared OAuth flow retains its document-sync
+scopes and does not request batch-grading permissions.
+
+Ask the Canvas administrator whether personal API tokens are permitted for this
+use and whether the instructor role has the required grading permissions. This
+does not require adding scopes to HelpMe's OAuth developer key. If administrators
+issue a restricted token, it must allow these batch endpoints:
 
 ```text
-url:GET|/api/v1/users/:user_id/courses
-url:GET|/api/v1/courses/:id
 url:GET|/api/v1/courses/:course_id/assignments
-url:GET|/api/v1/courses/:course_id/users
-url:GET|/api/v1/courses/:course_id/enrollments
-url:GET|/api/v1/courses/:course_id/discussion_topics
-url:GET|/api/v1/courses/:course_id/pages
-url:GET|/api/v1/courses/:course_id/pages/:url_or_id
-url:GET|/api/v1/courses/:course_id/files
 url:GET|/api/v1/courses/:course_id/quizzes
 url:GET|/api/v1/courses/:course_id/quizzes/:quiz_id/questions
 url:GET|/api/v1/courses/:course_id/lti_resource_links/:id
@@ -211,17 +211,10 @@ url:PUT|/api/v1/courses/:course_id/quizzes/:quiz_id/submissions/:id
 url:PUT|/api/v1/courses/:course_id/assignments/:assignment_id/submissions/:user_id
 ```
 
-The last scope adds one "REVIEW REQUIRED" submission comment when the AI flags
-any question in an attempt. With manual posting, the comment stays hidden until
-grades are posted, so staff should delete it after reviewing.
-
-Enable the developer key's **Allow Include Parameters** setting. Canvas
-otherwise returns successful submission responses but silently omits the
-`submission_history` needed for safe grading. After changing scopes or that
-setting, reconnect the HelpMe course so
-the instructor grants the new scopes; an old access token does not gain them
-automatically. The Canvas user who connects the course must also have normal
-teacher grading permission.
+The last endpoint adds one "REVIEW REQUIRED" submission comment only when the
+model returns a non-empty `human_review_reason`. Technical failures stay in the
+HelpMe report. With manual posting, the comment stays hidden until grades are
+posted, so staff should delete it after reviewing.
 
 For a local run:
 
@@ -241,8 +234,9 @@ For a local run:
    SpeedGrader. Post grades manually in Canvas only after review; HelpMe has no
    grade-release action.
 
-Production use needs Canvas administrator approval for these exact scopes and
-the include setting. Do not replace them with an account-wide wildcard.
+Confirm that the instructor token can retrieve `submission_history` on a test
+quiz before production use. Missing history produces a report error, never an
+assumed blank answer or a zero grade.
 
 ### Feedback deployment and failures
 
@@ -255,17 +249,32 @@ the request contract and evaluation entry point.
 
 A failed run shows its error in Canvas Batch Grading and stops polling. Resolve
 the error, check SpeedGrader, and start a new run. The failed run remains available
-for review; a new run freezes the current settings. A 401 requires reconnecting
-the integration; a 403 requires checking the connected account's permissions and
-developer key scopes before reconnecting. These messages also apply when Canvas
+for review in the run selector; a new run freezes the current settings. A 401
+requires replacing the instructor API token; a 403 requires checking its owner's
+course access and grading permissions. These messages also apply when Canvas
 returns an HTML error page.
 
 Rejected writes and unknown write outcomes appear separately in the report.
-HelpMe does not retry either write. For an unknown outcome, inspect SpeedGrader
-before starting another run; an interrupted request may have reached Canvas.
+HelpMe does not retry either write. A durable write marker is saved before the
+request. After a worker interruption, a resumed run reports any unconfirmed write
+instead of resending it. HTTP 408, server/proxy errors, and network timeouts also
+have unknown outcomes. Inspect SpeedGrader before starting another run; an
+interrupted request may have reached Canvas. If grades succeeded but the review
+comment is missing, add the report's review reasons manually; do not regrade.
 A new run skips attempts that already have a Canvas grade or a posted grade.
 HelpMe checks this only when a run starts, so do not grade, post, or edit the
 quiz in Canvas while a run is active.
+
+Answers longer than 15,000 characters are not truncated or sent to the model.
+Grade them manually in SpeedGrader. Invalid model output also leaves the attempt
+unwritten; inspect the answer and rubric, then grade manually or start a new run
+after resolving the model/configuration problem. Report refresh failures have a
+Retry action; do not infer completion from stale progress.
+
+The worker holds one PostgreSQL connection for a run-level advisory lock. Keep
+the connection pool larger than the number of active workers. The `writing`
+attempt status uses the existing text column, so this recovery change requires
+no additional migration. Stop old workers before deploying it.
 
 ## Start another development session
 

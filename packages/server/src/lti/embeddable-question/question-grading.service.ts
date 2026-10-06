@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   questionGradingSettingsSchema,
   FINAL_GRADING_INSTRUCTION,
+  MAX_GRADING_TEXT_LENGTH,
   type GradingEvaluation,
   type GradingSnapshot,
   type QuestionGradingSettings,
@@ -40,6 +41,11 @@ export class QuestionGradingService {
     /** Frozen batch instruction; omitted for practice grading. */
     finalInstruction?: string;
   }): Promise<GradingEvaluation> {
+    if (submission.length > MAX_GRADING_TEXT_LENGTH) {
+      throw new Error(
+        `The answer exceeds the ${MAX_GRADING_TEXT_LENGTH}-character grading limit. Grade this answer manually in SpeedGrader; it was not truncated or sent to the model.`,
+      );
+    }
     // The one grading-path validation of the settings, before anything is
     // built or called; invalid settings fail before any chatbot call and
     // nothing is persisted.

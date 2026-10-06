@@ -14,6 +14,7 @@ import {
   CanvasBatchRunCounts,
   CanvasBatchRunReport,
   CanvasBatchRunStatus,
+  CanvasBatchAttemptStatus,
   CanvasBatchRunSummary,
   CanvasBatchQuestionStatus,
   CLASSIC_CANVAS_GRADING_MODE,
@@ -21,6 +22,7 @@ import {
   FINAL_GRADING_INSTRUCTION,
   LMSApiResponseStatus,
   StartCanvasBatchRunParams,
+  questionGradingSettingsSchema,
 } from '@koh/common';
 import { LMSIntegrationService } from '../../../lmsIntegration/lmsIntegration.service';
 import { EmbeddableQuestionModel } from '../../embeddable-question/embeddable-question.entity';
@@ -125,7 +127,7 @@ export class CanvasBatchService {
     }
 
     const adapter = await this.transport(courseId);
-    const result = await adapter.getClassicQuizCatalog();
+    const result = await adapter.getClassicQuizCatalog(params.canvasQuizId);
     if (result.status !== LMSApiResponseStatus.Success) {
       throw new BadRequestException(result.status);
     }
@@ -218,7 +220,17 @@ export class CanvasBatchService {
           error: `Question ${canvasQuestion.position} embeds a HelpMe question that is not available in this course.`,
         };
       }
-      const helpMeMax = helpMeQuestion.gradingSettings.scoreScale.max;
+      const settings = questionGradingSettingsSchema.safeParse(
+        helpMeQuestion.gradingSettings,
+      );
+      if (!settings.success) {
+        return {
+          status: 'error',
+          detectedQuestions: detected.length,
+          error: `Question ${canvasQuestion.position} has invalid grading settings. Edit and save the HelpMe question before starting a new run.`,
+        };
+      }
+      const helpMeMax = settings.data.scoreScale.max;
       if (canvasQuestion.points !== helpMeMax) {
         return {
           status: 'error',
@@ -235,7 +247,7 @@ export class CanvasBatchService {
         canvasPoints: canvasQuestion.points,
         helpMeMax,
         questionText: helpMeQuestion.questionText,
-        gradingSettings: helpMeQuestion.gradingSettings,
+        gradingSettings: settings.data,
       });
     }
     return { status: 'ready', questions };
@@ -247,7 +259,7 @@ export class CanvasBatchService {
   ): Promise<CanvasBatchRunReport> {
     const run = await this.findRunForCourse(courseId, runId);
     const attempts = await this.store.listAttempts(run.id);
-    const errors = this.errorRecords(attempts);
+    const errors = this.errorRecords(attempts, run.status);
     return {
       run: this.toSummary(run, attempts),
       errors,
@@ -336,14 +348,17 @@ export class CanvasBatchService {
       speedGraderUrl: run.speedGraderUrl,
       createdAt: run.createdAt.toISOString(),
       completedAt: run.completedAt ? run.completedAt.toISOString() : null,
-      counts: this.counts(attempts),
+      counts: this.counts(attempts, run.status),
       questions: run.questions,
     };
   }
 
-  private counts(attempts: CanvasBatchAttemptModel[]): CanvasBatchRunCounts {
+  private counts(
+    attempts: CanvasBatchAttemptModel[],
+    runStatus: CanvasBatchRunStatus,
+  ): CanvasBatchRunCounts {
     const questions = attempts.flatMap((attempt) => attempt.questions);
-    const errors = this.errorRecords(attempts);
+    const errors = this.errorRecords(attempts, runStatus);
     const byStatus = (status: CanvasBatchQuestionStatus) =>
       questions.filter((question) => question.status === status).length;
     return {
@@ -366,9 +381,16 @@ export class CanvasBatchService {
 
   private errorRecords(
     attempts: CanvasBatchAttemptModel[],
+    runStatus: CanvasBatchRunStatus,
   ): CanvasBatchErrorRecord[] {
     const records: CanvasBatchErrorRecord[] = [];
     for (const attempt of attempts) {
+      // The recovery marker is not a failure while a write is still in progress.
+      if (
+        runStatus === CanvasBatchRunStatus.Running &&
+        attempt.status === CanvasBatchAttemptStatus.Writing
+      )
+        continue;
       const questionErrors = new Set<string | null>();
       for (const question of attempt.questions) {
         if (question.status !== CanvasBatchQuestionStatus.Error) {

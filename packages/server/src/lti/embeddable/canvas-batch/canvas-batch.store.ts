@@ -11,6 +11,32 @@ import { CanvasBatchAttemptModel } from './canvas-batch-attempt.entity';
  */
 @Injectable()
 export class CanvasBatchStore {
+  /** BullMQ may redeliver a stalled job while its original worker is alive. */
+  async withRunLock(runId: number, work: () => Promise<void>): Promise<void> {
+    // ponytail: one DB connection per active run; use fenced leases if worker count approaches the pool size.
+    const connection =
+      CanvasBatchRunModel.getRepository().manager.connection.createQueryRunner();
+    let locked = false;
+    try {
+      const rows: { locked: boolean }[] = await connection.query(
+        'SELECT pg_try_advisory_lock(1789763948, $1) AS locked',
+        [runId],
+      );
+      locked = rows[0].locked;
+      if (locked) await work();
+    } finally {
+      try {
+        if (locked) {
+          await connection.query('SELECT pg_advisory_unlock(1789763948, $1)', [
+            runId,
+          ]);
+        }
+      } finally {
+        await connection.release();
+      }
+    }
+  }
+
   async findActiveRun(
     courseId: number,
     canvasQuizId: number,

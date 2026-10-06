@@ -30,8 +30,11 @@ function getErrorMessage(error: unknown): string {
 function outcomeMessage(result: LMSWriteResult): string {
   return result.outcome === 'unknown'
     ? `Canvas write outcome is unknown. Check SpeedGrader before starting another run; the write was not retried. ${result.message ?? ''}`
-    : `Canvas rejected the write${result.httpStatus ? ` (${result.httpStatus})` : ''}. ${result.message ?? ''}`;
+    : `Canvas rejected the write${result.httpStatus ? ` (${result.httpStatus})` : ''}. ${result.message ?? ''} Check the Canvas connection and grading permissions, then start a new run for ungraded attempts.`;
 }
+
+const INTERRUPTED_WRITE_ERROR =
+  'Canvas write outcome is unknown because processing was interrupted. Check this attempt’s scores and review comment in SpeedGrader before starting another run. HelpMe will not resend this write automatically.';
 
 /** SpeedGrader note for staff; null when no question was flagged. */
 export function reviewComment(
@@ -73,6 +76,10 @@ export class CanvasBatchRunnerService {
 
   /** Discovers, grades, and prefills every eligible attempt for a run. */
   async run(runId: number): Promise<void> {
+    await this.store.withRunLock(runId, () => this.processRun(runId));
+  }
+
+  private async processRun(runId: number): Promise<void> {
     const run = await this.store.findRun(runId);
     if (!run || run.status !== CanvasBatchRunStatus.Running) {
       return;
@@ -183,6 +190,20 @@ export class CanvasBatchRunnerService {
     adapter: AbstractLMSAdapter,
     attempt: CanvasBatchAttemptModel,
   ): Promise<void> {
+    if (attempt.status === CanvasBatchAttemptStatus.Writing) {
+      // A saved successful grade needs no replay, even if the comment was interrupted.
+      if (
+        !attempt.questions.every(
+          (question) => question.status === CanvasBatchQuestionStatus.Posted,
+        )
+      ) {
+        attempt.error = INTERRUPTED_WRITE_ERROR;
+      }
+      this.finalizeAttempt(attempt);
+      await this.store.saveAttempt(attempt);
+      return;
+    }
+    if (attempt.status !== CanvasBatchAttemptStatus.Pending) return;
     try {
       await this.gradeQuestions(run, attempt);
       await this.store.saveAttempt(attempt);
@@ -191,7 +212,9 @@ export class CanvasBatchRunnerService {
       await this.store.saveAttempt(attempt);
     } catch (error) {
       attempt.status = CanvasBatchAttemptStatus.Error;
-      attempt.error = `Batch processing failed: ${getErrorMessage(error)}`;
+      attempt.error =
+        attempt.error ??
+        `Batch processing failed: ${getErrorMessage(error)} Check SpeedGrader, resolve the error, then start a new run for ungraded attempts.`;
       await this.store.saveAttempt(attempt);
       this.logger.warn(
         `Batch attempt ${attempt.id} for run ${run.id} failed: ${getErrorMessage(error)}`,
@@ -249,7 +272,7 @@ export class CanvasBatchRunnerService {
         question.score = null;
         question.comment = null;
         question.humanReviewReason = null;
-        question.error = `Grading failed: ${getErrorMessage(error)}`;
+        question.error = `Grading failed: ${getErrorMessage(error)} No grades were written for this attempt. Review the answer and grading settings; grade it manually in SpeedGrader or resolve the error and start a new run.`;
         this.logger.warn(
           `Batch question ${question.canvasQuestionId} for run ${run.id} failed to grade: ${getErrorMessage(error)}`,
         );
@@ -272,11 +295,9 @@ export class CanvasBatchRunnerService {
     ) {
       return;
     }
-    const writes: {
-      canvasQuestionId: number;
-      score: number;
-      comment: string;
-    }[] = [];
+    const questions: Parameters<
+      AbstractLMSAdapter['putClassicAttemptGrades']
+    >[0]['questions'] = [];
     for (const question of attempt.questions) {
       if (question.score === null || question.comment === null) {
         this.markWriteError(
@@ -285,35 +306,29 @@ export class CanvasBatchRunnerService {
         );
         return;
       }
-      writes.push({
-        canvasQuestionId: question.canvasQuestionId,
+      questions.push({
+        questionId: question.canvasQuestionId,
         score: question.score,
         comment: question.comment,
       });
     }
-    await this.sendWrites(run, adapter, attempt, writes);
-  }
-
-  /** Sends every question score and comment for the attempt in one PUT. */
-  private async sendWrites(
-    run: CanvasBatchRunModel,
-    adapter: AbstractLMSAdapter,
-    attempt: CanvasBatchAttemptModel,
-    writes: { canvasQuestionId: number; score: number; comment: string }[],
-  ): Promise<void> {
+    // Persist before either external write. A crash cannot leave a replayable grade.
+    attempt.status = CanvasBatchAttemptStatus.Writing;
+    attempt.error = INTERRUPTED_WRITE_ERROR;
+    await this.store.saveAttempt(attempt);
     const result = await adapter.putClassicAttemptGrades({
       quizId: run.canvasQuizId,
       quizSubmissionId: attempt.quizSubmissionId,
       attempt: attempt.attemptNumber,
-      questions: writes.map((write) => ({
-        questionId: write.canvasQuestionId,
-        score: write.score,
-        comment: write.comment,
-      })),
+      questions,
     });
     if (result.outcome === 'success') {
       this.markPosted(attempt.questions);
       const text = reviewComment(attempt.questions);
+      attempt.error = text
+        ? 'Grades were prefilled, but the review comment outcome is unknown. Check SpeedGrader and add the review reasons shown in this report manually if the comment is missing. Do not regrade the attempt.'
+        : null;
+      await this.store.saveAttempt(attempt);
       if (text) {
         const commented = await adapter.putSubmissionComment({
           assignmentId: run.assignmentId,
@@ -321,18 +336,23 @@ export class CanvasBatchRunnerService {
           text,
         });
         if (commented.outcome !== 'success') {
-          attempt.error = `Grades were prefilled, but the review comment was not added. ${outcomeMessage(commented)}`;
+          attempt.error = `Grades were prefilled, but the review comment ${commented.outcome === 'unknown' ? 'outcome is unknown' : 'was not added'}. ${commented.message ?? ''} Check SpeedGrader and add the review reasons shown in this report manually if the comment is missing. Do not regrade the attempt.`;
+        } else {
+          attempt.error = null;
         }
       }
     } else {
+      attempt.error = null;
       this.markWriteError(attempt.questions, outcomeMessage(result));
     }
   }
 
   private finalizeAttempt(attempt: CanvasBatchAttemptModel): void {
-    const hasError = attempt.questions.some(
-      (question) => question.status === CanvasBatchQuestionStatus.Error,
-    );
+    const hasError =
+      attempt.error ||
+      attempt.questions.some(
+        (question) => question.status === CanvasBatchQuestionStatus.Error,
+      );
     attempt.status = hasError
       ? CanvasBatchAttemptStatus.Error
       : CanvasBatchAttemptStatus.Prefilled;

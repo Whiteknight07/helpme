@@ -104,19 +104,35 @@ function harness(
   }
   const attempts: CanvasBatchAttemptModel[] = [];
   const store = {
+    withRunLock: jest.fn(async (_runId: number, work: () => Promise<void>) =>
+      work(),
+    ),
     findRun: jest.fn(async () => structuredClone(batchRun)),
-    listAttempts: jest.fn(async () => attempts),
-    findAttempt: jest.fn().mockResolvedValue(null),
+    listAttempts: jest.fn(async () => structuredClone(attempts)),
+    findAttempt: jest.fn(
+      async (_runId: number, submissionId: number, attemptNumber: number) =>
+        structuredClone(
+          attempts.find(
+            (item) =>
+              item.quizSubmissionId === submissionId &&
+              item.attemptNumber === attemptNumber,
+          ) ?? null,
+        ),
+    ),
     createAttempt: jest.fn(async (data: Partial<CanvasBatchAttemptModel>) => {
       const created = {
         id: 1,
         createdAt: new Date(),
         ...data,
       } as CanvasBatchAttemptModel;
-      attempts.push(created);
+      attempts.push(structuredClone(created));
       return created;
     }),
-    saveAttempt: jest.fn(async (item: CanvasBatchAttemptModel) => item),
+    saveAttempt: jest.fn(async (item: CanvasBatchAttemptModel) => {
+      attempts[attempts.findIndex((saved) => saved.id === item.id)] =
+        structuredClone(item);
+      return item;
+    }),
     saveRun: jest.fn(async (item: CanvasBatchRunModel) =>
       Object.assign(batchRun, item),
     ),
@@ -141,11 +157,87 @@ function harness(
 }
 
 describe('CanvasBatchRunnerService', () => {
-  it.each([
-    LMSApiResponseStatus.Unauthorized,
-    LMSApiResponseStatus.Forbidden,
-    LMSApiResponseStatus.Error,
-  ])('persists a recoverable discovery failure: %s', async (status) => {
+  it('does not show the recovery marker as a failure during an active write', async () => {
+    const { runner, adapter, store } = harness(
+      jest.fn().mockResolvedValue(evaluation(4)),
+    );
+    adapter.putClassicAttemptGrades.mockImplementationOnce(async () => {
+      const report = await new CanvasBatchService(
+        {} as never,
+        store as unknown as CanvasBatchStore,
+        {} as never,
+      ).getReport(3, 7);
+      expect(report.errors).toEqual([]);
+      expect(report.run.counts.errors).toBe(0);
+      return { outcome: 'success' };
+    });
+    await runner.run(7);
+    expect(adapter.putClassicAttemptGrades).toHaveBeenCalledTimes(1);
+  });
+  it.each(['grade', 'review comment'])(
+    'does not replay a %s after Canvas accepts it but persistence fails',
+    async (stage) => {
+      const evaluate = jest.fn().mockResolvedValue({
+        ...evaluation(4),
+        humanReviewReason: 'Ambiguous rubric.',
+      });
+      const { runner, adapter, attempts, batchRun, store } = harness(evaluate);
+      const save = store.saveAttempt.getMockImplementation()!;
+      const write =
+        stage === 'grade'
+          ? adapter.putClassicAttemptGrades
+          : adapter.putSubmissionComment;
+      write.mockImplementationOnce(async () => {
+        // Canvas accepted the request, then the database became unavailable.
+        store.saveAttempt.mockRejectedValue(new Error('Database unavailable'));
+        return { outcome: 'success' };
+      });
+      await runner.run(7);
+      expect(attempts[0].status).toBe(CanvasBatchAttemptStatus.Writing);
+      store.saveAttempt.mockImplementation(save);
+      batchRun.status = CanvasBatchRunStatus.Running;
+      await runner.run(7);
+
+      expect(adapter.putClassicAttemptGrades).toHaveBeenCalledTimes(1);
+      expect(adapter.putSubmissionComment).toHaveBeenCalledTimes(
+        stage === 'grade' ? 0 : 1,
+      );
+      expect(attempts[0].status).toBe(CanvasBatchAttemptStatus.Error);
+      expect(attempts[0].error).toContain('SpeedGrader');
+      expect(attempts[0].error).toContain('unknown');
+      const report = await new CanvasBatchService(
+        {} as never,
+        store as unknown as CanvasBatchStore,
+        {} as never,
+      ).getReport(3, 7);
+      expect(report.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: 'attempt',
+            error: expect.stringContaining('unknown'),
+          }),
+        ]),
+      );
+      expect(report.flags).toHaveLength(2);
+    },
+  );
+
+  it('does not send a grade when its write marker cannot be saved', async () => {
+    const { runner, adapter, store } = harness(
+      jest.fn().mockResolvedValue(evaluation(4)),
+    );
+    const save = store.saveAttempt.getMockImplementation()!;
+    store.saveAttempt.mockImplementation(async (attempt) => {
+      if (attempt.status === CanvasBatchAttemptStatus.Writing)
+        throw new Error('Database unavailable');
+      return save(attempt);
+    });
+    await runner.run(7);
+    expect(adapter.putClassicAttemptGrades).not.toHaveBeenCalled();
+  });
+
+  it('reports a discovery failure with recovery steps', async () => {
+    const status = LMSApiResponseStatus.Unauthorized;
     const { runner, adapter, batchRun, store } = harness(jest.fn());
     adapter.getClassicAttemptSnapshots.mockResolvedValue({ status });
     await runner.run(7);
@@ -234,6 +326,8 @@ describe('CanvasBatchRunnerService', () => {
       CanvasBatchQuestionStatus.Posted,
     );
     expect(attempts[0].error).toContain('review comment was not added');
+    expect(attempts[0].error).toContain('Do not regrade');
+    expect(attempts[0].status).toBe(CanvasBatchAttemptStatus.Error);
   });
 
   it('grades a student and sends every question in one Canvas request', async () => {
@@ -275,6 +369,7 @@ describe('CanvasBatchRunnerService', () => {
 
     expect(adapter.putClassicAttemptGrades).not.toHaveBeenCalled();
     expect(attempts[0].status).toBe(CanvasBatchAttemptStatus.Error);
+    expect(adapter.putSubmissionComment).not.toHaveBeenCalled();
   });
 
   it.each([

@@ -47,19 +47,20 @@ function harness(canvasQuiz: LMSClassicQuiz) {
     listAttempts: jest.fn().mockResolvedValue([]),
   };
   const queue = { add: jest.fn().mockResolvedValue(undefined) };
+  const getClassicQuizCatalog = jest.fn().mockResolvedValue({
+    status: LMSApiResponseStatus.Success,
+    quizzes: [canvasQuiz],
+  });
   const service = new CanvasBatchService(
     {
       getAdapter: jest.fn().mockResolvedValue({
-        getClassicQuizCatalog: jest.fn().mockResolvedValue({
-          status: LMSApiResponseStatus.Success,
-          quizzes: [canvasQuiz],
-        }),
+        getClassicQuizCatalog,
       }),
     } as never,
     store as unknown as CanvasBatchStore,
     queue as never,
   );
-  return { service, store, queue };
+  return { service, store, queue, getClassicQuizCatalog };
 }
 
 describe('CanvasBatchService', () => {
@@ -74,7 +75,7 @@ describe('CanvasBatchService', () => {
         gradingSettings,
       } as EmbeddableQuestionModel,
     ]);
-    const { service, store, queue } = harness(
+    const { service, store, queue, getClassicQuizCatalog } = harness(
       quiz({
         status: 'detected',
         lookupUuid: '11111111-1111-4111-8111-111111111111',
@@ -100,6 +101,7 @@ describe('CanvasBatchService', () => {
     );
     expect(queue.add).toHaveBeenCalledTimes(1);
     expect(run.id).toBe(7);
+    expect(getClassicQuizCatalog).toHaveBeenCalledWith(55);
   });
 
   it('rejects a quiz without a recognized HelpMe question', async () => {
@@ -109,6 +111,28 @@ describe('CanvasBatchService', () => {
 
     await expect(service.startRun(3, 1, { canvasQuizId: 55 })).rejects.toThrow(
       BadRequestException,
+    );
+    expect(store.createActiveRun).not.toHaveBeenCalled();
+    expect(queue.add).not.toHaveBeenCalled();
+  });
+
+  it('reports invalid saved grading settings before starting a run', async () => {
+    jest.spyOn(EmbeddableQuestionModel, 'find').mockResolvedValue([
+      Object.assign(new EmbeddableQuestionModel(), {
+        id: 11,
+        courseId: 3,
+        gradingSettings: null,
+      }),
+    ]);
+    const { service, store, queue } = harness(
+      quiz({
+        status: 'detected',
+        lookupUuid: '11111111-1111-4111-8111-111111111111',
+        embeddableQuestionId: 11,
+      }),
+    );
+    await expect(service.startRun(3, 1, { canvasQuizId: 55 })).rejects.toThrow(
+      'Edit and save the HelpMe question',
     );
     expect(store.createActiveRun).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();

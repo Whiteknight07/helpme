@@ -2,6 +2,7 @@ import { ChatbotApiService } from '../../chatbot/chatbot-api.service';
 import { ConfigService } from '@nestjs/config';
 import {
   FINAL_GRADING_INSTRUCTION,
+  MAX_GRADING_TEXT_LENGTH,
   type QuestionGradingSettings,
 } from '@koh/common';
 import { GradingConstraintError } from './grading-utils';
@@ -70,6 +71,26 @@ describe('QuestionGradingService (real chatbot adapter, mocked fetch boundary)',
     gradingSettings: settings(),
     submission: 'A complete answer.',
   };
+
+  it('rejects oversized batch answers without calling the model', async () => {
+    const { service, fetchMock } = harness();
+    await expect(
+      service.evaluate({
+        ...evaluateArgs,
+        gradingMode: 'final',
+        submission: 'a'.repeat(MAX_GRADING_TEXT_LENGTH + 1),
+      }),
+    ).rejects.toThrow('Grade this answer manually');
+    expect(fetchMock).not.toHaveBeenCalled();
+    respond(fetchMock, validAnswer());
+    await expect(
+      service.evaluate({
+        ...evaluateArgs,
+        gradingMode: 'final',
+        submission: 'a'.repeat(MAX_GRADING_TEXT_LENGTH),
+      }),
+    ).resolves.toMatchObject({ score: 8 });
+  });
 
   it('errors on an invalid grade after exactly one outbound call', async () => {
     const { service, fetchMock } = harness();

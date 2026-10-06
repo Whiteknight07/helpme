@@ -44,6 +44,8 @@ export enum CanvasBatchRunStatus {
 /** Durable attempt-level state. */
 export enum CanvasBatchAttemptStatus {
   Pending = 'pending',
+  /** A Canvas write may have reached the server; never replay automatically. */
+  Writing = 'writing',
   /** Prefill finished: every question is written, skipped, or errored. */
   Prefilled = 'prefilled',
   Error = 'error',

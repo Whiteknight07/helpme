@@ -23,6 +23,36 @@ describe('ChatbotApiService', () => {
     global.fetch = originalFetch;
   });
 
+  it('reports a grading timeout without retrying the request', async () => {
+    const controller = new AbortController();
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockReturnValue(controller.signal);
+    const fetchMock = jest.spyOn(global, 'fetch').mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(init.signal?.reason),
+            { once: true },
+          );
+        }),
+    );
+    const service = new ChatbotApiService(
+      new ConfigService({ CHATBOT_API_URL: 'https://chatbot.test' }),
+    );
+    const result = expect(
+      service.queryFeedback('answer', 42, grading),
+    ).rejects.toMatchObject({
+      status: 504,
+      message: 'The chatbot request timed out.',
+    });
+    controller.abort(new Error('Deadline reached'));
+    await result;
+    expect(timeout).toHaveBeenCalledWith(180_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('returns a valid structured feedback response', async () => {
     const testApiUrl = 'https://chatbot.test';
     const configService = new ConfigService({

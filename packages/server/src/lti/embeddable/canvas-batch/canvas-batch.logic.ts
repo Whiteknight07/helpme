@@ -14,10 +14,10 @@ import { LMSClassicAttemptAnswer } from '../../../lmsIntegration/lmsIntegration.
 
 /** Staff-visible error for an attempt Canvas could not hand us history for. */
 export const UNREADABLE_ATTEMPT_ERROR =
-  'Canvas did not return usable submission history for this attempt.';
+  'Canvas did not return usable submission history for this attempt. Check that the instructor API token can read this course’s submissions. Update the token in LMS Integrations if needed, then start a new run, or grade this attempt manually in SpeedGrader.';
 /** Staff-visible error for a mapped question with no answer in the attempt. */
 export const MISSING_ANSWER_ERROR =
-  'Canvas did not return an answer for this mapped question.';
+  'Canvas did not return an answer for this mapped question. Check the question mapping and submission in SpeedGrader; grade it manually if the answer cannot be retrieved. HelpMe did not treat it as blank.';
 
 /** The frozen grading snapshot for one question of a run. */
 export function buildGradingSnapshot(

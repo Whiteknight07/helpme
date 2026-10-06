@@ -1,6 +1,6 @@
 'use client'
 
-import { use, useEffect, useMemo, useState, type ReactElement } from 'react'
+import { use, useState, type ReactElement } from 'react'
 import {
   Alert,
   Button,
@@ -12,7 +12,6 @@ import {
   message,
 } from 'antd'
 import { ExportOutlined } from '@ant-design/icons'
-import useSWR from 'swr'
 import useSWRImmutable from 'swr/immutable'
 import { CanvasBatchRunStatus } from '@koh/common'
 import { API } from '@/app/api'
@@ -27,7 +26,10 @@ export default function CanvasBatchGradingPage({
 }): ReactElement {
   const courseId = Number(use(params).cid)
   const [selectedQuizId, setSelectedQuizId] = useState<number>()
-  const [activeRunId, setActiveRunId] = useState<number>()
+  const [selectedRun, setSelectedRun] = useState<{
+    quizId: number
+    runId: number
+  }>()
   const [starting, setStarting] = useState(false)
 
   const quizzesRequest = useSWRImmutable(
@@ -39,20 +41,18 @@ export default function CanvasBatchGradingPage({
   )
   const quizzes = quizzesRequest.data ?? []
   const runs = runsRequest.data ?? []
-  const selectedQuiz = useMemo(
-    () => quizzes.find((quiz) => quiz.canvasQuizId === selectedQuizId),
-    [quizzes, selectedQuizId],
+  const selectedQuiz = quizzes.find(
+    (quiz) => quiz.canvasQuizId === selectedQuizId,
   )
-  const latestRun = useMemo(
-    () => runs.find((run) => run.canvasQuizId === selectedQuizId),
-    [runs, selectedQuizId],
-  )
+  const latestRun = runs.find((run) => run.canvasQuizId === selectedQuizId)
+  const activeRunId =
+    selectedRun?.quizId === selectedQuizId ? selectedRun?.runId : latestRun?.id
 
-  useEffect(() => setActiveRunId(latestRun?.id), [latestRun?.id])
-
-  const reportRequest = useSWR(
-    activeRunId ? `canvasBatch/report/${courseId}/${activeRunId}` : null,
-    () => API.lti.canvasBatch.getReport(courseId, activeRunId as number),
+  const reportRequest = useSWRImmutable(
+    activeRunId
+      ? (['canvasBatch/report', courseId, activeRunId] as const)
+      : null,
+    ([, courseId, runId]) => API.lti.canvasBatch.getReport(courseId, runId),
     {
       refreshInterval: (report) =>
         report?.run.status === CanvasBatchRunStatus.Running
@@ -67,9 +67,10 @@ export default function CanvasBatchGradingPage({
   const run = report?.run
   const isFailed = run?.status === CanvasBatchRunStatus.Failed
   const isRunning = run?.status === CanvasBatchRunStatus.Running
-  const isResuming = run
-    ? isRunning
-    : latestRun?.status === CanvasBatchRunStatus.Running
+  const isResuming =
+    run?.id === latestRun?.id
+      ? isRunning
+      : latestRun?.status === CanvasBatchRunStatus.Running
   const questionCount = selectedQuiz?.essayQuestions.length ?? 0
   const blockingReason = !selectedQuiz
     ? null
@@ -90,7 +91,7 @@ export default function CanvasBatchGradingPage({
       const started = await API.lti.canvasBatch.startRun(courseId, {
         canvasQuizId: selectedQuiz.canvasQuizId,
       })
-      setActiveRunId(started.id)
+      setSelectedRun({ quizId: started.canvasQuizId, runId: started.id })
       message.success(
         isResuming
           ? 'Grading resumed.'
@@ -105,11 +106,17 @@ export default function CanvasBatchGradingPage({
   }
 
   const counts = run?.counts
+  const hasErrors = isFailed || (counts?.errors ?? 0) > 0
   const flags = report?.flags ?? []
   const total = counts?.questions ?? 0
-  const percent = total
-    ? Math.round(((total - (counts?.pending ?? 0)) / total) * 100)
-    : 0
+  const percent =
+    run && !isRunning
+      ? 100
+      : total
+        ? Math.round(
+            (((counts?.posted ?? 0) + (counts?.skipped ?? 0)) / total) * 100,
+          )
+        : 0
   const loadError = quizzesRequest.error ?? runsRequest.error
 
   return (
@@ -132,6 +139,35 @@ export default function CanvasBatchGradingPage({
           showIcon
           message="Failed to load Canvas quizzes"
           description={getErrorMessage(loadError)}
+          action={
+            <Button
+              onClick={() => {
+                void quizzesRequest.mutate()
+                void runsRequest.mutate()
+              }}
+            >
+              Retry
+            </Button>
+          }
+        />
+      )}
+
+      {reportRequest.error && (
+        <Alert
+          className="mb-4"
+          type="error"
+          showIcon
+          message="Could not refresh grading progress"
+          description={`The run may still be processing. Retry to see its current status before posting grades. ${getErrorMessage(reportRequest.error)}`}
+          action={
+            <Button
+              onClick={() => {
+                void reportRequest.mutate()
+              }}
+            >
+              Retry
+            </Button>
+          }
         />
       )}
 
@@ -195,15 +231,47 @@ export default function CanvasBatchGradingPage({
         </>
       )}
 
+      {selectedQuiz &&
+        runs.some((item) => item.canvasQuizId === selectedQuizId) && (
+          <Select
+            className="mt-4 w-full md:max-w-xl"
+            aria-label="Grading run report"
+            value={activeRunId}
+            onChange={(runId) =>
+              setSelectedRun({ quizId: selectedQuiz.canvasQuizId, runId })
+            }
+            options={runs
+              .filter((item) => item.canvasQuizId === selectedQuizId)
+              .map((item) => ({
+                value: item.id,
+                label: `Run ${item.id} · ${new Date(item.createdAt).toLocaleString()}`,
+              }))}
+          />
+        )}
+
       {run && (
         <div className="mt-6 border-t pt-4">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Tag color={isRunning ? 'processing' : undefined}>
+            <Tag
+              color={
+                isRunning
+                  ? 'processing'
+                  : hasErrors
+                    ? 'error'
+                    : flags.length
+                      ? 'warning'
+                      : 'success'
+              }
+            >
               {isRunning
                 ? 'Prefilling SpeedGrader'
                 : isFailed
                   ? 'Prefill failed'
-                  : 'Prefill complete'}
+                  : hasErrors
+                    ? 'Prefill finished with errors'
+                    : flags.length
+                      ? 'Prefill finished; review required'
+                      : 'Prefill complete'}
             </Tag>
             <span className="text-gray-500" role="status" aria-live="polite">
               {counts
@@ -213,7 +281,7 @@ export default function CanvasBatchGradingPage({
           </div>
           <Progress
             percent={percent}
-            status={isRunning ? 'active' : isFailed ? 'exception' : 'success'}
+            status={hasErrors ? 'exception' : isRunning ? 'active' : 'success'}
             aria-label="SpeedGrader prefill progress"
           />
           {run.error && (
@@ -232,22 +300,29 @@ export default function CanvasBatchGradingPage({
               showIcon
               message="Some items need attention before you post grades"
               description={
-                <ul className="list-disc pl-5">
-                  {report.errors.map((record) => (
-                    <li
-                      key={`${record.quizSubmissionId}-${record.attemptNumber}-${record.source}-${record.canvasQuestionId ?? ''}`}
-                    >
-                      Submission {record.quizSubmissionId}, attempt{' '}
-                      {record.attemptNumber}
-                      {record.source === 'question'
-                        ? `, question ${record.position}`
-                        : ''}
-                      :{' '}
-                      {record.error?.trim() ||
-                        'Canvas prefill did not complete.'}
-                    </li>
-                  ))}
-                </ul>
+                <div>
+                  <p>
+                    Resolve each error below before posting grades. For an
+                    unknown write outcome, check SpeedGrader before starting
+                    another run; the write may already have succeeded.
+                  </p>
+                  <ul className="list-disc pl-5">
+                    {report.errors.map((record) => (
+                      <li
+                        key={`${record.quizSubmissionId}-${record.attemptNumber}-${record.source}-${record.canvasQuestionId ?? ''}`}
+                      >
+                        Submission {record.quizSubmissionId}, attempt{' '}
+                        {record.attemptNumber}
+                        {record.source === 'question'
+                          ? `, question ${record.position}`
+                          : ''}
+                        :{' '}
+                        {record.error?.trim() ||
+                          'Canvas prefill did not complete.'}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               }
             />
           )}
