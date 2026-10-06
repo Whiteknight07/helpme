@@ -1,8 +1,6 @@
 # Canvas grading evaluation handoff
 
-For grading evaluation. For Adam's branch status, remaining work, and release
-steps, start with [the maintainer handoff](CANVAS_BATCH_ADAM_HANDOFF.md).
-Use these branch revisions:
+For grading evaluation. Use these branch revisions:
 
 - HelpMe: `/Users/stavan/projects/helpme-canvas-batch-review`,
   `stavan/canvas-batch-grading`, the commit containing this handoff
